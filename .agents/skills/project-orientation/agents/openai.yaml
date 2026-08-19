@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Orientation"
+  short_description: "Navigate Pareto Harness project context"
+  default_prompt: "Use $project-orientation to understand this repository before making changes."

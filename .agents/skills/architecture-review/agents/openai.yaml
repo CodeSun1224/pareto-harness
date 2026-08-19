@@ -1,0 +1,4 @@
+interface:
+  display_name: "Architecture Review"
+  short_description: "Review trusted-kernel boundaries"
+  default_prompt: "Use $architecture-review to review a design against Pareto Harness invariants."

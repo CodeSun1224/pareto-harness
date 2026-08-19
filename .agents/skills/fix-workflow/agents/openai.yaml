@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fix Workflow"
+  short_description: "Diagnose and document regressions"
+  default_prompt: "Use $fix-workflow to investigate and document a defect and its regression proof."

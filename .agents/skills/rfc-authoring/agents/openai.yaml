@@ -1,0 +1,4 @@
+interface:
+  display_name: "RFC Authoring"
+  short_description: "Propose reviewable technical designs"
+  default_prompt: "Use $rfc-authoring to propose a significant technical design."

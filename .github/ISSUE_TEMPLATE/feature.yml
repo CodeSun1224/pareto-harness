@@ -1,0 +1,27 @@
+name: Feature or requirement
+description: Propose a user-visible capability with measurable acceptance criteria.
+title: "[Requirement] "
+labels: ["requirement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and user
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Verifiable acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints and non-goals

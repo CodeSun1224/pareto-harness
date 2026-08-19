@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Evidence"
+  short_description: "Capture sourced competitor and paper claims"
+  default_prompt: "Use $research-evidence to add evidence-backed research findings."

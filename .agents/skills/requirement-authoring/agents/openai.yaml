@@ -1,0 +1,4 @@
+interface:
+  display_name: "Requirement Authoring"
+  short_description: "Write verifiable product requirements"
+  default_prompt: "Use $requirement-authoring to draft or revise a verifiable requirement."

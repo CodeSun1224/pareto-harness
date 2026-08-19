@@ -1,0 +1,33 @@
+# 文档导航
+
+本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-20。
+
+## 产品
+
+- [项目章程与 PRD](product/project-charter.md)：目标、用户、范围、成功指标。
+- [核心能力](product/capabilities.md)：能力地图、优先级和验收方向。
+- [REQ-0001：建立 Pareto Harness 设计基线](requirements/REQ-0001-design-baseline.md)
+
+## 研究
+
+- [竞品与论文洞察](research/landscape.md)：综合判断与可挖掘空间。
+- [证据账本](research/evidence-register.md)：来源、等级、成熟度和受支持声明。
+
+## 架构
+
+- [总体架构](architecture/overview.md)
+- [可信内核宪法](architecture/kernel-constitution.md)
+- [版本与事件模型](architecture/version-and-event-model.md)
+- [技术选型](architecture/technology-selection.md)
+- [RFC-0001：稳定机制内核与版本化策略](rfcs/RFC-0001-stable-kernel-versioned-strategies.md)
+- [ADR-0001：采用稳定内核和版本化策略边界](adrs/ADR-0001-stable-kernel-boundary.md)
+- [ADR-0002：Rust 模块化单体与 SQLite 起步](adrs/ADR-0002-rust-modular-monolith.md)
+
+## 交付
+
+- [评测协议](benchmarks/protocol.md)
+- [16 周路线图](roadmap/roadmap.md)
+
+## 记录类型
+
+`requirements/` 定义需求；`rfcs/` 保存技术提案；`adrs/` 保存已接受决策；`fixes/` 保存缺陷根因和回归证据；`postmortems/` 保存系统性事故复盘。模板位于 `.agents/templates/`。

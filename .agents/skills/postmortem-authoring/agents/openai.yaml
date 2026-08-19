@@ -1,0 +1,4 @@
+interface:
+  display_name: "Postmortem Authoring"
+  short_description: "Write blameless system postmortems"
+  default_prompt: "Use $postmortem-authoring to document a consequential failure and guardrails."

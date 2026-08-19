@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pre-commit Checks"
+  short_description: "Run repository completion gates"
+  default_prompt: "Use $pre-commit-checks to validate this repository before committing."
