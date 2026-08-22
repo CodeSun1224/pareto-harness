@@ -31,6 +31,7 @@ ID_PATTERN = re.compile(r"^[A-Z][A-Z0-9-]*-\d{4}$")
 LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 PLACEHOLDER_PATTERN = re.compile(r"\b(?:TODO|TBD|FIXME)\b", re.IGNORECASE)
 TASK_PATTERN = re.compile(r"^- \[([ xX])\] (TASK-REQ-\d{4}-\d{2,})[：:]", re.MULTILINE)
+CHECKBOX_PATTERN = re.compile(r"^- \[([ xX])\] .+$", re.MULTILINE)
 REVISION_PATTERN = re.compile(r"^[0-9a-f]{7,40}$")
 
 ALLOWED_STATUS = {
@@ -146,6 +147,67 @@ def git_revision_exists(root: Path, revision: str) -> bool:
     return result.returncode == 0
 
 
+def changed_paths_since(root: Path, revision: str) -> set[str]:
+    if not (root / ".git").exists():
+        return set()
+    result = subprocess.run(
+        ["git", "diff", "--name-only", revision, "--"],
+        cwd=root,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        return {"<git-diff-failed>"}
+    return {line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()}
+
+
+def review_findings(record: Record) -> tuple[list[tuple[str, str, str]], list[str]]:
+    findings: list[tuple[str, str, str]] = []
+    errors: list[str] = []
+    for line in record.text.splitlines():
+        if not line.lstrip().startswith("| F-"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 6:
+            errors.append(f"{record.path}: malformed Finding row {line!r}")
+            continue
+        finding_id, severity, _, _, _, status = cells
+        if severity not in {"Blocker", "Major", "Minor", "Note"}:
+            errors.append(f"{record.path}: invalid Finding severity {severity!r}")
+        if status not in {"open", "closed", "accepted"}:
+            errors.append(f"{record.path}: invalid Finding status {status!r}")
+        findings.append((finding_id, severity, status))
+    return findings, errors
+
+
+def validation_results(path: Path) -> tuple[int, int, list[str]]:
+    text = path.read_text(encoding="utf-8")
+    errors: list[str] = []
+    if "## Results" not in text:
+        errors.append(f"{path}: missing Results section")
+    results = 0
+    failures = 0
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 4 or cells[0] in {"Scope/layer", "---"}:
+            continue
+        result = cells[2].lower()
+        if result not in {"passed", "failed", "skipped"}:
+            continue
+        results += 1
+        failures += result == "failed"
+        if not cells[1] or not cells[3]:
+            errors.append(f"{path}: validation row lacks command/procedure or artifact")
+    if results == 0:
+        errors.append(f"{path}: no parseable validation result rows")
+    if failures:
+        errors.append(f"{path}: contains failed validation results")
+    return results, failures, errors
+
+
 def validate_repository(root: Path) -> tuple[list[str], int, int]:
     root = root.resolve()
     docs = root / "docs"
@@ -234,6 +296,16 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
             if record.status == "approved":
                 if record.metadata.get("open_blockers") != "0" or record.metadata.get("open_majors") != "0":
                     errors.append(f"{record.path}: approved REVIEW has open Blocker or Major findings")
+            findings, finding_errors = review_findings(record)
+            errors.extend(finding_errors)
+            actual_blockers = sum(1 for _, severity, status in findings if severity == "Blocker" and status == "open")
+            actual_majors = sum(1 for _, severity, status in findings if severity == "Major" and status == "open")
+            if record.metadata.get("open_blockers", "") != str(actual_blockers):
+                errors.append(f"{record.path}: open_blockers does not match Findings table")
+            if record.metadata.get("open_majors", "") != str(actual_majors):
+                errors.append(f"{record.path}: open_majors does not match Findings table")
+            if record.status == "approved" and (actual_blockers or actual_majors):
+                errors.append(f"{record.path}: approved REVIEW has open Findings table Blocker or Major")
 
         if prefix == "REQ" and record.status != "accepted":
             if record.metadata.get("risk") not in {"lightweight", "standard", "high"}:
@@ -243,6 +315,29 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
 
     specs_by_req: dict[str, list[Record]] = defaultdict(list)
     reviews_by_req: dict[str, list[Record]] = defaultdict(list)
+    work_claims: dict[str, list[Record]] = defaultdict(list)
+    for record in records:
+        if record_prefix(record.id) != "REQ" or record.status == "accepted":
+            continue
+        work_value = record.metadata.get("work", "")
+        work_path = (root / work_value).resolve() if work_value else None
+        work_base = (root / ".agents" / "work").resolve()
+        if work_path is None or not work_path.is_relative_to(work_base):
+            errors.append(f"{record.path}: Requirement work must stay under .agents/work")
+            continue
+        if not work_path.name.startswith(record.id):
+            errors.append(f"{record.path}: work directory must start with {record.id}")
+        work_claims[work_path.as_posix()].append(record)
+        if record.status in {"planned", "implementing", "reviewing", "verified", "done"} and not work_path.is_dir():
+            errors.append(f"{record.path}: active Requirement lacks its declared work directory")
+
+    for work_path, claimants in work_claims.items():
+        if len(claimants) > 1:
+            errors.append(
+                f"work directory {work_path} is claimed by multiple Requirements: "
+                + ", ".join(record.id for record in claimants)
+            )
+
     for record in records:
         for linked_id in record.links:
             if linked_id.startswith("REQ-"):
@@ -274,6 +369,31 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
         ]
         if not valid_reviews:
             errors.append(f"{record.path}: completed Requirement lacks an approved Review")
+        else:
+            for review in valid_reviews:
+                revision = review.metadata.get("reviewed_revision", "")
+                changed = changed_paths_since(root, revision)
+                work_name = Path(record.metadata.get("work", "")).name
+                work_prefixes = {
+                    f".agents/work/active/{work_name}/",
+                    f".agents/work/archived/{work_name}/",
+                }
+                allowed = {
+                    str(record.path).replace("\\", "/"),
+                    str(review.path).replace("\\", "/"),
+                }
+                stale = sorted(
+                    path
+                    for path in changed
+                    if path not in allowed
+                    and not path.startswith("docs/reviews/")
+                    and not any(path.startswith(prefix) for prefix in work_prefixes)
+                )
+                if stale:
+                    errors.append(
+                        f"{review.path}: reviewed revision is stale; substantive paths changed: "
+                        + ", ".join(stale)
+                    )
 
         work_value = record.metadata.get("work", "")
         work_path = (root / work_value).resolve() if work_value else None
@@ -292,6 +412,10 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
                 errors.append(f"{tasks_path.relative_to(root)}: no parseable Task IDs")
             elif any(match.group(1) == " " for match in task_matches):
                 errors.append(f"{tasks_path.relative_to(root)}: completed Requirement has open Tasks")
+        validation_path = work_path / "VALIDATION.md"
+        if validation_path.exists():
+            _, _, validation_errors = validation_results(validation_path)
+            errors.extend(validation_errors)
 
     work_roots = [root / ".agents" / "work" / "active", root / ".agents" / "work" / "archived"]
     for work_root in work_roots:
@@ -304,9 +428,14 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
                 errors.append(f"{work_dir.relative_to(root)}: missing work files {', '.join(missing)}")
             tasks_path = work_dir / "TASKS.md"
             if tasks_path.exists():
-                task_ids = [match.group(2) for match in TASK_PATTERN.finditer(tasks_path.read_text(encoding="utf-8"))]
+                task_text = tasks_path.read_text(encoding="utf-8")
+                task_matches = list(TASK_PATTERN.finditer(task_text))
+                task_ids = [match.group(2) for match in task_matches]
                 if len(task_ids) != len(set(task_ids)):
                     errors.append(f"{tasks_path.relative_to(root)}: duplicate task IDs")
+                checkbox_count = len(CHECKBOX_PATTERN.findall(task_text))
+                if checkbox_count != len(task_matches):
+                    errors.append(f"{tasks_path.relative_to(root)}: every checkbox must use a valid Task ID")
 
     return errors, len(markdown_files), len(by_id)
 

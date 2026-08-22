@@ -1,1 +1,7 @@
-# Validation
+# Validation Evidence
+
+## Results
+
+| Scope/layer | Command or procedure | Result | Artifact/reference |
+|---|---|---|---|
+| Focused | validate fixture | passed | unittest output |

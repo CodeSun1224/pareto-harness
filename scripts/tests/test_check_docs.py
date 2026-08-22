@@ -4,6 +4,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "check_docs.py"
@@ -64,6 +65,28 @@ class DocumentValidationTests(unittest.TestCase):
     def test_rejects_completed_work_without_validation(self) -> None:
         errors = self.errors("missing_validation")
         self.assertTrue(any("completed work missing VALIDATION.md" in error for error in errors))
+
+    def test_rejects_finding_counter_mismatch(self) -> None:
+        errors = self.errors("finding_mismatch")
+        self.assertTrue(any("open_majors does not match" in error for error in errors))
+        self.assertTrue(any("approved REVIEW has open" in error for error in errors))
+
+    @mock.patch.object(check_docs, "changed_paths_since", return_value={"src/changed_after_review.rs"})
+    def test_rejects_stale_review_revision(self, _changed_paths) -> None:
+        errors = self.errors("valid_completed")
+        self.assertTrue(any("reviewed revision is stale" in error for error in errors))
+
+    def test_rejects_empty_validation(self) -> None:
+        errors = self.errors("empty_validation")
+        self.assertTrue(any("no parseable validation result rows" in error for error in errors))
+
+    def test_rejects_shared_work_directory(self) -> None:
+        errors = self.errors("shared_work")
+        self.assertTrue(any("claimed by multiple Requirements" in error for error in errors))
+
+    def test_rejects_unidentified_checkbox(self) -> None:
+        errors = self.errors("malformed_task")
+        self.assertTrue(any("every checkbox must use a valid Task ID" in error for error in errors))
 
 
 if __name__ == "__main__":

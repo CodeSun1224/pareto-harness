@@ -26,6 +26,17 @@ links: [REQ-0002, SPEC-0001]
 - Core：所有项目 Skills、断链、ID 和 whitespace 检查。
 - Full：不适用；仓库尚无 Runtime。
 
+# Validation commands
+
+```text
+python -m py_compile scripts/check_docs.py scripts/tests/test_check_docs.py
+python -m unittest discover -s scripts/tests -p "test_*.py"
+python scripts/check_docs.py
+python <skill-creator>/scripts/quick_validate.py .agents/skills/<each-skill>
+git diff --check
+git status --short
+```
+
 # Rollback
 
 本需求作为单一治理基线提交；可通过 Git revert 回退，不影响 Runtime 数据。
