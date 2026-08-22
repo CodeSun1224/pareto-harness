@@ -1,0 +1,4 @@
+interface:
+  display_name: "Impact Analysis"
+  short_description: "Trace direct and indirect change risks"
+  default_prompt: "Use $impact-analysis to analyze the direct, indirect, permission, isolation, compatibility, and regression impact of this change."

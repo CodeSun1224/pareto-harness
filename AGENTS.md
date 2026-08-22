@@ -14,6 +14,23 @@ Build a coding-agent harness that improves verified result quality while reducin
 4. Use the narrowest relevant skill from `.agents/skills/`.
 5. Inspect existing changes and preserve unrelated user work.
 
+## Spec-driven delivery
+
+Classify every change before editing:
+
+- `lightweight`: spelling, comments, links, or behavior-neutral metadata. Record impact and run basic checks; a formal Review record is optional.
+- `standard`: runtime behavior, tests, tools, public documentation structure, or automation. Require Requirement, Spec, Plan, Tasks, layered tests, and independent Review.
+- `high`: permissions, sandboxing, data isolation, events/schemas, persistence, concurrency, replay, secrets, or promotion. Add the relevant specialist review and negative tests.
+
+For standard and high-risk work, follow this state path:
+
+```text
+proposed → impact-analyzed → specified → approved → planned
+→ implementing → reviewing → verified → done
+```
+
+Before implementation, use `impact-analysis`, complete the Spec impact matrix, map every acceptance criterion to a test, and create the Requirement work directory. Do not infer impact only from the files requested by the user; inspect callers, consumers, schemas, permissions, isolation boundaries, persistence, and regression surfaces.
+
 ## Architectural constitution
 
 - Keep event integrity, version identity, state transitions, permissions, budgets, cancellation, replay, MVCC, evidence admission, and promote/rollback protocols in the trusted kernel.
@@ -25,29 +42,51 @@ Build a coding-agent harness that improves verified result quality while reducin
 
 ## One home for each fact
 
+- Epic: roadmap outcome and ordered Requirement set.
 - Requirement: desired behavior and acceptance criteria.
+- Spec: approved behavior contract, impact analysis, and test traceability.
 - RFC: proposed significant design.
 - ADR: accepted durable decision and rationale.
 - Fix: defect reproduction, root cause, repair, and regression proof.
 - Postmortem: escaped/systemic failure, timeline, and guardrails.
-- `.agents/work`: temporary execution state, never the sole source of durable truth.
+- Review: independent findings, evidence, and approval state.
+- `.agents/work`: Plan, Tasks, Handoff, and test evidence for active execution; never the sole source of durable product truth.
 
-Use stable IDs (`REQ-####`, `RFC-####`, `ADR-####`, `FIX-####`, `PM-####`). Change `status` metadata rather than moving a document between lifecycle folders.
+Use stable IDs (`EPIC-####`, `REQ-####`, `SPEC-####`, `RFC-####`, `ADR-####`, `FIX-####`, `PM-####`, `REVIEW-####`). Change `status` metadata rather than moving a formal document between lifecycle folders.
 
 ## Change workflow
 
 - Non-trivial product behavior requires an accepted Requirement.
+- Every standard/high Requirement requires an approved Spec, impact analysis, test matrix, Plan, Tasks, validation evidence, and independent Review.
 - Cross-cutting or hard-to-reverse design requires an RFC and, once accepted, an ADR.
 - Bug fixes require a Fix document unless the change is self-evident and local.
 - Update architecture and benchmark documents in the same change when contracts or metrics change.
 - Record assumptions, rejected alternatives, failure modes, rollback, and validation evidence.
 - Prefer a small vertical slice over empty package scaffolding.
 
+## Layered testing
+
+- `Focused`: changed behavior and minimal reproduction.
+- `Impacted`: direct and indirect callers/consumers identified by impact analysis.
+- `Core`: kernel invariants, permissions, isolation, event/replay, and critical CLI flows.
+- `Full`: milestone and release suite, including real-provider and performance runs where applicable.
+
+Within those scopes select the appropriate static, unit, component/contract, integration, E2E, replay/compatibility, security/isolation, and performance tests. Every Plan must name concrete commands; “run relevant tests” is not sufficient.
+
+## Independent review gate
+
+- Run `code-review` for every standard/high Requirement after implementation and tests.
+- Prefer a fresh Agent/session. Give the reviewer the Requirement, Spec, RFC/ADR, diff, and test evidence—not the implementer's conclusions.
+- Review data isolation, API/schema compatibility, permissions, concurrency, regression scope, irrelevant changes, dependency growth, rollback, and quality/cost/latency.
+- `Blocker` and `Major` findings must be closed and re-reviewed before verification. The implementing Agent may not self-close them.
+- If independent execution is unavailable, record the review as non-independent; do not represent it as an independent approval.
+
 ## Completion gates
 
 Run:
 
 ```text
+python -m unittest discover -s scripts/tests -p "test_*.py"
 python scripts/check_docs.py
 git diff --check
 git status --short

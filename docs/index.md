@@ -7,6 +7,8 @@
 - [项目章程与 PRD](product/project-charter.md)：目标、用户、范围、成功指标。
 - [核心能力](product/capabilities.md)：能力地图、优先级和验收方向。
 - [REQ-0001：建立 Pareto Harness 设计基线](requirements/REQ-0001-design-baseline.md)
+- [REQ-0002：建立 SDD 与独立评审门禁](requirements/REQ-0002-sdd-review-gates.md)
+- [SPEC-0001：SDD 与独立评审规范](specs/SPEC-0001-sdd-review-gates.md)
 
 ## 研究
 
@@ -26,8 +28,10 @@
 ## 交付
 
 - [评测协议](benchmarks/protocol.md)
-- [16 周路线图](roadmap/roadmap.md)
+- [Evidence-gated 路线图](roadmap/roadmap.md)
+- [Requirement Backlog](roadmap/requirement-backlog.md)
+- [Epic 目录](epics/EPIC-0001-engineering-foundation.md)
 
 ## 记录类型
 
-`requirements/` 定义需求；`rfcs/` 保存技术提案；`adrs/` 保存已接受决策；`fixes/` 保存缺陷根因和回归证据；`postmortems/` 保存系统性事故复盘。模板位于 `.agents/templates/`。
+`epics/` 组织路线结果；`requirements/` 定义需求；`specs/` 固化行为、影响和测试合同；`rfcs/` 保存重大技术提案；`adrs/` 保存已接受决策；`reviews/` 保存独立评审；`fixes/` 保存缺陷根因和回归证据；`postmortems/` 保存系统性事故复盘。模板位于 `.agents/templates/`。

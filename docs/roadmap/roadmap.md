@@ -1,6 +1,6 @@
 ---
 id: ROADMAP-0001
-title: Pareto Harness 16 周实施路线图
+title: Pareto Harness Evidence-gated 实施路线图
 status: active
 owners: [maintainers]
 created: 2026-08-20
@@ -8,19 +8,19 @@ updated: 2026-08-20
 links: [PRD-0001, REQ-0001, BENCH-0001]
 ---
 
-# 16 周实施路线图
+# Evidence-gated 实施路线图
 
-时间是规划基线，里程碑以验收证据而非日期宣告完成。
+以一名主要开发者配合 AI Coding 估算为 16–20 周。时间是规划基线，阶段只以验收证据而非日期宣告完成。逐项顺序和稳定编号见 [Requirement Backlog](requirement-backlog.md)。
 
-## M0：工程与设计基线（第 1 周）
+## G0：工程、设计与 SDD 基线
 
-交付：独立 Git 仓库、治理文件、Agent/Skill 体系、模板、文档检查、PRD、研究、架构、ADR/RFC、Benchmark 和 Roadmap。
+交付：独立 Git 仓库、治理文件、Agent/Skill 体系、模板、文档检查、PRD、研究、架构、ADR/RFC、Benchmark，以及 SDD、影响分析、分层测试和独立 Review 门禁。
 
-退出条件：REQ-0001 全部满足；新 Agent 无需原始聊天即可说明目标、边界和下一步；无运行时代码空壳。
+退出条件：REQ-0001 和 REQ-0002 满足；新 Agent 无需原始聊天即可完成 Requirement → Spec → Plan → Tasks → Review → Verified；无运行时代码空壳。
 
-## M1：事件—版本—重放纵切（第 2–4 周）
+## G1：可信内核骨架
 
-交付：Rust workspace；protocol/kernel/sqlite/cli/testkit 的最小实现；Task、Behavior、Workspace Revision；Run Manifest；append-only Event Log；Snapshot/Replay；Fake Model/Tool。
+交付：REQ-0003 至 REQ-0009，包括协议/Revision、Event Store、Run Manifest、Snapshot/Replay、Capability/Budget、Hook 骨架和 Effect Intent/Receipt。
 
 退出条件：
 
@@ -29,27 +29,27 @@ links: [PRD-0001, REQ-0001, BENCH-0001]
 - CLI 可以创建、运行、检查和重放确定性示例。
 - Schema、数据库迁移和兼容失败均有测试。
 
-## M2：Task DAG 与 Evidence Loop（第 5–7 周）
+## G2：稳定单 Agent Coding CLI
 
-交付：Plan Revision、DAG 校验和调度；预算/取消/失败传播；Requirement—Evidence—Verifier—Verdict；测试/构建验证器。
+交付：REQ-0010 至 REQ-0017，包括 OpenAI 兼容 Provider、Coding Tools、Workspace/Sandbox、单 Agent Loop、Memory 基线、Evidence Gate 和 CLI。
 
-退出条件：循环依赖、节点失败、重试、取消、迟到结果和证据缺失场景通过；Agent 不能在必需证据缺失时成功结束。
+退出条件：能在真实仓库完成缺陷修复和小型功能；失败可恢复；必需证据缺失不能成功；权限、隔离和费用可审计。
 
-## M3：Context DAG 与成本感知路由（第 8–10 周）
+## G3：受控 Multi-Agent
 
-交付：Context 来源/派生图、Projection Revision、缓存和失效、Token 预算、模型 Provider 接口、Router、升级/降级策略。
+交付：REQ-0018 至 REQ-0022，包括基础 Task DAG、Agent Lease、结构化消息、Worktree 合并和单/多 Agent Router。
 
-退出条件：每个上下文片段可追溯来源和选择理由；缓存失效正确；在固定质量底线下形成至少一个成本或延迟不劣的候选，而不是预设收益。
+退出条件：Agent 不共享可写工作区、不重复提交效果；崩溃可重领；无收益任务默认单 Agent。
 
-## M4：Behavior Revision 与离线演化（第 11–13 周）
+## G4：技术亮点增强
 
-交付：策略注册、Behavior 谱系、Evolution Proposal、历史/隐藏集执行、Pareto Archive、MVCC 冲突处理。
+交付：REQ-0023 至 REQ-0027，包括自适应 Task DAG、Context DAG、Context Cache/GC、完整 Evidence Graph 和成本感知 Router。
 
-退出条件：候选不能原位修改基线；并发 Proposal 冲突显式；过拟合和质量回退候选被门禁拒绝；评测成本完整核算。
+退出条件：每项优化分别完成消融；只在质量底线成立且至少改善一个目标维度时进入默认 Behavior。
 
-## M5：Canary、Rollback 与隔离（第 14–16 周）
+## G5：受控演化
 
-交付：Canary 分配、自动停止、原子 Promote/Rollback、审计视图、WASM/进程隔离最小边界、安全负例集。
+交付：REQ-0028 至 REQ-0033，包括 Behavior 谱系、Evolution Proposal、历史/隐藏评测、MVCC、Canary/Promote/Rollback 和 WASM 隔离。
 
 退出条件：越权和资源超限被拒绝；Canary 触发停止后恢复到指定 Behavior；历史 Run 仍可由原版本解释；发布首份可复现实验报告。
 

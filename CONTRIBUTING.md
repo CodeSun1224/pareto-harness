@@ -4,15 +4,19 @@ Pareto Harness uses trunk-based development around `main` with short-lived branc
 
 ## Before changing the repository
 
-1. Find or create the Requirement that defines acceptance.
-2. Use an RFC for cross-cutting or hard-to-reverse design.
-3. Create an ADR after a design decision is accepted.
-4. Keep temporary plans in `.agents/work/active/` and archive them when done.
+1. Classify the change as lightweight, standard, or high risk using `AGENTS.md`.
+2. Find or create the Requirement that defines acceptance.
+3. For standard/high work, complete an approved Spec, impact analysis, test matrix, Plan, and Tasks before implementation.
+4. Use an RFC for cross-cutting or hard-to-reverse design and an ADR after acceptance.
+5. Keep execution state in one Requirement work directory under `.agents/work/active/` and archive it when done.
+6. Run layered tests and an independent Review before verification.
 
 ## Pull requests
 
-A pull request must identify linked decisions, risks, evidence, benchmark impact, compatibility, and rollback. Use Conventional Commit prefixes (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`) without treating commit text as a substitute for design records.
+A pull request must identify its risk class, linked Epic/Requirement/Spec/decisions, direct and indirect impacts, evidence, compatibility, permissions, data isolation, regression scope, irrelevant changes, and rollback. Blocker or Major Review findings prevent merge.
 
-Before submission run `python scripts/check_docs.py` and `git diff --check`. Runtime-specific gates will be added when runtime code is introduced.
+Use Conventional Commit prefixes (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`) without treating commit text as a substitute for design records.
+
+Before submission run the commands in `AGENTS.md`. Runtime-specific gates will be added when runtime code is introduced.
 
 See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [SECURITY.md](SECURITY.md).

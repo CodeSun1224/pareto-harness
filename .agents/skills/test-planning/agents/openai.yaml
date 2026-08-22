@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test Planning"
+  short_description: "Map requirements to layered regression tests"
+  default_prompt: "Use $test-planning to create a risk-based test and regression matrix for this requirement."

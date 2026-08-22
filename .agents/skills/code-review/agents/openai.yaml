@@ -1,0 +1,4 @@
+interface:
+  display_name: "Independent Code Review"
+  short_description: "Review diffs for correctness and hidden risk"
+  default_prompt: "Use $code-review to independently review this requirement, its diff, and its validation evidence."

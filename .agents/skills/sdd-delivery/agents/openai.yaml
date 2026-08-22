@@ -1,0 +1,4 @@
+interface:
+  display_name: "SDD Delivery"
+  short_description: "Run spec-driven requirement delivery"
+  default_prompt: "Use $sdd-delivery to deliver this requirement from impact analysis through independent review."

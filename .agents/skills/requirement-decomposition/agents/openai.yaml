@@ -1,0 +1,4 @@
+interface:
+  display_name: "Requirement Decomposition"
+  short_description: "Split epics into verifiable requirements"
+  default_prompt: "Use $requirement-decomposition to split this epic into ordered, independently verifiable requirements."
