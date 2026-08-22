@@ -17,3 +17,4 @@ open_majors: 0
 | ID | Severity | Location | Finding and impact | Required proof | Status |
 |---|---|---|---|---|---|
 | F-001 | Major | validator | Open major hidden by metadata | Fix validator | open |
+| X-002 | Major | validator | Invalid ID and accepted major | Fix parser | accepted |

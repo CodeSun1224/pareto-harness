@@ -9,8 +9,8 @@
 
 ## Results
 
-| Scope/layer | Command or procedure | Result | Artifact/reference |
-|---|---|---|---|
+| Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
+|---|---|---|---|---|
 
 ## Skipped tests
 

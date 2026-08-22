@@ -32,7 +32,11 @@ links: [REQ-0002, SPEC-0001]
 python -m py_compile scripts/check_docs.py scripts/tests/test_check_docs.py
 python -m unittest discover -s scripts/tests -p "test_*.py"
 python scripts/check_docs.py
-python <skill-creator>/scripts/quick_validate.py .agents/skills/<each-skill>
+python C:/Users/codes/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/sdd-delivery
+python C:/Users/codes/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/impact-analysis
+python C:/Users/codes/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/test-planning
+python C:/Users/codes/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/code-review
+python C:/Users/codes/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/requirement-decomposition
 git diff --check
 git status --short
 ```

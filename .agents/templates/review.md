@@ -19,6 +19,8 @@ open_majors: 0
 | ID | Severity | Location | Finding and impact | Required proof | Status |
 |---|---|---|---|---|---|
 
+Use IDs `F-001`, `F-002`, and so on. Blocker/Major status is only `open` or `closed`; `accepted` is reserved for Minor/Note risk acceptance.
+
 # Acceptance trace
 
 # Compatibility, permission, and isolation review

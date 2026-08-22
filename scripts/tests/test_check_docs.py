@@ -70,6 +70,8 @@ class DocumentValidationTests(unittest.TestCase):
         errors = self.errors("finding_mismatch")
         self.assertTrue(any("open_majors does not match" in error for error in errors))
         self.assertTrue(any("approved REVIEW has open" in error for error in errors))
+        self.assertTrue(any("invalid Finding ID" in error for error in errors))
+        self.assertTrue(any("Major Finding cannot use accepted" in error for error in errors))
 
     @mock.patch.object(check_docs, "changed_paths_since", return_value={"src/changed_after_review.rs"})
     def test_rejects_stale_review_revision(self, _changed_paths) -> None:
@@ -87,6 +89,21 @@ class DocumentValidationTests(unittest.TestCase):
     def test_rejects_unidentified_checkbox(self) -> None:
         errors = self.errors("malformed_task")
         self.assertTrue(any("every checkbox must use a valid Task ID" in error for error in errors))
+
+    def test_requirement_acceptance_change_invalidates_review(self) -> None:
+        path = FIXTURES / "valid_completed" / "docs" / "requirements" / "req.md"
+        current_text = path.read_text(encoding="utf-8")
+        metadata, error = check_docs.parse_frontmatter(Path("docs/requirements/req.md"), current_text)
+        self.assertIsNone(error)
+        assert metadata is not None
+        current = check_docs.Record(Path("docs/requirements/req.md"), metadata, current_text)
+        previous_text = current_text.replace("# Valid", "# Different acceptance contract")
+        self.assertFalse(check_docs.closure_only_requirement_change(previous_text, current))
+
+    def test_rejects_all_skipped_validation(self) -> None:
+        path = FIXTURES / "all_skipped" / "VALIDATION.md"
+        _, _, errors = check_docs.validation_results(path)
+        self.assertTrue(any("has no passed result" in error for error in errors))
 
 
 if __name__ == "__main__":

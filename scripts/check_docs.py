@@ -165,18 +165,30 @@ def changed_paths_since(root: Path, revision: str) -> set[str]:
 def review_findings(record: Record) -> tuple[list[tuple[str, str, str]], list[str]]:
     findings: list[tuple[str, str, str]] = []
     errors: list[str] = []
+    in_findings = False
     for line in record.text.splitlines():
-        if not line.lstrip().startswith("| F-"):
+        if line.strip() == "# Findings":
+            in_findings = True
+            continue
+        if in_findings and line.startswith("#"):
+            break
+        if not in_findings or not line.lstrip().startswith("|"):
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not cells or cells[0] in {"ID", "---"}:
+            continue
         if len(cells) != 6:
             errors.append(f"{record.path}: malformed Finding row {line!r}")
             continue
         finding_id, severity, _, _, _, status = cells
+        if not re.fullmatch(r"F-\d{3,}", finding_id):
+            errors.append(f"{record.path}: invalid Finding ID {finding_id!r}")
         if severity not in {"Blocker", "Major", "Minor", "Note"}:
             errors.append(f"{record.path}: invalid Finding severity {severity!r}")
         if status not in {"open", "closed", "accepted"}:
             errors.append(f"{record.path}: invalid Finding status {status!r}")
+        if severity in {"Blocker", "Major"} and status == "accepted":
+            errors.append(f"{record.path}: {severity} Finding cannot use accepted status")
         findings.append((finding_id, severity, status))
     return findings, errors
 
@@ -187,25 +199,86 @@ def validation_results(path: Path) -> tuple[int, int, list[str]]:
     if "## Results" not in text:
         errors.append(f"{path}: missing Results section")
     results = 0
+    passed = 0
     failures = 0
     for line in text.splitlines():
         if not line.startswith("|"):
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) != 4 or cells[0] in {"Scope/layer", "---"}:
+        if len(cells) != 5 or cells[0] in {"Scope/layer", "---"}:
             continue
         result = cells[2].lower()
         if result not in {"passed", "failed", "skipped"}:
             continue
         results += 1
+        passed += result == "passed"
         failures += result == "failed"
         if not cells[1] or not cells[3]:
             errors.append(f"{path}: validation row lacks command/procedure or artifact")
+        if result == "skipped" and not cells[4]:
+            errors.append(f"{path}: skipped validation row lacks reason and risk")
     if results == 0:
         errors.append(f"{path}: no parseable validation result rows")
     if failures:
         errors.append(f"{path}: contains failed validation results")
+    if passed == 0:
+        errors.append(f"{path}: completed validation has no passed result")
     return results, failures, errors
+
+
+def frontmatter_body(text: str) -> str:
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return text
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        return text
+    return "\n".join(lines[end + 1 :]).strip()
+
+
+def closure_only_requirement_change(previous_text: str, current: Record) -> bool:
+    previous, parse_error = parse_frontmatter(current.path, previous_text)
+    if parse_error or previous is None:
+        return False
+    if frontmatter_body(previous_text) != frontmatter_body(current.text):
+        return False
+    allowed_fields = {"status", "updated", "links", "work"}
+    for key in set(previous) | set(current.metadata):
+        if key not in allowed_fields and previous.get(key) != current.metadata.get(key):
+            return False
+    if previous.get("status") not in {"implementing", "reviewing"}:
+        return False
+    if current.status not in {"verified", "done"}:
+        return False
+    previous_links = parse_links(previous.get("links", ""))
+    current_links = parse_links(current.metadata.get("links", ""))
+    if previous_links is None or current_links is None or not previous_links.issubset(current_links):
+        return False
+    if any(not link.startswith("REVIEW-") for link in current_links - previous_links):
+        return False
+    previous_work = Path(previous.get("work", ""))
+    current_work = Path(current.metadata.get("work", ""))
+    if previous_work != current_work:
+        if previous_work.name != current_work.name:
+            return False
+        if "active" not in previous_work.parts or "archived" not in current_work.parts:
+            return False
+    return True
+
+
+def file_at_revision(root: Path, revision: str, path: Path) -> str | None:
+    if not (root / ".git").exists():
+        return None
+    result = subprocess.run(
+        ["git", "show", f"{revision}:{path.as_posix()}"],
+        cwd=root,
+        capture_output=True,
+        check=False,
+        text=True,
+        encoding="utf-8",
+    )
+    return result.stdout if result.returncode == 0 else None
 
 
 def validate_repository(root: Path) -> tuple[list[str], int, int]:
@@ -378,10 +451,11 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
                     f".agents/work/active/{work_name}/",
                     f".agents/work/archived/{work_name}/",
                 }
-                allowed = {
-                    str(record.path).replace("\\", "/"),
-                    str(review.path).replace("\\", "/"),
-                }
+                requirement_path = str(record.path).replace("\\", "/")
+                allowed = {str(review.path).replace("\\", "/")}
+                previous_requirement = file_at_revision(root, revision, record.path)
+                if previous_requirement is not None and closure_only_requirement_change(previous_requirement, record):
+                    allowed.add(requirement_path)
                 stale = sorted(
                     path
                     for path in changed
