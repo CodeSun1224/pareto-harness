@@ -8,5 +8,5 @@
 - [x] TASK-REQ-0002-06：扩展文档检查器及其自测试。
 - [x] TASK-REQ-0002-07：升级 PR/CI 门禁。
 - [x] TASK-REQ-0002-08：拆分 Roadmap、Epic 和 Requirement Backlog。
-- [ ] TASK-REQ-0002-09：运行独立 Review 并关闭 Findings。
-- [ ] TASK-REQ-0002-10：记录验证证据、更新状态并提交。
+- [x] TASK-REQ-0002-09：运行独立 Review 并关闭 Findings。
+- [x] TASK-REQ-0002-10：记录验证证据、更新状态并提交。

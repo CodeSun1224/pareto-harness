@@ -1,13 +1,13 @@
 ---
 id: REQ-0002
 title: 建立 SDD、影响分析和独立评审门禁
-status: implementing
+status: done
 owners: [maintainers]
 created: 2026-08-22
 updated: 2026-08-22
-links: [EPIC-0001, SPEC-0001]
+links: [EPIC-0001, SPEC-0001, REVIEW-0001]
 risk: standard
-work: .agents/work/active/REQ-0002-sdd-governance
+work: .agents/work/archived/REQ-0002-sdd-governance
 ---
 
 # Context and user

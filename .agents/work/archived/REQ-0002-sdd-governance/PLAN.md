@@ -1,9 +1,9 @@
 ---
 title: REQ-0002 实施计划
-status: active
+status: completed
 owner: primary-agent
 updated: 2026-08-22
-links: [REQ-0002, SPEC-0001]
+links: [REQ-0002, SPEC-0001, REVIEW-0001]
 ---
 
 # Goal and acceptance
@@ -22,8 +22,8 @@ links: [REQ-0002, SPEC-0001]
 # Regression selection
 
 - Focused：新增状态、模板、Skill 和检查器自测。
-- Impacted：现有 38 个 Markdown 文档继续通过检查。
-- Core：所有项目 Skills、断链、ID 和 whitespace 检查。
+- Impacted：既有正式文档继续通过检查。
+- Core：所有项目 Skills、断链、ID、Review、Validation、Task 和 whitespace 检查。
 - Full：不适用；仓库尚无 Runtime。
 
 # Validation commands
@@ -43,4 +43,4 @@ git status --short
 
 # Rollback
 
-本需求作为单一治理基线提交；可通过 Git revert 回退，不影响 Runtime 数据。
+治理变更由连续、可定位的 Git 提交组成；可按逆序 revert，不影响 Runtime 数据。
