@@ -201,14 +201,24 @@ def validation_results(path: Path) -> tuple[int, int, list[str]]:
     results = 0
     passed = 0
     failures = 0
+    in_results = False
     for line in text.splitlines():
-        if not line.startswith("|"):
+        if line.strip() == "## Results":
+            in_results = True
+            continue
+        if in_results and line.startswith("#"):
+            break
+        if not in_results or not line.startswith("|"):
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) != 5 or cells[0] in {"Scope/layer", "---"}:
+        if cells and cells[0] in {"Scope/layer", "---"}:
+            continue
+        if len(cells) != 5:
+            errors.append(f"{path}: malformed validation result row {line!r}")
             continue
         result = cells[2].lower()
         if result not in {"passed", "failed", "skipped"}:
+            errors.append(f"{path}: invalid validation result {cells[2]!r}")
             continue
         results += 1
         passed += result == "passed"

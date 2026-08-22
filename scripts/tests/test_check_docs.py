@@ -105,6 +105,11 @@ class DocumentValidationTests(unittest.TestCase):
         _, _, errors = check_docs.validation_results(path)
         self.assertTrue(any("has no passed result" in error for error in errors))
 
+    def test_rejects_malformed_skipped_row_after_pass(self) -> None:
+        path = FIXTURES / "malformed_skipped" / "VALIDATION.md"
+        _, _, errors = check_docs.validation_results(path)
+        self.assertTrue(any("malformed validation result row" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
