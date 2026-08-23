@@ -152,6 +152,8 @@ impl Fixture {
             self.scope(),
             self.scope().agent_id,
             Some(event.stream_id.clone()),
+            self.set.reference().clone(),
+            self.limits.clone(),
         );
         let validated = self
             .set
@@ -171,25 +173,21 @@ impl Fixture {
             self.scope(),
             self.scope().agent_id,
             Some(StreamId::parse(stream).unwrap()),
-        );
-        AdmittedRead::admit(
-            &authority,
-            self.set.reference(),
+            self.set.reference().clone(),
             self.limits.clone(),
-            &SchemaRegistry(vec![self.set.clone()]),
-        )
-        .unwrap()
+        );
+        AdmittedRead::admit(&authority, &SchemaRegistry(vec![self.set.clone()])).unwrap()
     }
 
     fn run_read(&self) -> AdmittedRead {
-        let authority = KernelAuthority::authenticated(self.scope(), self.scope().agent_id, None);
-        AdmittedRead::admit(
-            &authority,
-            self.set.reference(),
+        let authority = KernelAuthority::authenticated(
+            self.scope(),
+            self.scope().agent_id,
+            None,
+            self.set.reference().clone(),
             self.limits.clone(),
-            &SchemaRegistry(vec![self.set.clone()]),
-        )
-        .unwrap()
+        );
+        AdmittedRead::admit(&authority, &SchemaRegistry(vec![self.set.clone()])).unwrap()
     }
 }
 
@@ -259,6 +257,13 @@ async fn append_round_trip_idempotency_sequence_and_restart() {
     let store = EventStore::open_pinned(&fixture.path, &store_id)
         .await
         .unwrap();
+    assert!(matches!(
+        store
+            .append(fixture.admit(fixture.event("event_one", "stream_main", 1)))
+            .await
+            .unwrap(),
+        AppendResult::AlreadyCommitted { sequence: 1, .. }
+    ));
     store
         .append(fixture.admit(fixture.event("event_two", "stream_main", 2)))
         .await
@@ -498,6 +503,8 @@ async fn failed_causation_is_atomic_and_exact_limits_are_bound() {
         fixture.scope(),
         fixture.scope().agent_id,
         Some(event.stream_id),
+        fixture.set.reference().clone(),
+        fixture.limits.clone(),
     );
     assert!(matches!(
         AdmittedAppend::admit(&authority, validated, fixture.set.clone(), wrong_limits),
@@ -530,16 +537,22 @@ async fn authority_admission_rejects_scope_actor_and_stream_claims() {
             wrong_scope,
             fixture.scope().agent_id,
             Some(event.stream_id.clone()),
+            fixture.set.reference().clone(),
+            fixture.limits.clone(),
         ),
         KernelAuthority::authenticated(
             fixture.scope(),
             AgentId::parse("agent_other").unwrap(),
             Some(event.stream_id.clone()),
+            fixture.set.reference().clone(),
+            fixture.limits.clone(),
         ),
         KernelAuthority::authenticated(
             fixture.scope(),
             fixture.scope().agent_id,
             Some(StreamId::parse("stream_other").unwrap()),
+            fixture.set.reference().clone(),
+            fixture.limits.clone(),
         ),
     ];
     for authority in cases {
@@ -556,14 +569,15 @@ async fn authority_admission_rejects_scope_actor_and_stream_claims() {
         ));
     }
     let missing = SchemaRegistry(Vec::new());
-    let authority = KernelAuthority::authenticated(fixture.scope(), fixture.scope().agent_id, None);
+    let authority = KernelAuthority::authenticated(
+        fixture.scope(),
+        fixture.scope().agent_id,
+        None,
+        fixture.set.reference().clone(),
+        fixture.limits.clone(),
+    );
     assert!(matches!(
-        AdmittedRead::admit(
-            &authority,
-            fixture.set.reference(),
-            fixture.limits.clone(),
-            &missing
-        ),
+        AdmittedRead::admit(&authority, &missing),
         Err(EventStoreError {
             kind: ErrorKind::ProtocolInvalid
         })
@@ -782,6 +796,8 @@ async fn complete_scope_matrix_and_payload_shadow_cannot_override_authority() {
             scope.clone(),
             scope.agent_id,
             Some(event.stream_id.clone()),
+            fixture.set.reference().clone(),
+            fixture.limits.clone(),
         );
         assert!(
             AdmittedAppend::admit(
@@ -819,4 +835,75 @@ async fn missing_parent_path_is_stable_io_error() {
         EventStore::open(&path).await.unwrap_err().kind,
         ErrorKind::Io
     );
+}
+
+#[tokio::test]
+async fn retained_schema_registry_drives_exact_reader_and_rejects_substitution() {
+    let fixture = Fixture::new();
+    let store = EventStore::open(&fixture.path).await.unwrap();
+    let store_id = store.store_id.clone();
+    store
+        .append(fixture.admit(fixture.event("event_old", "stream_old", 1)))
+        .await
+        .unwrap();
+    drop(store);
+
+    let base = generate_schema_bundle().unwrap();
+    let alternate = Arc::new(
+        SchemaSet::bootstrap_initial(base.manifest, base.schemas, &base.reference).unwrap(),
+    );
+    let registry = SchemaRegistry(vec![alternate.clone(), fixture.set.clone()]);
+    let exact_authority = KernelAuthority::authenticated(
+        fixture.scope(),
+        fixture.scope().agent_id,
+        Some(StreamId::parse("stream_old").unwrap()),
+        fixture.set.reference().clone(),
+        fixture.limits.clone(),
+    );
+    let exact_read = AdmittedRead::admit(&exact_authority, &registry).unwrap();
+    let store = EventStore::open_pinned(&fixture.path, &store_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .read(&exact_read, None, 10)
+            .await
+            .unwrap()
+            .events
+            .len(),
+        1
+    );
+
+    let alternate_authority = KernelAuthority::authenticated(
+        fixture.scope(),
+        fixture.scope().agent_id,
+        Some(StreamId::parse("stream_old").unwrap()),
+        alternate.reference().clone(),
+        fixture.limits.clone(),
+    );
+    let alternate_read = AdmittedRead::admit(&alternate_authority, &registry).unwrap();
+    assert_eq!(
+        store
+            .read(&alternate_read, None, 10)
+            .await
+            .unwrap_err()
+            .kind,
+        ErrorKind::ProtocolInvalid
+    );
+
+    let mut wrong_ref = fixture.set.reference().clone();
+    wrong_ref.manifest_digest = Digest::parse(format!("sha256:{}", "1".repeat(64))).unwrap();
+    let wrong_authority = KernelAuthority::authenticated(
+        fixture.scope(),
+        fixture.scope().agent_id,
+        Some(StreamId::parse("stream_old").unwrap()),
+        wrong_ref,
+        fixture.limits.clone(),
+    );
+    assert!(matches!(
+        AdmittedRead::admit(&wrong_authority, &registry),
+        Err(EventStoreError {
+            kind: ErrorKind::ProtocolInvalid
+        })
+    ));
 }

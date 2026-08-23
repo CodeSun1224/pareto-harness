@@ -105,6 +105,9 @@ impl AdmittedAppend {
         schema_set: Arc<SchemaSet>,
         limits: ProtocolLimitsRef,
     ) -> Result<Self, EventStoreError> {
+        if schema_set.reference() != &authority.schema_set_ref || limits != authority.limits {
+            return Err(EventStoreError::new(ErrorKind::ProtocolInvalid));
+        }
         let envelope = event.envelope().clone();
         let target_stream = authority
             .target_stream
@@ -131,6 +134,8 @@ struct KernelAuthority {
     scope: IsolationScope,
     actor: AgentId,
     target_stream: Option<StreamId>,
+    schema_set_ref: SchemaSetRef,
+    limits: ProtocolLimitsRef,
 }
 
 impl KernelAuthority {
@@ -138,11 +143,15 @@ impl KernelAuthority {
         scope: IsolationScope,
         actor: AgentId,
         target_stream: Option<StreamId>,
+        schema_set_ref: SchemaSetRef,
+        limits: ProtocolLimitsRef,
     ) -> Self {
         Self {
             scope,
             actor,
             target_stream,
+            schema_set_ref,
+            limits,
         }
     }
 }
@@ -157,15 +166,13 @@ struct AdmittedRead {
 impl AdmittedRead {
     fn admit(
         authority: &KernelAuthority,
-        expected_schema_set: &SchemaSetRef,
-        limits: ProtocolLimitsRef,
         registry: &SchemaRegistry,
     ) -> Result<Self, EventStoreError> {
         Ok(Self {
             scope: authority.scope.clone(),
             stream_id: authority.target_stream.clone(),
-            schema_set: registry.resolve(expected_schema_set)?,
-            limits,
+            schema_set: registry.resolve(&authority.schema_set_ref)?,
+            limits: authority.limits.clone(),
         })
     }
 }
