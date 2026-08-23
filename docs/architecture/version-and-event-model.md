@@ -4,8 +4,8 @@ title: 版本、事件与证据模型
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-22
-links: [RFC-0001, RFC-0002, ADR-0001, ADR-0003, REQ-0003, SPEC-0002]
+updated: 2026-08-24
+links: [RFC-0001, RFC-0002, RFC-0003, ADR-0001, ADR-0003, ADR-0004, REQ-0003, REQ-0004, SPEC-0002, SPEC-0003]
 ---
 
 # 版本、事件与证据模型
@@ -58,7 +58,7 @@ ModelSnapshot          ToolSetRevision
 - `hypothesis`, `target_metrics`, `quality_floor`
 - `evaluation_suite_revision`, `budget`, `risk`, `rollback_condition`
 
-字段名是设计契约；序列化、SchemaSet、规范化/digest、可信验证上下文、兼容与 Replay lineage 已由 RFC-0002/ADR-0003 冻结。公开数据携带完整 SchemaRef 和 IsolationScope，不直接暴露 Rust 内部布局。已实现事实限于 REQ-0003 protocol crate 和生成 Schema；Event Store、状态机与 Replay executor 仍由后续 Requirement 交付。
+字段名是设计契约；序列化、SchemaSet、规范化/digest、可信验证上下文、兼容与 Replay lineage 已由 RFC-0002/ADR-0003 冻结。公开数据携带完整 SchemaRef 和 IsolationScope，不直接暴露 Rust 内部布局。REQ-0004 已实现 Kernel 私有 SQLite append-only Event Store：固定完整隔离键、exact SchemaSet/limits、连续 Stream sequence、幂等事务、显式 append ordinal horizon 与读取重验证；状态机、Projection 与 Replay executor 仍由后续 Requirement 交付。
 
 ## 事件族
 

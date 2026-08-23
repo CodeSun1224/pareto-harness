@@ -4,7 +4,7 @@
 
 Pareto Harness 的目标是在结果质量、Token/费用与端到端延迟之间持续寻找 Pareto 最优的 Agent 行为。项目采用“稳定机制内核 + 版本化策略”的架构：内核负责事件、版本、权限、重放和晋升安全，规划、上下文、路由、重试和评测策略可以独立实验与演化。
 
-可信内核的首个协议基础切片 REQ-0003 已交付：提供不依赖 Runtime 服务的版本化协议类型、JSON Schema 和合同测试；Event Store、状态机、Replay executor 与 CLI 尚未实现。这里不会用空模块冒充完成度。
+可信内核的前两个纵向切片已交付：REQ-0003 提供版本化协议类型、JSON Schema 和合同测试；REQ-0004 提供 Kernel 私有、真实 SQLite 文件支持的 append-only Event Store，以及 migration、事务幂等、隔离、稳定分页与重启恢复测试。Run/Task 状态机、Projection、Replay executor 与 CLI 尚未实现。
 
 ## Start here
 
@@ -21,7 +21,7 @@ Pareto Harness is an independent coding-agent runtime designed to maximize verif
 
 ## Status
 
-`pre-alpha / protocol foundation delivered`. Claims in research documents are evidence-graded; target metrics are not presented as achieved results.
+`pre-alpha / protocol and SQLite event-store foundation delivered`. Claims in research documents are evidence-graded; target metrics are not presented as achieved results.
 
 ## License
 

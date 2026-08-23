@@ -4,8 +4,8 @@ title: 可信内核骨架
 status: active
 owners: [maintainers]
 created: 2026-08-22
-updated: 2026-08-22
-links: [PRD-0001, RFC-0001, RFC-0002, ADR-0001, ADR-0003, BACKLOG-0001, REQ-0003, SPEC-0002]
+updated: 2026-08-24
+links: [PRD-0001, RFC-0001, RFC-0002, RFC-0003, ADR-0001, ADR-0003, ADR-0004, BACKLOG-0001, REQ-0003, REQ-0004, SPEC-0002, SPEC-0003]
 ---
 
 # Outcome
@@ -15,6 +15,8 @@ links: [PRD-0001, RFC-0001, RFC-0002, ADR-0001, ADR-0003, BACKLOG-0001, REQ-0003
 # Planned requirements
 
 REQ-0003 至 REQ-0009：协议与 Revision、Event Store、状态机与 Run Manifest、Snapshot/Replay、Capability/Budget、Hook 骨架、Effect Intent/Receipt。详细顺序见 Requirement Backlog。
+
+已交付 REQ-0003 协议基础与 REQ-0004 SQLite append-only Event Store；REQ-0005 起的状态机、Projection/Replay 和权限能力仍未实现。
 
 # Exit criteria
 

@@ -11,6 +11,8 @@
 - [SPEC-0001：SDD 与独立评审规范](specs/SPEC-0001-sdd-review-gates.md)
 - [REQ-0003：版本化协议类型和 JSON Schema](requirements/REQ-0003-versioned-protocol-types-json-schema.md)
 - [SPEC-0002：版本化协议类型和 JSON Schema 规范](specs/SPEC-0002-versioned-protocol-types-json-schema.md)
+- [REQ-0004：SQLite append-only Event Store](requirements/REQ-0004-sqlite-append-only-event-store.md)
+- [SPEC-0003：SQLite append-only Event Store 规范](specs/SPEC-0003-sqlite-append-only-event-store.md)
 
 ## 研究
 
@@ -28,6 +30,8 @@
 - [ADR-0002：Rust 模块化单体与 SQLite 起步](adrs/ADR-0002-rust-modular-monolith.md)
 - [RFC-0002：版本化协议、规范化 JSON 与 Schema 兼容合同](rfcs/RFC-0002-versioned-protocol-json-schema.md)
 - [ADR-0003：闭合版本化 JSON 协议与可信上下文验证](adrs/ADR-0003-versioned-json-protocol-contract.md)
+- [RFC-0003：SQLite Event Store 事务、幂等与读取合同](rfcs/RFC-0003-sqlite-event-store-contract.md)
+- [ADR-0004：Kernel 私有 SQLite append-only Event Store 合同](adrs/ADR-0004-sqlite-event-store-transaction-contract.md)
 
 ## 交付
 

@@ -1,13 +1,13 @@
 ---
 id: REQ-0004
 title: SQLite append-only Event Store
-status: planned
+status: done
 owners: [maintainers]
 created: 2026-08-23
 updated: 2026-08-23
-links: [EPIC-0002, REQ-0003, SPEC-0003, RFC-0003, ADR-0002, ADR-0003, ADR-0004]
+links: [EPIC-0002, REQ-0003, SPEC-0003, RFC-0003, ADR-0002, ADR-0003, ADR-0004, REVIEW-0003]
 risk: high
-work: .agents/work/active/REQ-0004-sqlite-event-store
+work: .agents/work/archived/REQ-0004-sqlite-event-store
 ---
 
 # Context and user
