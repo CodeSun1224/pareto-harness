@@ -139,3 +139,21 @@ Exact-HEAD local evidence passed: `cargo fmt --all -- --check`; locked/offline c
 | F-011 | Minor | PLAN/VALIDATION acknowledge exact commits and pending CI, but HANDOFF remains pre-implementation, the unit `--exact` filter remains unqualified, VALIDATION still overclaims atomic schema publication, and its review candidate is `d1daa0d` rather than exact HEAD. | open |
 
 REQ-0003 must remain `changes-requested`; F-001/F-002/F-003 and F-005/F-007/F-008/F-009/F-010 require remediation and another exact-commit independent re-review.
+
+## Focused re-review — exact commit `c115b92` — 2026-08-23
+
+- Reviewed revision: `c115b9241f47b129f255c582b78a20ea3b75513a`
+- Scope: only F-011 documentation/work drift and the REVIEW-0001 whitespace-range regression associated with F-010
+- Verdict: changes-requested; REQ-0003 open count is now 3 Blocker, 5 Major, 0 Minor
+
+| ID | Severity | Focused evidence | Status |
+|---|---|---|---|
+| F-001–F-003 | Blocker | Outside this focused diff; prior exact-HEAD dispositions unchanged. | open |
+| F-004 | Blocker | Exact review remains satisfied at the newer exact commit. | closed by reviewer |
+| F-005 | Major | Outside this focused diff; prior disposition unchanged. | open |
+| F-006 | Major | Outside this focused diff; prior closure retained. | closed by reviewer |
+| F-007–F-009 | Major | Outside this focused diff; prior dispositions unchanged. | open |
+| F-010 | Major | The workflow whitespace sub-finding is repaired: PR uses `base.sha...HEAD`, ordinary push uses `before...sha`, and zero-before initial push falls back to exact `HEAD` (`protocol-matrix.yml:46-56`). Cross-platform executions and the other F-010 evidence remain pending, so F-010 stays open. | open |
+| F-011 | Minor | HANDOFF now describes implementing/current review state and pending matrix; PLAN uses the module-qualified exact unit-test name; VALIDATION records the completed `ff614b5` review, removes the atomic-publication overclaim, and correctly marks F-009/cross-platform evidence open. These are accurate facts for the reviewed history; `c115b92` is this focused remediation revision. | closed by reviewer |
+
+No approved formal REQ-0003 Review is created because 3 Blocker and 5 Major findings remain.

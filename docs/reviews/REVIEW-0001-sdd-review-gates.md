@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-23
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 98e882acbb44cb9055128ff67b3ae9094c254a3b
+reviewed_revision: c115b9241f47b129f255c582b78a20ea3b75513a
 open_blockers: 0
 open_majors: 0
 ---
@@ -28,7 +28,7 @@ Approved。独立 Reviewer 使用不继承实现讨论的评审上下文，检�
 | F-006 | Major | Findings parsing | Blocker/Major accepted 或非法 ID 可逃逸 | 严格 ID、severity 和 status 解析 | closed |
 | F-007 | Major | Validation row parsing | 畸形 skipped 行可被静默忽略 | 所有 Results 数据行严格校验 | closed |
 | F-008 | Minor | CI whitespace range | 多提交 push 只检查 HEAD | PR/push 使用事件范围 diff | closed |
-| F-009 | Minor | `.github/workflows/protocol-matrix.yml:48` | 新增 protocol matrix 再次只执行 `git show --check ... HEAD`，PR/多提交 push 的较早 commit whitespace 不在门禁范围，回归 F-008 已关闭保护 | 按 `pull_request` base/head 与 `push` before/after 事件范围执行 `git diff --check`，并增加多提交 workflow/脚本回归证据 | open |
+| F-009 | Minor | `.github/workflows/protocol-matrix.yml:46-56` | 新增 protocol matrix 曾只检查 `HEAD`，遗漏 PR/多提交 push 范围 | PR 使用 base/head、普通 push 使用 before/after、零 before initial push 检查 exact HEAD | closed |
 
 # Acceptance trace
 
@@ -53,3 +53,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - 第二次 focused re-review：changes-requested，1 Major。
 - revision `98e882a` 最终 re-review：approved，无新 Finding。
 - exact HEAD `ff614b5` focused re-review：changes-requested。独立复核 `98e882a..ff614b5` 全部 substantive changes；AGENTS/README/index/ARCH/EPIC 和 protocol SDD 增量未削弱生命周期、风险、独立 Review、freshness 或完成门禁，18 个治理测试通过。但新三平台 workflow 的 whitespace 步骤仅检查 `HEAD`，重新引入 F-008 的多提交范围缺口，记录为 F-009。按门禁要求 `reviewed_revision` 保持 `98e882a`，不批准 `ff614b5` 的治理增量。
+- exact commit `c115b9241f47b129f255c582b78a20ea3b75513a` focused re-review：approved。workflow 分别以 PR `base.sha...HEAD`、普通 push `before...sha` 和零 before initial push 的 exact `HEAD` 执行 whitespace gate，关闭 F-009；HANDOFF/PLAN/VALIDATION 只修正执行事实和命令，未削弱 REQ-0002/SPEC-0001 生命周期、独立 Review、freshness 或完成门禁。0 open Blocker/Major，reviewed revision 前移至 `c115b92`。
