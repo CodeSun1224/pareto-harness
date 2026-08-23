@@ -10,3 +10,8 @@
 - [x] TASK-REQ-0003-08：批准后实现确定性 Schema、manifest、digest、兼容矩阵和公共记录 fixtures。Validation: schema, compatibility, isolation and replay commands in PLAN.md。
 - [x] TASK-REQ-0003-09：运行 Focused、Impacted、Core 与完成门禁并记录 VALIDATION.md。Validation: exact commands and artifacts；跨平台与 exact-revision 门禁仍记录为 open risk。
 - [ ] TASK-REQ-0003-10：执行独立 code/architecture review，复审 Blocker/Major 后验证归档。Validation: approved Review linked to REQ-0003 and SPEC-0002。
+- [x] TASK-REQ-0003-11：整改 F005，封闭 `ProtocolRecord` 并禁止通用 API 为 Event/Run/Evidence 产生缺少可信上下文的 `Validated<T>`；补专用边界绕过负例。Validation: sealed compile-fail doctest and dedicated boundary contract tests。
+- [x] TASK-REQ-0003-12：整改 F007，对 admitted SchemaSet 精确绑定 boundary revision 顶层与 hash-view SchemaRef，并补 content/wrong-ref/lineage/outcome matrix。Validation: `boundary_record_admission_binds_exact_top_and_hash_schemas`。
+- [x] TASK-REQ-0003-13：整改 F008，补 Event/Run/Evidence typed `RECORD_BYTES` 与 Event `PAYLOAD_BYTES` 精确 N/N+1、pretty/minified/escape 和错误顺序证据。Validation: `typed_event_payload_and_record_bytes_are_exact` and `typed_run_and_evidence_record_bytes_are_exact`。
+- [x] TASK-REQ-0003-14：整改 F009，逐个验证所有保留 set 的目录/manifest/member digest/精确文件集合，并覆盖并发、冲突和 stale staging。Validation: retained-set and publisher focused tests。
+- [ ] TASK-REQ-0003-15：运行完整门禁、提交推送 exact commit、取得三平台 raw Actions 结果并请求独立 focused re-review。Validation: VALIDATION raw commands, GitHub run/job IDs, CODE-REVIEW disposition。

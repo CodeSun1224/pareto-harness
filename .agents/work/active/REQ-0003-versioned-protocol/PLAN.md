@@ -23,9 +23,10 @@ links: [REQ-0003, SPEC-0002]
 3. 已完成：公共类型、验证错误、确定性 Schema/manifest、规范化/digest vectors 和保守兼容检查。
 4. 已完成：EventEnvelope、RunManifest、EvidenceRecord、隔离、limits、boundary inventory/reconciliation 与 replay lineage 本地 fixtures。
 5. 已完成：本地 Focused → Impacted → Core 验证并记录证据；已创建 exact commit `d1daa0d`。
-6. 进行中：由 fresh reviewer 对 exact commit 聚焦复审；实现者不自行关闭 Blocker/Major。
-7. 进行中：增加 GitHub Actions Windows/Linux/macOS matrix；远端执行结果返回前只记录为 planned，不声明通过。
-8. 待完成：关闭独立 Review findings、刷新文档 freshness、取得三平台证据，再进入 verified/done。
+6. 已完成：fresh reviewer 对 exact commit `f8275e09103fe7702188c8298c5c2a791b9118b8` 聚焦复审；F001/F002/F003/F004/F006/F011 已由 reviewer 关闭。
+7. 进行中：整改 F005/F007/F008/F009：封闭顶层 record admission、对 admitted set 精确绑定 boundary 顶层/hash-view Schema、补齐 typed RECORD/PAYLOAD N/N+1，以及逐个保留 set/并发/失败发布门禁。
+8. 进行中：核验 `f8275e0` 与下一整改 exact commit 的 GitHub Actions Windows/Linux/macOS matrix；远端结果返回前不得声明跨平台通过。
+9. 待完成：运行完整 locked/offline 门禁，提交并推送整改 exact commit，由同一独立 reviewer focused re-review；全部 Major 和 F010 证据关闭后才进入 verified/done。
 
 # Validation
 
@@ -40,6 +41,9 @@ cargo test -p pareto-protocol --test protocol_contract compatibility_proof_allow
 cargo test -p pareto-protocol --test protocol_contract closed_types_reject_unknown_fields_duplicate_keys_and_floats -- --exact
 cargo test -p pareto-protocol validation::tests::isolation_boundaries_and_payload_schema_fail_closed -- --exact
 cargo test -p pareto-protocol --test protocol_contract replay_lineage_and_boundary_finalization_fail_closed -- --exact
+cargo test -p pareto-protocol --test protocol_contract typed_record_and_payload_byte_limits_are_exact -- --exact
+cargo test -p pareto-protocol --test protocol_contract every_retained_schema_set_is_complete_and_content_addressed -- --exact
+cargo test -p pareto-protocol --test protocol_contract schema_publisher_handles_concurrency_and_stale_staging -- --exact
 cargo tree -p pareto-protocol
 python -m unittest discover -s scripts/tests -p "test_*.py"
 python scripts/check_docs.py

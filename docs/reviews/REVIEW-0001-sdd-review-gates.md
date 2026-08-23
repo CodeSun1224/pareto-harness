@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-23
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: e761dc772ffb9987e57b8376d681a8c417719fbb
+reviewed_revision: f8275e09103fe7702188c8298c5c2a791b9118b8
 open_blockers: 0
 open_majors: 0
 ---
@@ -55,3 +55,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact HEAD `ff614b5` focused re-review：changes-requested。独立复核 `98e882a..ff614b5` 全部 substantive changes；AGENTS/README/index/ARCH/EPIC 和 protocol SDD 增量未削弱生命周期、风险、独立 Review、freshness 或完成门禁，18 个治理测试通过。但新三平台 workflow 的 whitespace 步骤仅检查 `HEAD`，重新引入 F-008 的多提交范围缺口，记录为 F-009。按门禁要求 `reviewed_revision` 保持 `98e882a`，不批准 `ff614b5` 的治理增量。
 - exact commit `c115b9241f47b129f255c582b78a20ea3b75513a` focused re-review：approved。workflow 分别以 PR `base.sha...HEAD`、普通 push `before...sha` 和零 before initial push 的 exact `HEAD` 执行 whitespace gate，关闭 F-009；HANDOFF/PLAN/VALIDATION 只修正执行事实和命令，未削弱 REQ-0002/SPEC-0001 生命周期、独立 Review、freshness 或完成门禁。0 open Blocker/Major，reviewed revision 前移至 `c115b92`。
 - exact commit `e761dc772ffb9987e57b8376d681a8c417719fbb` closure re-review：仅落盘上述独立 Review 结论与 freshness metadata，无产品、CI 或治理行为变化；0 open Blocker/Major，reviewed revision 前移至 `e761dc7`。
+- exact commit `f8275e09103fe7702188c8298c5c2a791b9118b8` freshness re-review：该增量未修改 REQ-0002/SPEC-0001 检查器、生命周期、独立性、finding 计数或完成判定规则；18 个治理测试通过。REQ-0003 产品 finding 由独立 CODE-REVIEW 继续以 changes-requested 跟踪，不冒充本治理 Review 的批准。REVIEW-0001 保持 0 open Blocker/Major，reviewed revision 前移至 exact f8275e0。

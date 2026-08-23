@@ -113,4 +113,17 @@ mod tests {
             "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}"
         );
     }
+
+    #[test]
+    fn matches_rfc_8785_literals_and_string_escaping_vector() {
+        // RFC 8785 section 3.2.2 sample, restricted to the protocol's non-floating subset.
+        let value = json!({
+            "literals": [null, true, false],
+            "string": "€$\u{000f}\nA'B\"\\\"/"
+        });
+        assert_eq!(
+            canonical_json(&value).unwrap(),
+            "{\"literals\":[null,true,false],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\"/\"}"
+        );
+    }
 }

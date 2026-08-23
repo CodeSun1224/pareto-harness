@@ -1,5 +1,30 @@
 # Validation Evidence
 
+## 2026-08-23 exact `f8275e0` re-review and CI preflight
+
+- 独立 reviewer 已对 `f8275e09103fe7702188c8298c5c2a791b9118b8` 完成 exact re-review：F001/F002/F003/F004/F006/F011 closed；F005/F007/F008/F009/F010 Major open。实现者未自行改变 finding disposition。
+- `gh --version`：passed，`gh version 2.98.0 (2026-08-20)`。
+- `gh auth status`：failed，keyring 中 `CodeSun1224` token invalid。
+- `gh run list --workflow protocol-matrix.yml --limit 20`：沙箱内失败，GitHub API 连接被 `127.0.0.1:9` proxy 拒绝；批准后的沙箱外重试超时，尚未取得 run/job 原始结果。
+- 因此 `f8275e0` Windows/Ubuntu/macOS 状态仍为 **未核实**；不得据此声明跨平台验证完成。后续在有效 GitHub CLI 认证/网络可用后记录 run ID、head SHA、每个 job conclusion 和原始命令输出。
+
+## 2026-08-23 remaining-major impact/test delta
+
+- F005 直接影响 public admission API；外部实现 `ProtocolRecord` 和 context-sensitive record 的通用 `Validated<T>` 是权限/语义绕过面。回滚为恢复旧 API，但不得发布该不安全表面。
+- F007 直接影响 boundary/replay identity，间接影响未来 REQ-0006；测试必须覆盖 exact admitted top/hash SchemaRef、content mutation、wrong inventory/cross-scope 与 intent/partial/cancel/late 结果。
+- F008 直接影响 untrusted typed resource boundary；Event/Run/Evidence 必须在 Schema、digest 和语义工作前执行 record limit，Event 另先执行 payload limit，并以精确 N/N+1 证明。
+- F009 直接影响不可变 Schema reader；所有保留 set 都必须独立重算目录/manifest/member digest 和精确文件集，并验证并发幂等、冲突失败与 stale staging 不破坏已发布目录。
+
+## 2026-08-23 remaining-major remediation evidence (pre-commit)
+
+- F005：`ProtocolRecord` 已 sealed；EventEnvelope、RunManifest、EvidenceRecord 不再实现通用 record admission，必须使用各自 trusted-context boundary。compile-fail doctest 固定该 API 不可绕过；V1 limits profile 通用 admission 另要求完整 preimage exact equality。
+- F007：`boundary_record_admission_binds_exact_top_and_hash_schemas` passed；inventory/reconciliation 的顶层 `metadata.schema_ref`、嵌套 `hash_schema_ref` 和 inventory `schema_set_ref` 都 exact-match admitted set；wrong hash/top/content mutation 失败，received、intent/partial-without-receipt、cancelled 与 late reconciliation 均覆盖。
+- F008：`typed_event_payload_and_record_bytes_are_exact` 与 `typed_run_and_evidence_record_bytes_are_exact` passed；Event payload、Event/Run/Evidence record 均覆盖 semantic bytes N/N+1，另覆盖 minified/pretty 同一语义边界和 escape 解码。
+- F009：`every_retained_schema_set_is_complete_and_content_addressed` passed，逐个检查 2 个保留 set 的目录 digest、manifest digest、所有 member digest/Draft compilation 和精确文件集合；publisher 并发同 digest、stale staging、幂等及 existing-target byte conflict 负例 passed。
+- RFC 8785 官方 property ordering 与 literals/string escaping 两组适用 vector passed；浮点/unsafe integer 按本协议冻结子集继续 fail closed。
+- 完整本地 Rust 结果：9 unit + 17 contract passed；1 个 release observation baseline 在普通 suite 中按设计 ignored。Python governance：18 passed。fmt、locked/offline clippy、locked/offline all-target/all-feature tests、Schema generation、`git diff --exit-code -- schemas/`、`git diff --check` passed。
+- `python scripts/check_docs.py` 在 pre-commit 工作树仍只因 REVIEW-0001 freshness 对未提交 substantive paths 报错。下一步提交 exact revision 后交独立 reviewer 更新 freshness 和 finding disposition；在此之前不声明 completion。
+
 ## 2026-08-23 remediation working-tree evidence
 
 - `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`：passed。

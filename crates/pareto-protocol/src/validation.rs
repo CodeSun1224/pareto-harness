@@ -159,12 +159,26 @@ pub trait EventVariantDecoder: Send + Sync {
     fn decode(&self, payload: &Value) -> Result<Box<dyn Any + Send + Sync>, ValidationError>;
 }
 
-/// Closed top-level protocol record that can cross an untrusted JSON boundary.
-pub trait ProtocolRecord: DeserializeOwned + Serialize {
+mod sealed {
+    pub trait ProtocolRecord {}
+}
+
+/// Closed, context-free top-level protocol record that can cross an untrusted JSON boundary.
+///
+/// This trait is sealed. Records whose admission requires trusted run context (events, run
+/// manifests, and evidence) deliberately do not implement it and must use their dedicated
+/// `SchemaSet` boundary.
+///
+/// ```compile_fail
+/// use pareto_protocol::{EventEnvelope, ProtocolRecord};
+/// fn bypass<T: ProtocolRecord>() {}
+/// bypass::<EventEnvelope>();
+/// ```
+pub trait ProtocolRecord: sealed::ProtocolRecord + DeserializeOwned + Serialize {
     /// Exact public Schema type name.
     const SCHEMA_TYPE: &'static str;
     /// Applies cross-field semantics after limits, Schema, and Serde validation.
-    fn validate_semantics(&self) -> Result<(), ValidationError> {
+    fn validate_semantics(&self, _set: &SchemaSet) -> Result<(), ValidationError> {
         Ok(())
     }
 }
@@ -352,7 +366,9 @@ impl SchemaSet {
                 "record does not match closed typed contract",
             )]
         })?;
-        record.validate_semantics().map_err(|error| vec![error])?;
+        record
+            .validate_semantics(self)
+            .map_err(|error| vec![error])?;
         Ok(Validated(record))
     }
 
@@ -1104,6 +1120,7 @@ impl<'de> serde::de::DeserializeSeed<'de> for UniqueValueSeed {
 
 macro_rules! protocol_record {
     ($type:ty, $schema:literal) => {
+        impl sealed::ProtocolRecord for $type {}
         impl ProtocolRecord for $type {
             const SCHEMA_TYPE: &'static str = $schema;
         }
@@ -1119,30 +1136,62 @@ protocol_record!(
     crate::BoundaryReconciliationHashView,
     "boundary-reconciliation-hash-view"
 );
-protocol_record!(crate::EventEnvelope, "event-envelope");
-protocol_record!(crate::EvidenceRecord, "evidence-record");
-protocol_record!(ProtocolLimitsProfileV1, "protocol-limits-profile");
 protocol_record!(crate::RevisionHashView, "revision-hash-view");
-protocol_record!(crate::RunManifest, "run-manifest");
 protocol_record!(crate::SchemaSetManifest, "schema-set-manifest");
 
+impl sealed::ProtocolRecord for ProtocolLimitsProfileV1 {}
+impl ProtocolRecord for ProtocolLimitsProfileV1 {
+    const SCHEMA_TYPE: &'static str = "protocol-limits-profile";
+    fn validate_semantics(&self, _set: &SchemaSet) -> Result<(), ValidationError> {
+        if self == &ProtocolLimitsV1::profile() {
+            Ok(())
+        } else {
+            Err(schema_error(
+                "",
+                "limits profile is not the exact V1 profile",
+            ))
+        }
+    }
+}
+
+impl sealed::ProtocolRecord for crate::RevisionMetadata {}
 impl ProtocolRecord for crate::RevisionMetadata {
     const SCHEMA_TYPE: &'static str = "revision-metadata";
-    fn validate_semantics(&self) -> Result<(), ValidationError> {
+    fn validate_semantics(&self, _set: &SchemaSet) -> Result<(), ValidationError> {
         self.validate_identity()
     }
 }
 
+impl sealed::ProtocolRecord for crate::BoundaryInventoryRevision {}
 impl ProtocolRecord for crate::BoundaryInventoryRevision {
     const SCHEMA_TYPE: &'static str = "boundary-inventory-revision";
-    fn validate_semantics(&self) -> Result<(), ValidationError> {
+    fn validate_semantics(&self, set: &SchemaSet) -> Result<(), ValidationError> {
+        if set.exact_schema("boundary-inventory-hash-view") != Some(&self.hash_schema_ref) {
+            return Err(schema_error(
+                "/hash_schema_ref",
+                "inventory hash view does not use the exact admitted Schema",
+            ));
+        }
+        if self.schema_set_ref != set.reference {
+            return Err(schema_error(
+                "/schema_set_ref",
+                "inventory does not pin the exact admitted SchemaSet",
+            ));
+        }
         self.validate()
     }
 }
 
+impl sealed::ProtocolRecord for crate::BoundaryReconciliationRevision {}
 impl ProtocolRecord for crate::BoundaryReconciliationRevision {
     const SCHEMA_TYPE: &'static str = "boundary-reconciliation-revision";
-    fn validate_semantics(&self) -> Result<(), ValidationError> {
+    fn validate_semantics(&self, set: &SchemaSet) -> Result<(), ValidationError> {
+        if set.exact_schema("boundary-reconciliation-hash-view") != Some(&self.hash_schema_ref) {
+            return Err(schema_error(
+                "/hash_schema_ref",
+                "reconciliation hash view does not use the exact admitted Schema",
+            ));
+        }
         self.validate()
     }
 }
@@ -1236,7 +1285,7 @@ mod tests {
     fn admitted() -> (SchemaSet, SchemaRef, SchemaRef) {
         let (payload_doc, payload_ref) = document(
             "run-started-payload",
-            json!({"type":"object","properties":{"message":{"type":"string"}},"required":["message"],"unevaluatedProperties":false}),
+            json!({"type":"object","properties":{"message":{"type":"string"},"part_a":{"type":"string"},"part_b":{"type":"string"}},"required":["message"],"unevaluatedProperties":false}),
         );
         let (envelope_doc, envelope_ref) = document("event-envelope", json!({"type":"object"}));
         let (manifest_doc, manifest_ref) =
@@ -1397,6 +1446,199 @@ mod tests {
         let mut wrong_limits = context;
         wrong_limits.protocol_limits_ref.digest = digest('d');
         assert!(set.validate_event(event, &wrong_limits).is_err());
+    }
+
+    fn payload_with_canonical_bytes(target: usize) -> Value {
+        let empty = json!({"message":"","part_a":"","part_b":""});
+        let overhead = canonical_json_bytes(&empty).unwrap().len();
+        let content = target - overhead;
+        let first = content.min(ProtocolLimitsV1::STRING_BYTES);
+        let second = (content - first).min(ProtocolLimitsV1::STRING_BYTES);
+        let third = content - first - second;
+        assert!(third <= ProtocolLimitsV1::STRING_BYTES);
+        json!({
+            "message":"x".repeat(first),
+            "part_a":"x".repeat(second),
+            "part_b":"x".repeat(third)
+        })
+    }
+
+    #[test]
+    fn typed_event_payload_and_record_bytes_are_exact() {
+        let (set, payload_ref, envelope_ref) = admitted();
+        let (mut event, context) = valid_event(&set, payload_ref.clone(), envelope_ref);
+
+        event.payload = payload_with_canonical_bytes(ProtocolLimitsV1::PAYLOAD_BYTES);
+        event.payload_digest = digest_json("event-payload", &payload_ref, &event.payload).unwrap();
+        assert_eq!(
+            canonical_json_bytes(&event.payload).unwrap().len(),
+            ProtocolLimitsV1::PAYLOAD_BYTES
+        );
+        assert!(set.validate_event(event.clone(), &context).is_ok());
+
+        let mut payload_over = event.clone();
+        payload_over.payload = payload_with_canonical_bytes(ProtocolLimitsV1::PAYLOAD_BYTES + 1);
+        payload_over.payload_digest =
+            digest_json("event-payload", &payload_ref, &payload_over.payload).unwrap();
+        assert!(
+            set.validate_event(payload_over, &context)
+                .unwrap_err()
+                .iter()
+                .any(|error| error.code == ErrorCode::LimitExceeded)
+        );
+
+        let current = canonical_json_bytes(&serde_json::to_value(&event).unwrap())
+            .unwrap()
+            .len();
+        event.correlation_id =
+            "c".repeat(event.correlation_id.len() + ProtocolLimitsV1::RECORD_BYTES - current);
+        assert_eq!(
+            canonical_json_bytes(&serde_json::to_value(&event).unwrap())
+                .unwrap()
+                .len(),
+            ProtocolLimitsV1::RECORD_BYTES
+        );
+        assert!(set.validate_event(event.clone(), &context).is_ok());
+        event.correlation_id.push('c');
+        assert!(
+            set.validate_event(event, &context)
+                .unwrap_err()
+                .iter()
+                .any(|error| error.code == ErrorCode::LimitExceeded)
+        );
+
+        let minified = serde_json::to_vec(&payload_with_canonical_bytes(1024)).unwrap();
+        let pretty = serde_json::to_vec_pretty(&payload_with_canonical_bytes(1024)).unwrap();
+        assert_eq!(
+            canonical_json_bytes(&parse_bounded_value(&minified).unwrap()).unwrap(),
+            canonical_json_bytes(&parse_bounded_value(&pretty).unwrap()).unwrap()
+        );
+        let escaped = br#"{"message":"\u0078"}"#;
+        assert_eq!(
+            canonical_json_bytes(&parse_bounded_value(escaped).unwrap()).unwrap(),
+            br#"{"message":"x"}"#
+        );
+    }
+
+    #[test]
+    fn typed_run_and_evidence_record_bytes_are_exact() {
+        let bundle = crate::generate_schema_bundle().unwrap();
+        let schema = |name: &str| {
+            bundle
+                .manifest
+                .schemas
+                .iter()
+                .find(|item| item.r#type == name)
+                .unwrap()
+                .clone()
+        };
+        let set = SchemaSet::bootstrap_initial(
+            bundle.manifest.clone(),
+            bundle.schemas.clone(),
+            &bundle.reference,
+        )
+        .unwrap();
+        let limits = ProtocolLimitsRef {
+            profile: "protocol-limits-v1".to_owned(),
+            digest: Digest::parse(ProtocolLimitsV1::DIGEST).unwrap(),
+        };
+
+        let mut revisions = std::collections::BTreeMap::new();
+        for index in 0..12_000 {
+            revisions.insert(
+                format!("{}-{index:05}", "r".repeat(50)),
+                crate::RevisionId::parse("rev_x").unwrap(),
+            );
+        }
+        revisions.insert(
+            "padding".to_owned(),
+            crate::RevisionId::parse("rev_x").unwrap(),
+        );
+        let mut run = RunManifest {
+            schema_ref: schema("run-manifest"),
+            scope: scope(),
+            revisions,
+            plan_revision: None,
+            schema_set_ref: bundle.reference.clone(),
+            budget_revision: crate::RevisionId::parse("rev_budget").unwrap(),
+            protocol_limits_ref: limits.clone(),
+            boundary_recording_policy_ref: crate::BoundaryRecordingPolicyRef {
+                revision_id: crate::RevisionId::parse("rev_policy").unwrap(),
+                digest: digest('f'),
+            },
+            execution_mode: crate::ExecutionMode::Live {},
+        };
+        let base = canonical_json_bytes(&serde_json::to_value(&run).unwrap())
+            .unwrap()
+            .len();
+        assert!(base < ProtocolLimitsV1::RECORD_BYTES);
+        let padding = "p".repeat(ProtocolLimitsV1::RECORD_BYTES - base);
+        let value = run.revisions.remove("padding").unwrap();
+        run.revisions.insert(format!("padding{padding}"), value);
+        assert_eq!(
+            canonical_json_bytes(&serde_json::to_value(&run).unwrap())
+                .unwrap()
+                .len(),
+            ProtocolLimitsV1::RECORD_BYTES
+        );
+        assert!(
+            set.validate_run_manifest(run.clone(), &scope())
+                .unwrap_err()
+                .iter()
+                .all(|error| error.code != ErrorCode::LimitExceeded)
+        );
+        let (pad_key, value) = run.revisions.pop_last().unwrap();
+        run.revisions.insert(format!("{pad_key}p"), value);
+        assert!(
+            set.validate_run_manifest(run, &scope())
+                .unwrap_err()
+                .iter()
+                .any(|error| error.code == ErrorCode::LimitExceeded)
+        );
+
+        let mut evidence = crate::EvidenceRecord {
+            schema_ref: schema("evidence-record"),
+            scope: scope(),
+            requirement_id: crate::RequirementId::parse("req_0003").unwrap(),
+            claim: "claim".to_owned(),
+            evidence_type: "contract".to_owned(),
+            producer_revision: crate::RevisionId::parse("rev_producer").unwrap(),
+            verifier_revision: crate::RevisionId::parse("rev_verifier").unwrap(),
+            subject_revision: crate::RevisionId::parse("rev_subject").unwrap(),
+            artifact_digest: digest('a'),
+            verdict: crate::EvidenceVerdict::Passed,
+            evidence_scope: "scope".to_owned(),
+            freshness: "exact-commit".to_owned(),
+            limitations: vec![String::new(); 4],
+            observed_at: "2026-08-22T10:11:12.123Z".to_owned(),
+        };
+        let base = canonical_json_bytes(&serde_json::to_value(&evidence).unwrap())
+            .unwrap()
+            .len();
+        let mut remaining = ProtocolLimitsV1::RECORD_BYTES - base;
+        for item in &mut evidence.limitations {
+            let length = remaining.min(ProtocolLimitsV1::STRING_BYTES);
+            *item = "l".repeat(length);
+            remaining -= length;
+        }
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            canonical_json_bytes(&serde_json::to_value(&evidence).unwrap())
+                .unwrap()
+                .len(),
+            ProtocolLimitsV1::RECORD_BYTES
+        );
+        assert!(
+            set.validate_evidence(evidence.clone(), &scope(), &limits)
+                .is_ok()
+        );
+        evidence.limitations.last_mut().unwrap().push('l');
+        assert!(
+            set.validate_evidence(evidence, &scope(), &limits)
+                .unwrap_err()
+                .iter()
+                .any(|error| error.code == ErrorCode::LimitExceeded)
+        );
     }
 
     #[test]

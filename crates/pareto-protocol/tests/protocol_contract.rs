@@ -1,6 +1,6 @@
 use pareto_protocol::*;
 use serde_json::json;
-use std::{any::Any, sync::Arc};
+use std::{any::Any, path::Path, sync::Arc};
 
 fn digest(hex: char) -> Digest {
     Digest::parse(format!("sha256:{}", hex.to_string().repeat(64))).unwrap()
@@ -234,6 +234,87 @@ fn checked_in_schemas_equal_deterministic_generation() {
     );
 }
 
+fn verify_retained_set(directory: &Path) {
+    let manifest_path = directory.join("schema-set-v1.0.manifest.json");
+    let reference_path = directory.join("schema-set-v1.0.ref.json");
+    let manifest: SchemaSetManifest =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    let reference: SchemaSetRef =
+        serde_json::from_slice(&std::fs::read(&reference_path).unwrap()).unwrap();
+    assert_eq!(
+        directory.file_name().unwrap().to_string_lossy(),
+        reference.manifest_digest.as_str().replace(':', "-")
+    );
+    assert_eq!(
+        digest_json(
+            "schema-set",
+            &reference.manifest_schema_ref,
+            &serde_json::to_value(&manifest).unwrap()
+        )
+        .unwrap(),
+        reference.manifest_digest
+    );
+    assert!(manifest.schemas.contains(&reference.manifest_schema_ref));
+
+    let expected: std::collections::BTreeSet<_> = manifest
+        .schemas
+        .iter()
+        .map(|schema| {
+            format!(
+                "{}-v{}.{}.schema.json",
+                schema.r#type, schema.major, schema.minor
+            )
+        })
+        .chain([
+            "schema-set-v1.0.manifest.json".to_owned(),
+            "schema-set-v1.0.ref.json".to_owned(),
+        ])
+        .collect();
+    let actual: std::collections::BTreeSet<_> = std::fs::read_dir(directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(actual, expected, "retained set has missing or extra files");
+
+    for schema_ref in &manifest.schemas {
+        let filename = format!(
+            "{}-v{}.{}.schema.json",
+            schema_ref.r#type, schema_ref.major, schema_ref.minor
+        );
+        let document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(directory.join(filename)).unwrap()).unwrap();
+        let id = document["$id"].as_str().unwrap();
+        assert_eq!(
+            id,
+            format!(
+                "urn:pareto-harness:schema:{}:{}.{}",
+                schema_ref.r#type, schema_ref.major, schema_ref.minor
+            )
+        );
+        assert_eq!(
+            digest_schema(id, &document).unwrap(),
+            schema_ref.schema_digest
+        );
+        jsonschema::validator_for(&document).unwrap();
+    }
+}
+
+#[test]
+fn every_retained_schema_set_is_complete_and_content_addressed() {
+    let sets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/sets");
+    let mut count = 0;
+    for entry in std::fs::read_dir(sets).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_dir()
+            && entry.file_name().to_string_lossy().starts_with("sha256-")
+        {
+            verify_retained_set(&entry.path());
+            count += 1;
+        }
+    }
+    assert!(count >= 2, "historical published sets must be retained");
+}
+
 #[test]
 fn schema_publisher_is_idempotent_and_rejects_existing_byte_drift() {
     let temporary =
@@ -267,6 +348,38 @@ fn schema_publisher_is_idempotent_and_rejects_existing_byte_drift() {
             .status()
             .unwrap()
             .success()
+    );
+    std::fs::remove_dir_all(temporary).unwrap();
+}
+
+#[test]
+fn schema_publisher_handles_concurrency_and_stale_staging() {
+    let temporary =
+        std::env::temp_dir().join(format!("pareto-schema-concurrent-{}", std::process::id()));
+    if temporary.exists() {
+        std::fs::remove_dir_all(&temporary).unwrap();
+    }
+    std::fs::create_dir_all(temporary.join("sets/.staging-sha256-stale-dead-process")).unwrap();
+    let executable = env!("CARGO_BIN_EXE_generate_schemas");
+    let mut first = std::process::Command::new(executable)
+        .arg(&temporary)
+        .spawn()
+        .unwrap();
+    let mut second = std::process::Command::new(executable)
+        .arg(&temporary)
+        .spawn()
+        .unwrap();
+    assert!(first.wait().unwrap().success());
+    assert!(second.wait().unwrap().success());
+    let bundle = generate_schema_bundle().unwrap();
+    let published = temporary
+        .join("sets")
+        .join(bundle.reference.manifest_digest.as_str().replace(':', "-"));
+    verify_retained_set(&published);
+    assert!(
+        temporary
+            .join("sets/.staging-sha256-stale-dead-process")
+            .is_dir()
     );
     std::fs::remove_dir_all(temporary).unwrap();
 }
@@ -537,6 +650,134 @@ fn replay_lineage_and_boundary_finalization_fail_closed() {
         .late_result_events
         .push(EventId::parse("event_later").unwrap());
     assert!(changed_reconciliation.validate().is_err());
+}
+
+#[test]
+fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
+    let bundle = generate_schema_bundle().unwrap();
+    let member = |name: &str| {
+        bundle
+            .manifest
+            .schemas
+            .iter()
+            .find(|item| item.r#type == name)
+            .unwrap()
+            .clone()
+    };
+    let inventory_top = member("boundary-inventory-revision");
+    let inventory_hash = member("boundary-inventory-hash-view");
+    let reconciliation_top = member("boundary-reconciliation-revision");
+    let reconciliation_hash = member("boundary-reconciliation-hash-view");
+    let revision_metadata = member("revision-metadata");
+    let set_ref = bundle.reference.clone();
+    let set =
+        SchemaSet::bootstrap_initial(bundle.manifest, bundle.schemas, &bundle.reference).unwrap();
+
+    let mut inventory = BoundaryInventoryRevision {
+        metadata: RevisionMetadata {
+            logical_id: "inventory/run_source".to_owned(),
+            revision_id: RevisionId::parse("rev_placeholder").unwrap(),
+            revision_kind: "boundary_inventory".to_owned(),
+            parent_revision: None,
+            schema_ref: inventory_top,
+            content_digest: digest('0'),
+            creator_actor: AgentId::parse("agent_primary").unwrap(),
+            source: "finalized-event-range".to_owned(),
+            created_at: "2026-08-22T00:00:00.000Z".to_owned(),
+        },
+        hash_schema_ref: inventory_hash.clone(),
+        source_run_id: RunId::parse("run_source").unwrap(),
+        final_event_sequence: "4".to_owned(),
+        schema_set_ref: set_ref,
+        recording_policy_ref: BoundaryRecordingPolicyRef {
+            revision_id: RevisionId::parse("rev_policy").unwrap(),
+            digest: digest('f'),
+        },
+        boundaries: vec![
+            BoundaryRecord {
+                boundary_kind: "tool".to_owned(),
+                request_event_id: EventId::parse("event_received").unwrap(),
+                outcome: BoundaryOutcome::Received {
+                    receipt_digest: digest('1'),
+                },
+            },
+            BoundaryRecord {
+                boundary_kind: "provider".to_owned(),
+                request_event_id: EventId::parse("event_partial-no-receipt").unwrap(),
+                outcome: BoundaryOutcome::Failed {
+                    reason_code: "partial_effect_no_receipt".to_owned(),
+                },
+            },
+            BoundaryRecord {
+                boundary_kind: "process".to_owned(),
+                request_event_id: EventId::parse("event_cancelled").unwrap(),
+                outcome: BoundaryOutcome::Cancelled,
+            },
+        ],
+    };
+    inventory.metadata.content_digest = inventory.content_digest().unwrap();
+    inventory.metadata.revision_id = derive_revision_id(&inventory.metadata).unwrap();
+    let bytes = serde_json::to_vec(&inventory).unwrap();
+    assert!(
+        set.parse_record::<BoundaryInventoryRevision>(&bytes)
+            .is_ok()
+    );
+
+    let mut wrong_hash = inventory.clone();
+    wrong_hash.hash_schema_ref = schema("boundary-inventory-hash-view", '9');
+    wrong_hash.metadata.content_digest = wrong_hash.content_digest().unwrap();
+    wrong_hash.metadata.revision_id = derive_revision_id(&wrong_hash.metadata).unwrap();
+    assert!(
+        set.parse_record::<BoundaryInventoryRevision>(&serde_json::to_vec(&wrong_hash).unwrap())
+            .is_err()
+    );
+    let mut mutated = inventory.clone();
+    mutated.final_event_sequence = "5".to_owned();
+    assert!(
+        set.parse_record::<BoundaryInventoryRevision>(&serde_json::to_vec(&mutated).unwrap())
+            .is_err()
+    );
+    let mut wrong_top = inventory.clone();
+    wrong_top.metadata.schema_ref = revision_metadata;
+    wrong_top.metadata.revision_id = derive_revision_id(&wrong_top.metadata).unwrap();
+    assert!(
+        set.parse_record::<BoundaryInventoryRevision>(&serde_json::to_vec(&wrong_top).unwrap())
+            .is_err()
+    );
+
+    let mut reconciliation = BoundaryReconciliationRevision {
+        metadata: RevisionMetadata {
+            logical_id: "reconciliation/run_source".to_owned(),
+            revision_id: RevisionId::parse("rev_placeholder").unwrap(),
+            revision_kind: "boundary_reconciliation".to_owned(),
+            parent_revision: None,
+            schema_ref: reconciliation_top,
+            content_digest: digest('0'),
+            creator_actor: AgentId::parse("agent_primary").unwrap(),
+            source: "late-result-audit".to_owned(),
+            created_at: "2026-08-22T00:00:00.000Z".to_owned(),
+        },
+        hash_schema_ref: reconciliation_hash,
+        inventory_revision: inventory.metadata.revision_id.clone(),
+        late_result_events: vec![EventId::parse("event_late").unwrap()],
+    };
+    reconciliation.metadata.content_digest = reconciliation.content_digest().unwrap();
+    reconciliation.metadata.revision_id = derive_revision_id(&reconciliation.metadata).unwrap();
+    assert!(
+        set.parse_record::<BoundaryReconciliationRevision>(
+            &serde_json::to_vec(&reconciliation).unwrap()
+        )
+        .is_ok()
+    );
+    reconciliation.hash_schema_ref = schema("boundary-reconciliation-hash-view", '8');
+    reconciliation.metadata.content_digest = reconciliation.content_digest().unwrap();
+    reconciliation.metadata.revision_id = derive_revision_id(&reconciliation.metadata).unwrap();
+    assert!(
+        set.parse_record::<BoundaryReconciliationRevision>(
+            &serde_json::to_vec(&reconciliation).unwrap()
+        )
+        .is_err()
+    );
 }
 
 #[test]
