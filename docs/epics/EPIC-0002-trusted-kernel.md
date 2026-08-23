@@ -1,11 +1,11 @@
 ---
 id: EPIC-0002
 title: 可信内核骨架
-status: proposed
+status: active
 owners: [maintainers]
 created: 2026-08-22
 updated: 2026-08-22
-links: [PRD-0001, RFC-0001, ADR-0001, BACKLOG-0001]
+links: [PRD-0001, RFC-0001, RFC-0002, ADR-0001, ADR-0003, BACKLOG-0001, REQ-0003, SPEC-0002]
 ---
 
 # Outcome

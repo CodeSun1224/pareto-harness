@@ -88,11 +88,15 @@ Run:
 ```text
 python -m unittest discover -s scripts/tests -p "test_*.py"
 python scripts/check_docs.py
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features --offline -- -D warnings
+cargo test --workspace --all-targets --all-features --offline
+cargo run -p pareto-protocol --bin generate_schemas --offline -- schemas
 git diff --check
 git status --short
 ```
 
-When runtime code exists, add its formatter, linter, unit, contract, replay, and migration checks here. Do not weaken a gate to make a change pass.
+Schema generation must leave `schemas/` byte-identical; the protocol contract tests cover unit, golden, compatibility, isolation, and replay-manifest semantics. Add Event Store replay/migration gates when those capabilities exist. Do not weaken a gate to make a change pass.
 
 ## Writing rules
 

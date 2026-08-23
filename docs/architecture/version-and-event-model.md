@@ -1,11 +1,11 @@
 ---
 id: ARCH-0003
 title: 版本、事件与证据模型
-status: proposed
+status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-20
-links: [RFC-0001, ADR-0001]
+updated: 2026-08-22
+links: [RFC-0001, RFC-0002, ADR-0001, ADR-0003, REQ-0003, SPEC-0002]
 ---
 
 # 版本、事件与证据模型
@@ -35,23 +35,22 @@ ModelSnapshot          ToolSetRevision
 
 `EventEnvelope`
 
-- `event_id`, `stream_id`, `sequence`, `run_id`
+- `schema_ref`, `scope`, `event_id`, `stream_id`, `sequence`, `run_id`
 - `causation_id`, `correlation_id`
-- `event_type`, `schema_version`, `occurred_at`
-- `actor`, `payload`, `payload_digest`
+- `event_type`, `event_major`, `event_minor`, `occurred_at`
+- `actor`, `payload_schema_ref`, `payload`, `payload_digest`
 
 `RunManifest`
 
-- `task_revision`, `behavior_revision`, `plan_revision?`
-- `workspace_revision`, `environment_revision`
-- `context_graph_revision`, `model_snapshot`, `tool_set_revision`
-- `kernel_version`, `schema_set`, `budget`, `replay_mode`
+- `schema_ref`, `scope`, `revisions`（闭合角色集合）、`plan_revision?`
+- `schema_set_ref`, `budget_revision`, `protocol_limits_ref`
+- `boundary_recording_policy_ref`, `execution_mode`
 
 `EvidenceRecord`
 
-- `requirement_id`, `claim`, `evidence_type`
+- `schema_ref`, `scope`, `requirement_id`, `claim`, `evidence_type`
 - `producer_revision`, `verifier_revision`, `subject_revision`
-- `artifact_digest`, `verdict`, `scope`, `freshness`, `limitations`
+- `artifact_digest`, `verdict`, `evidence_scope`, `freshness`, `limitations`
 
 `EvolutionProposal`
 
@@ -59,7 +58,7 @@ ModelSnapshot          ToolSetRevision
 - `hypothesis`, `target_metrics`, `quality_floor`
 - `evaluation_suite_revision`, `budget`, `risk`, `rollback_condition`
 
-字段名是设计契约，序列化细节在实现 RFC 中冻结。公开数据必须携带 Schema 版本，不直接暴露 Rust 内部布局。
+字段名是设计契约；序列化、SchemaSet、规范化/digest、可信验证上下文、兼容与 Replay lineage 已由 RFC-0002/ADR-0003 冻结。公开数据携带完整 SchemaRef 和 IsolationScope，不直接暴露 Rust 内部布局。已实现事实限于 REQ-0003 protocol crate 和生成 Schema；Event Store、状态机与 Replay executor 仍由后续 Requirement 交付。
 
 ## 事件族
 
@@ -74,8 +73,9 @@ ModelSnapshot          ToolSetRevision
 
 ## Replay 模式
 
-- `recorded`：复用已记录的模型和外部效果结果，验证状态投影和策略消费逻辑。
+- `live`：首次实时执行，不声明 source Run。
+- `recorded_replay`：引用 source Run 和已终结的 `BoundaryInventoryRevision`，复用已记录边界结果。
 - `reexecute`：重新调用外部系统，比较新旧结果并明确标为新 Run。
-- `simulated`：使用 Fake/Fixture，验证状态机和失败路径。
+- `simulated`：固定非空 Fixture revisions，并显式区分 standalone/derived lineage。
 
-任何模式都不得覆盖原 Run；派生 Run 通过 `derived_from_run_id` 建立谱系。
+任何模式都不得覆盖原 Run；派生模式以 `source_run_id` 和 exact inventory revision 建立谱系。迟到结果写入独立 audit/reconciliation revision，不修改已终结 inventory。

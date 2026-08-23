@@ -9,6 +9,8 @@
 - [REQ-0001：建立 Pareto Harness 设计基线](requirements/REQ-0001-design-baseline.md)
 - [REQ-0002：建立 SDD 与独立评审门禁](requirements/REQ-0002-sdd-review-gates.md)
 - [SPEC-0001：SDD 与独立评审规范](specs/SPEC-0001-sdd-review-gates.md)
+- [REQ-0003：版本化协议类型和 JSON Schema](requirements/REQ-0003-versioned-protocol-types-json-schema.md)
+- [SPEC-0002：版本化协议类型和 JSON Schema 规范](specs/SPEC-0002-versioned-protocol-types-json-schema.md)
 
 ## 研究
 
@@ -24,6 +26,8 @@
 - [RFC-0001：稳定机制内核与版本化策略](rfcs/RFC-0001-stable-kernel-versioned-strategies.md)
 - [ADR-0001：采用稳定内核和版本化策略边界](adrs/ADR-0001-stable-kernel-boundary.md)
 - [ADR-0002：Rust 模块化单体与 SQLite 起步](adrs/ADR-0002-rust-modular-monolith.md)
+- [RFC-0002：版本化协议、规范化 JSON 与 Schema 兼容合同](rfcs/RFC-0002-versioned-protocol-json-schema.md)
+- [ADR-0003：闭合版本化 JSON 协议与可信上下文验证](adrs/ADR-0003-versioned-json-protocol-contract.md)
 
 ## 交付
 
