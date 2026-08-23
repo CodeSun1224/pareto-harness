@@ -1,0 +1,19 @@
+[package]
+name = "pareto-kernel"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Trusted mechanism kernel for Pareto Harness"
+publish = false
+
+[dependencies]
+pareto-protocol = { path = "../pareto-protocol" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio.workspace = true
