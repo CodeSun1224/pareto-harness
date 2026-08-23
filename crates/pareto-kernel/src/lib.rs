@@ -6,7 +6,7 @@
 //! Authority-bearing Event Store operations are intentionally not public.
 //!
 //! ```compile_fail
-//! use pareto_kernel::event_store::EventStore;
+//! use pareto_kernel::event_store::{AdmittedAppend, AdmittedRead, EventStore};
 //! ```
 
 // The authority-bearing API remains crate-private until a later Kernel capability requirement

@@ -148,6 +148,11 @@ impl Fixture {
     }
 
     fn admit(&self, event: EventEnvelope) -> AdmittedAppend {
+        let authority = KernelAuthority::authenticated(
+            self.scope(),
+            self.scope().agent_id,
+            Some(event.stream_id.clone()),
+        );
         let validated = self
             .set
             .validate_event_at_boundary(
@@ -158,25 +163,33 @@ impl Fixture {
                 self.limits.clone(),
             )
             .unwrap();
-        AdmittedAppend::admit(validated, self.set.clone(), self.limits.clone()).unwrap()
+        AdmittedAppend::admit(&authority, validated, self.set.clone(), self.limits.clone()).unwrap()
     }
 
     fn stream_read(&self, stream: &str) -> AdmittedRead {
-        AdmittedRead {
-            scope: self.scope(),
-            stream_id: Some(StreamId::parse(stream).unwrap()),
-            schema_set: self.set.clone(),
-            limits: self.limits.clone(),
-        }
+        let authority = KernelAuthority::authenticated(
+            self.scope(),
+            self.scope().agent_id,
+            Some(StreamId::parse(stream).unwrap()),
+        );
+        AdmittedRead::admit(
+            &authority,
+            self.set.reference(),
+            self.limits.clone(),
+            &SchemaRegistry(vec![self.set.clone()]),
+        )
+        .unwrap()
     }
 
     fn run_read(&self) -> AdmittedRead {
-        AdmittedRead {
-            scope: self.scope(),
-            stream_id: None,
-            schema_set: self.set.clone(),
-            limits: self.limits.clone(),
-        }
+        let authority = KernelAuthority::authenticated(self.scope(), self.scope().agent_id, None);
+        AdmittedRead::admit(
+            &authority,
+            self.set.reference(),
+            self.limits.clone(),
+            &SchemaRegistry(vec![self.set.clone()]),
+        )
+        .unwrap()
     }
 }
 
@@ -184,14 +197,20 @@ impl Fixture {
 async fn migration_is_atomic_versioned_and_detects_trigger_drift() {
     let fixture = Fixture::new();
     let store = EventStore::open(&fixture.path).await.unwrap();
+    let store_id = store.store_id.clone();
     drop(store);
-    EventStore::open(&fixture.path).await.unwrap();
+    EventStore::open_pinned(&fixture.path, &store_id)
+        .await
+        .unwrap();
     let options =
         SqliteConnectOptions::from_str(&format!("sqlite://{}", fixture.path.display())).unwrap();
     let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
     connection.execute("PRAGMA user_version=2").await.unwrap();
     assert_eq!(
-        EventStore::open(&fixture.path).await.unwrap_err().kind,
+        EventStore::open_pinned(&fixture.path, &store_id)
+            .await
+            .unwrap_err()
+            .kind,
         ErrorKind::Migration
     );
     connection.execute("PRAGMA user_version=1").await.unwrap();
@@ -200,7 +219,10 @@ async fn migration_is_atomic_versioned_and_detects_trigger_drift() {
         .await
         .unwrap();
     assert_eq!(
-        EventStore::open(&fixture.path).await.unwrap_err().kind,
+        EventStore::open_pinned(&fixture.path, &store_id)
+            .await
+            .unwrap_err()
+            .kind,
         ErrorKind::Migration
     );
 }
@@ -209,6 +231,7 @@ async fn migration_is_atomic_versioned_and_detects_trigger_drift() {
 async fn append_round_trip_idempotency_sequence_and_restart() {
     let fixture = Fixture::new();
     let store = EventStore::open(&fixture.path).await.unwrap();
+    let store_id = store.store_id.clone();
     let first = fixture.event("event_one", "stream_main", 1);
     assert!(matches!(
         store.append(fixture.admit(first.clone())).await.unwrap(),
@@ -233,7 +256,9 @@ async fn append_round_trip_idempotency_sequence_and_restart() {
         ErrorKind::SequenceConflict
     );
     drop(store);
-    let store = EventStore::open(&fixture.path).await.unwrap();
+    let store = EventStore::open_pinned(&fixture.path, &store_id)
+        .await
+        .unwrap();
     store
         .append(fixture.admit(fixture.event("event_two", "stream_main", 2)))
         .await
@@ -250,6 +275,7 @@ async fn append_round_trip_idempotency_sequence_and_restart() {
 async fn append_only_triggers_and_row_drift_fail_closed() {
     let fixture = Fixture::new();
     let store = EventStore::open(&fixture.path).await.unwrap();
+    let store_id = store.store_id.clone();
     store
         .append(fixture.admit(fixture.event("event_one", "stream_main", 1)))
         .await
@@ -280,7 +306,10 @@ async fn append_only_triggers_and_row_drift_fail_closed() {
         .unwrap();
     connection.execute(UPDATE_TRIGGER).await.unwrap();
     assert_eq!(
-        EventStore::open(&fixture.path).await.unwrap_err().kind,
+        EventStore::open_pinned(&fixture.path, &store_id)
+            .await
+            .unwrap_err()
+            .kind,
         ErrorKind::DatabaseCorrupt
     );
 }
@@ -288,11 +317,15 @@ async fn append_only_triggers_and_row_drift_fail_closed() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrent_same_sequence_has_at_most_one_commit() {
     let fixture = Fixture::new();
-    let store = Arc::new(EventStore::open(&fixture.path).await.unwrap());
+    let first_store = EventStore::open(&fixture.path).await.unwrap();
+    let second_store = EventStore::open_pinned(&fixture.path, &first_store.store_id)
+        .await
+        .unwrap();
+    let stores = [Arc::new(first_store), Arc::new(second_store)];
     let barrier = Arc::new(Barrier::new(3));
     let mut tasks = Vec::new();
-    for name in ["event_left", "event_right"] {
-        let store = store.clone();
+    for (index, name) in ["event_left", "event_right"].into_iter().enumerate() {
+        let store = stores[index].clone();
         let barrier = barrier.clone();
         let admitted = fixture.admit(fixture.event(name, "stream_race", 1));
         tasks.push(tokio::spawn(async move {
@@ -309,6 +342,23 @@ async fn concurrent_same_sequence_has_at_most_one_commit() {
             .count(),
         1
     );
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| matches!(
+                result,
+                Err(EventStoreError {
+                    kind: ErrorKind::SequenceConflict
+                })
+            ))
+            .count(),
+        1
+    );
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&stores[0].pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
 }
 
 async fn futures_for_tests(
@@ -325,6 +375,7 @@ async fn futures_for_tests(
 async fn run_cursor_uses_fixed_horizon_and_rejects_scope_mixing() {
     let fixture = Fixture::new();
     let store = EventStore::open(&fixture.path).await.unwrap();
+    let store_id = store.store_id.clone();
     store
         .append(fixture.admit(fixture.event("event_z-one", "stream_z", 1)))
         .await
@@ -334,13 +385,15 @@ async fn run_cursor_uses_fixed_horizon_and_rejects_scope_mixing() {
         .await
         .unwrap();
     let first = store.read(&fixture.run_read(), None, 1).await.unwrap();
-    let cursor = first.next.unwrap();
+    let cursor = first.next.clone().unwrap();
     store
         .append(fixture.admit(fixture.event("event_a-one", "stream_a", 1)))
         .await
         .unwrap();
     drop(store);
-    let store = EventStore::open(&fixture.path).await.unwrap();
+    let store = EventStore::open_pinned(&fixture.path, &store_id)
+        .await
+        .unwrap();
     sqlx::query("VACUUM").execute(&store.pool).await.unwrap();
     let second = store
         .read(&fixture.run_read(), Some(&cursor), 10)
@@ -358,6 +411,24 @@ async fn run_cursor_uses_fixed_horizon_and_rejects_scope_mixing() {
             .kind,
         ErrorKind::IsolationConflict
     );
+
+    for field in 0..4 {
+        let mut tampered = first.next.clone().unwrap_or_else(|| unreachable!());
+        match field {
+            0 => tampered.horizon += 1,
+            1 => tampered.last_stream = "stream_a".into(),
+            2 => tampered.last_sequence += 1,
+            _ => tampered.last_event = "event_other".into(),
+        }
+        assert_eq!(
+            store
+                .read(&fixture.run_read(), Some(&tampered), 10)
+                .await
+                .unwrap_err()
+                .kind,
+            ErrorKind::IsolationConflict
+        );
+    }
 }
 
 #[tokio::test]
@@ -423,10 +494,329 @@ async fn failed_causation_is_atomic_and_exact_limits_are_bound() {
         profile: "protocol-limits-v1".into(),
         digest: Digest::parse(format!("sha256:{}", "0".repeat(64))).unwrap(),
     };
+    let authority = KernelAuthority::authenticated(
+        fixture.scope(),
+        fixture.scope().agent_id,
+        Some(event.stream_id),
+    );
     assert!(matches!(
-        AdmittedAppend::admit(validated, fixture.set.clone(), wrong_limits),
+        AdmittedAppend::admit(&authority, validated, fixture.set.clone(), wrong_limits),
         Err(EventStoreError {
             kind: ErrorKind::ProtocolInvalid
         })
     ));
+}
+
+#[tokio::test]
+async fn authority_admission_rejects_scope_actor_and_stream_claims() {
+    let fixture = Fixture::new();
+    let event = fixture.event("event_one", "stream_main", 1);
+    let validated = || {
+        fixture
+            .set
+            .validate_event_at_boundary(
+                event.clone(),
+                event.scope.clone(),
+                event.actor.clone(),
+                event.stream_id.clone(),
+                fixture.limits.clone(),
+            )
+            .unwrap()
+    };
+    let mut wrong_scope = fixture.scope();
+    wrong_scope.run_id = pareto_protocol::RunId::parse("run_other").unwrap();
+    let cases = [
+        KernelAuthority::authenticated(
+            wrong_scope,
+            fixture.scope().agent_id,
+            Some(event.stream_id.clone()),
+        ),
+        KernelAuthority::authenticated(
+            fixture.scope(),
+            AgentId::parse("agent_other").unwrap(),
+            Some(event.stream_id.clone()),
+        ),
+        KernelAuthority::authenticated(
+            fixture.scope(),
+            fixture.scope().agent_id,
+            Some(StreamId::parse("stream_other").unwrap()),
+        ),
+    ];
+    for authority in cases {
+        assert!(matches!(
+            AdmittedAppend::admit(
+                &authority,
+                validated(),
+                fixture.set.clone(),
+                fixture.limits.clone()
+            ),
+            Err(EventStoreError {
+                kind: ErrorKind::ProtocolInvalid
+            })
+        ));
+    }
+    let missing = SchemaRegistry(Vec::new());
+    let authority = KernelAuthority::authenticated(fixture.scope(), fixture.scope().agent_id, None);
+    assert!(matches!(
+        AdmittedRead::admit(
+            &authority,
+            fixture.set.reference(),
+            fixture.limits.clone(),
+            &missing
+        ),
+        Err(EventStoreError {
+            kind: ErrorKind::ProtocolInvalid
+        })
+    ));
+}
+
+#[tokio::test]
+async fn store_identity_application_id_and_swap_fail_closed() {
+    let first = Fixture::new();
+    let first_store = EventStore::open(&first.path).await.unwrap();
+    let first_id = first_store.store_id.clone();
+    drop(first_store);
+    let second = Fixture::new();
+    let second_store = EventStore::open(&second.path).await.unwrap();
+    assert_ne!(first_id, second_store.store_id);
+    assert_eq!(
+        EventStore::open_pinned(&first.path, &second_store.store_id)
+            .await
+            .unwrap_err()
+            .kind,
+        ErrorKind::Migration
+    );
+
+    let options =
+        SqliteConnectOptions::from_str(&format!("sqlite://{}", first.path.display())).unwrap();
+    let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
+    connection.execute("PRAGMA application_id=0").await.unwrap();
+    drop(connection);
+    assert_eq!(
+        EventStore::open_pinned(&first.path, &first_id)
+            .await
+            .unwrap_err()
+            .kind,
+        ErrorKind::Migration
+    );
+
+    let third = Fixture::new();
+    let third_store = EventStore::open(&third.path).await.unwrap();
+    let third_id = third_store.store_id.clone();
+    drop(third_store);
+    let options =
+        SqliteConnectOptions::from_str(&format!("sqlite://{}", third.path.display())).unwrap();
+    let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
+    connection
+        .execute("UPDATE store_metadata SET store_id='00000000000000000000000000000000'")
+        .await
+        .unwrap();
+    drop(connection);
+    assert_eq!(
+        EventStore::open_pinned(&third.path, &third_id)
+            .await
+            .unwrap_err()
+            .kind,
+        ErrorKind::Migration
+    );
+}
+
+#[tokio::test]
+async fn migration_failure_rolls_back_all_schema_changes() {
+    let fixture = Fixture::new();
+    let options = SqliteConnectOptions::from_str(&format!("sqlite://{}", fixture.path.display()))
+        .unwrap()
+        .create_if_missing(true);
+    let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
+    connection
+        .execute("CREATE TABLE schema_migrations(conflict INTEGER)")
+        .await
+        .unwrap();
+    connection.close().await.unwrap();
+    assert_eq!(
+        EventStore::open_inner(&fixture.path, None)
+            .await
+            .unwrap_err()
+            .kind,
+        ErrorKind::DatabaseCorrupt
+    );
+    let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
+    let application_id: i64 = sqlx::query_scalar("PRAGMA application_id")
+        .fetch_one(&mut connection)
+        .await
+        .unwrap();
+    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut connection)
+        .await
+        .unwrap();
+    let events: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'",
+    )
+    .fetch_one(&mut connection)
+    .await
+    .unwrap();
+    assert_eq!((application_id, version, events), (0, 0, 0));
+}
+
+#[tokio::test]
+async fn transaction_drop_busy_and_new_connection_visibility_are_observable() {
+    let fixture = Fixture::new();
+    let store = EventStore::open(&fixture.path).await.unwrap();
+    store
+        .append(fixture.admit(fixture.event("event_one", "stream_main", 1)))
+        .await
+        .unwrap();
+    let options =
+        SqliteConnectOptions::from_str(&format!("sqlite://{}", fixture.path.display())).unwrap();
+    let mut fresh = SqliteConnection::connect_with(&options).await.unwrap();
+    let visible: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&mut fresh)
+        .await
+        .unwrap();
+    assert_eq!(visible, 1);
+    let original_id = store.store_id.clone();
+    {
+        let mut transaction = store.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+        sqlx::query("UPDATE store_metadata SET store_id='00000000000000000000000000000000'")
+            .execute(&mut *transaction)
+            .await
+            .unwrap();
+    }
+    let retained: String = sqlx::query_scalar("SELECT store_id FROM store_metadata")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap();
+    assert_eq!(retained, original_id);
+
+    let mut locker = SqliteConnection::connect_with(&options).await.unwrap();
+    locker.execute("PRAGMA busy_timeout=750").await.unwrap();
+    locker.execute("BEGIN IMMEDIATE").await.unwrap();
+    assert_eq!(
+        store
+            .append(fixture.admit(fixture.event("event_two", "stream_main", 2)))
+            .await
+            .unwrap_err()
+            .kind,
+        ErrorKind::Busy
+    );
+    locker.execute("ROLLBACK").await.unwrap();
+}
+
+async fn assert_drift_rejected(update: &str) {
+    let fixture = Fixture::new();
+    let store = EventStore::open(&fixture.path).await.unwrap();
+    let store_id = store.store_id.clone();
+    store
+        .append(fixture.admit(fixture.event("event_one", "stream_main", 1)))
+        .await
+        .unwrap();
+    drop(store);
+    let options =
+        SqliteConnectOptions::from_str(&format!("sqlite://{}", fixture.path.display())).unwrap();
+    let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
+    connection
+        .execute("DROP TRIGGER events_no_update")
+        .await
+        .unwrap();
+    connection.execute(update).await.unwrap();
+    connection.execute(UPDATE_TRIGGER).await.unwrap();
+    drop(connection);
+    assert_eq!(
+        EventStore::open_pinned(&fixture.path, &store_id)
+            .await
+            .unwrap_err()
+            .kind,
+        ErrorKind::DatabaseCorrupt
+    );
+}
+
+#[tokio::test]
+async fn every_persisted_json_identity_and_fingerprint_drift_fails_closed() {
+    for update in [
+        "UPDATE events SET correlation_id='drift'",
+        "UPDATE events SET causation_id='event_other'",
+        "UPDATE events SET envelope_fingerprint='sha256:bad'",
+        "UPDATE events SET schema_set_fingerprint='sha256:bad'",
+        "UPDATE events SET limits_fingerprint='sha256:bad'",
+        "UPDATE events SET schema_set_json='{}'",
+        "UPDATE events SET limits_json='{}'",
+    ] {
+        assert_drift_rejected(update).await;
+    }
+}
+
+#[tokio::test]
+async fn complete_scope_matrix_and_payload_shadow_cannot_override_authority() {
+    let fixture = Fixture::new();
+    let event = fixture.event("event_one", "stream_main", 1);
+    let validated = || {
+        fixture
+            .set
+            .validate_event_at_boundary(
+                event.clone(),
+                event.scope.clone(),
+                event.actor.clone(),
+                event.stream_id.clone(),
+                fixture.limits.clone(),
+            )
+            .unwrap()
+    };
+    let mut scopes = Vec::new();
+    let mut tenant = fixture.scope();
+    tenant.tenant_id = pareto_protocol::TenantId::parse("tenant_other").unwrap();
+    scopes.push(tenant);
+    let mut user = fixture.scope();
+    user.user_id = Some(pareto_protocol::UserId::parse("user_other").unwrap());
+    scopes.push(user);
+    let mut workspace = fixture.scope();
+    workspace.workspace_id = pareto_protocol::WorkspaceId::parse("workspace_other").unwrap();
+    scopes.push(workspace);
+    let mut run = fixture.scope();
+    run.run_id = pareto_protocol::RunId::parse("run_other").unwrap();
+    scopes.push(run);
+    let mut agent = fixture.scope();
+    agent.agent_id = AgentId::parse("agent_other").unwrap();
+    scopes.push(agent);
+    for scope in scopes {
+        let authority = KernelAuthority::authenticated(
+            scope.clone(),
+            scope.agent_id,
+            Some(event.stream_id.clone()),
+        );
+        assert!(
+            AdmittedAppend::admit(
+                &authority,
+                validated(),
+                fixture.set.clone(),
+                fixture.limits.clone()
+            )
+            .is_err()
+        );
+    }
+
+    let mut shadow = fixture.event("event_shadow", "stream_shadow", 1);
+    shadow.payload = json!({"message":"tenant_other/run_other/stream_other"});
+    shadow.payload_digest =
+        digest_json("event-payload", &fixture.payload_schema, &shadow.payload).unwrap();
+    let store = EventStore::open(&fixture.path).await.unwrap();
+    store.append(fixture.admit(shadow)).await.unwrap();
+    assert_eq!(
+        store
+            .read(&fixture.stream_read("stream_shadow"), None, 10)
+            .await
+            .unwrap()
+            .events
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn missing_parent_path_is_stable_io_error() {
+    let fixture = Fixture::new();
+    let path = fixture._temp.path().join("missing").join("events.sqlite3");
+    assert_eq!(
+        EventStore::open(&path).await.unwrap_err().kind,
+        ErrorKind::Io
+    );
 }

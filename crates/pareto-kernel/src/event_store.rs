@@ -1,8 +1,8 @@
 //! SQLite-backed append-only event log. All authority-bearing types and entry points stay private.
 
 use pareto_protocol::{
-    EventEnvelope, EventId, IsolationScope, ProtocolLimitsRef, SchemaSet, StreamId, ValidatedEvent,
-    canonical_json,
+    AgentId, EventEnvelope, EventId, IsolationScope, ProtocolLimitsRef, SchemaSet, SchemaSetRef,
+    StreamId, ValidatedEvent, canonical_json,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -76,6 +76,9 @@ impl From<sqlx::Error> for EventStoreError {
             {
                 ErrorKind::Busy
             }
+            sqlx::Error::Database(database) if database.code().as_deref() == Some("14") => {
+                ErrorKind::Io
+            }
             sqlx::Error::Io(_) => ErrorKind::Io,
             _ => ErrorKind::DatabaseCorrupt,
         };
@@ -97,17 +100,22 @@ struct AdmittedAppend {
 
 impl AdmittedAppend {
     fn admit(
+        authority: &KernelAuthority,
         event: ValidatedEvent,
         schema_set: Arc<SchemaSet>,
         limits: ProtocolLimitsRef,
     ) -> Result<Self, EventStoreError> {
         let envelope = event.envelope().clone();
+        let target_stream = authority
+            .target_stream
+            .clone()
+            .ok_or_else(|| EventStoreError::new(ErrorKind::IsolationConflict))?;
         let event = schema_set
             .validate_event_at_boundary(
                 envelope.clone(),
-                envelope.scope.clone(),
-                envelope.actor.clone(),
-                envelope.stream_id.clone(),
+                authority.scope.clone(),
+                authority.actor.clone(),
+                target_stream,
                 limits.clone(),
             )
             .map_err(|_| EventStoreError::new(ErrorKind::ProtocolInvalid))?;
@@ -119,11 +127,59 @@ impl AdmittedAppend {
     }
 }
 
+struct KernelAuthority {
+    scope: IsolationScope,
+    actor: AgentId,
+    target_stream: Option<StreamId>,
+}
+
+impl KernelAuthority {
+    fn authenticated(
+        scope: IsolationScope,
+        actor: AgentId,
+        target_stream: Option<StreamId>,
+    ) -> Self {
+        Self {
+            scope,
+            actor,
+            target_stream,
+        }
+    }
+}
+
 struct AdmittedRead {
     scope: IsolationScope,
     stream_id: Option<StreamId>,
     schema_set: Arc<SchemaSet>,
     limits: ProtocolLimitsRef,
+}
+
+impl AdmittedRead {
+    fn admit(
+        authority: &KernelAuthority,
+        expected_schema_set: &SchemaSetRef,
+        limits: ProtocolLimitsRef,
+        registry: &SchemaRegistry,
+    ) -> Result<Self, EventStoreError> {
+        Ok(Self {
+            scope: authority.scope.clone(),
+            stream_id: authority.target_stream.clone(),
+            schema_set: registry.resolve(expected_schema_set)?,
+            limits,
+        })
+    }
+}
+
+struct SchemaRegistry(Vec<Arc<SchemaSet>>);
+
+impl SchemaRegistry {
+    fn resolve(&self, reference: &SchemaSetRef) -> Result<Arc<SchemaSet>, EventStoreError> {
+        self.0
+            .iter()
+            .find(|set| set.reference() == reference)
+            .cloned()
+            .ok_or_else(|| EventStoreError::new(ErrorKind::ProtocolInvalid))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -134,6 +190,7 @@ struct Cursor {
     last_stream: String,
     last_sequence: i64,
     last_event: String,
+    seal: String,
 }
 
 #[derive(Debug)]
@@ -145,16 +202,34 @@ struct Page {
 #[derive(Debug)]
 struct EventStore {
     pool: SqlitePool,
+    store_id: String,
 }
 
 impl EventStore {
     async fn open(path: &Path) -> Result<Self, EventStoreError> {
+        if path.exists() {
+            return Err(EventStoreError::new(ErrorKind::Migration));
+        }
+        Self::open_inner(path, None).await
+    }
+
+    async fn open_pinned(path: &Path, expected_store_id: &str) -> Result<Self, EventStoreError> {
+        Self::open_inner(path, Some(expected_store_id)).await
+    }
+
+    async fn open_inner(
+        path: &Path,
+        expected_store_id: Option<&str>,
+    ) -> Result<Self, EventStoreError> {
         let options = SqliteConnectOptions::from_str(&format!("sqlite://{}", path.display()))
             .map_err(|_| EventStoreError::new(ErrorKind::Io))?
             .create_if_missing(true)
             .busy_timeout(Duration::from_millis(BUSY_MILLIS));
         let mut connection = SqliteConnection::connect_with(&options).await?;
-        Self::migrate(&mut connection).await?;
+        let store_id = Self::migrate(&mut connection).await?;
+        if expected_store_id.is_some_and(|expected| expected != store_id) {
+            return Err(EventStoreError::new(ErrorKind::Migration));
+        }
         connection.close().await?;
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(5)
@@ -163,15 +238,16 @@ impl EventStore {
                     connection.execute("PRAGMA foreign_keys=ON").await?;
                     connection.execute("PRAGMA trusted_schema=OFF").await?;
                     connection.execute("PRAGMA busy_timeout=750").await?;
+                    connection.execute("PRAGMA synchronous=FULL").await?;
                     Ok(())
                 })
             })
             .connect_with(options)
             .await?;
-        Ok(Self { pool })
+        Ok(Self { pool, store_id })
     }
 
-    async fn migrate(connection: &mut SqliteConnection) -> Result<(), EventStoreError> {
+    async fn migrate(connection: &mut SqliteConnection) -> Result<String, EventStoreError> {
         connection.execute("PRAGMA journal_mode=WAL").await?;
         connection.execute("PRAGMA synchronous=FULL").await?;
         connection.execute("PRAGMA foreign_keys=ON").await?;
@@ -179,10 +255,10 @@ impl EventStore {
         connection.execute("BEGIN EXCLUSIVE").await?;
         let result = Self::migrate_locked(connection).await;
         match result {
-            Ok(()) => connection
+            Ok(store_id) => connection
                 .execute("COMMIT")
                 .await
-                .map(|_| ())
+                .map(|_| store_id)
                 .map_err(Into::into),
             Err(error) => {
                 let _ = connection.execute("ROLLBACK").await;
@@ -191,16 +267,14 @@ impl EventStore {
         }
     }
 
-    async fn migrate_locked(connection: &mut SqliteConnection) -> Result<(), EventStoreError> {
+    async fn migrate_locked(connection: &mut SqliteConnection) -> Result<String, EventStoreError> {
         let application_id: i64 = sqlx::query_scalar("PRAGMA application_id")
             .fetch_one(&mut *connection)
             .await?;
         let version: i64 = sqlx::query_scalar("PRAGMA user_version")
             .fetch_one(&mut *connection)
             .await?;
-        if version > DB_VERSION
-            || (application_id != 0 && application_id != i64::from(APPLICATION_ID))
-        {
+        if version > DB_VERSION || (version > 0 && application_id != i64::from(APPLICATION_ID)) {
             return Err(EventStoreError::new(ErrorKind::Migration));
         }
         if version == 0 {
@@ -230,12 +304,16 @@ impl EventStore {
         if checksum != fingerprint(EVENTS_DDL.as_bytes()) {
             return Err(EventStoreError::new(ErrorKind::Migration));
         }
-        let store_identity_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM store_metadata WHERE singleton=1 AND length(store_id)=32",
+        let store_id: String = sqlx::query_scalar(
+            "SELECT store_id FROM store_metadata WHERE singleton=1 AND length(store_id)=32",
         )
-        .fetch_one(&mut *connection)
-        .await?;
-        if store_identity_count != 1 {
+        .fetch_optional(&mut *connection)
+        .await?
+        .ok_or_else(|| EventStoreError::new(ErrorKind::Migration))?;
+        if !store_id
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
             return Err(EventStoreError::new(ErrorKind::Migration));
         }
         for (name, expected) in [
@@ -258,9 +336,12 @@ impl EventStore {
             json_extract(envelope_json,'$.scope.tenant_id') != tenant_id OR
             json_extract(envelope_json,'$.scope.workspace_id') != workspace_id OR
             json_extract(envelope_json,'$.scope.run_id') != run_id OR
+            json_extract(envelope_json,'$.run_id') != run_id OR
             json_extract(envelope_json,'$.scope.agent_id') != agent_id OR
             json_extract(envelope_json,'$.stream_id') != stream_id OR
             CAST(json_extract(envelope_json,'$.sequence') AS INTEGER) != sequence_i64 OR
+            NOT (json_extract(envelope_json,'$.causation_id') IS causation_id) OR
+            json_extract(envelope_json,'$.correlation_id') != correlation_id OR
             (user_present=0 AND json_type(envelope_json,'$.scope.user_id') IS NOT NULL) OR
             (user_present=1 AND json_extract(envelope_json,'$.scope.user_id') != user_id)"#,
         )
@@ -269,7 +350,8 @@ impl EventStore {
         if drift != 0 {
             return Err(EventStoreError::new(ErrorKind::DatabaseCorrupt));
         }
-        Ok(())
+        validate_all_stored_bytes(connection).await?;
+        Ok(store_id)
     }
 
     async fn append(&self, admitted: AdmittedAppend) -> Result<AppendResult, EventStoreError> {
@@ -285,8 +367,7 @@ impl EventStore {
         let schema_fp = fingerprint(schema_json.as_bytes());
         let limits_fp = fingerprint(limits_json.as_bytes());
         let (user_present, user_id) = user_key(&envelope.scope);
-        let mut connection = self.pool.acquire().await?;
-        connection.execute("BEGIN IMMEDIATE").await?;
+        let mut connection = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = async {
             if let Some(row) = sqlx::query("SELECT envelope_fingerprint,schema_set_fingerprint,limits_fingerprint,sequence_i64 FROM events WHERE event_id=?")
                 .bind(envelope.event_id.as_str()).fetch_optional(&mut *connection).await? {
@@ -317,13 +398,10 @@ impl EventStore {
         }.await;
         match result {
             Ok(value) => {
-                connection.execute("COMMIT").await?;
+                connection.commit().await?;
                 Ok(value)
             }
-            Err(error) => {
-                let _ = connection.execute("ROLLBACK").await;
-                Err(error)
-            }
+            Err(error) => Err(error),
         }
     }
 
@@ -342,11 +420,13 @@ impl EventStore {
             "run"
         };
         let binding = read_binding(admitted, kind)?;
-        let mut connection = self.pool.acquire().await?;
-        connection.execute("BEGIN").await?;
+        let mut connection = self.pool.begin().await?;
         let result = async {
             let horizon = match cursor {
-                Some(cursor) if cursor.kind == kind && cursor.binding == binding => cursor.horizon,
+                Some(cursor)
+                    if cursor.kind == kind
+                        && cursor.binding == binding
+                        && cursor.seal == cursor_seal(cursor) => cursor.horizon,
                 Some(_) => return Err(EventStoreError::new(ErrorKind::IsolationConflict)),
                 None => sqlx::query_scalar("SELECT COALESCE(MAX(append_ordinal),0) FROM events").fetch_one(&mut *connection).await?,
             };
@@ -355,10 +435,10 @@ impl EventStore {
             let previous_event = cursor.map_or("", |item| item.last_event.as_str());
             let (present, user) = user_key(&admitted.scope);
             let rows = if let Some(stream) = &admitted.stream_id {
-                sqlx::query("SELECT envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,event_id FROM events WHERE tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND stream_id=? AND append_ordinal<=? AND (sequence_i64>? OR (sequence_i64=? AND event_id>?)) ORDER BY sequence_i64,event_id LIMIT ?")
+                sqlx::query("SELECT envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,event_id,causation_id,correlation_id FROM events WHERE tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND stream_id=? AND append_ordinal<=? AND (sequence_i64>? OR (sequence_i64=? AND event_id>?)) ORDER BY sequence_i64,event_id LIMIT ?")
                     .bind(admitted.scope.tenant_id.as_str()).bind(present).bind(user).bind(admitted.scope.workspace_id.as_str()).bind(admitted.scope.run_id.as_str()).bind(admitted.scope.agent_id.as_str()).bind(stream.as_str()).bind(horizon).bind(previous_sequence).bind(previous_sequence).bind(previous_event).bind(limit + 1).fetch_all(&mut *connection).await?
             } else {
-                sqlx::query("SELECT envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,event_id FROM events WHERE tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND append_ordinal<=? AND (stream_id>? OR (stream_id=? AND sequence_i64>?) OR (stream_id=? AND sequence_i64=? AND event_id>?)) ORDER BY stream_id,sequence_i64,event_id LIMIT ?")
+                sqlx::query("SELECT envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,event_id,causation_id,correlation_id FROM events WHERE tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND append_ordinal<=? AND (stream_id>? OR (stream_id=? AND sequence_i64>?) OR (stream_id=? AND sequence_i64=? AND event_id>?)) ORDER BY stream_id,sequence_i64,event_id LIMIT ?")
                     .bind(admitted.scope.tenant_id.as_str()).bind(present).bind(user).bind(admitted.scope.workspace_id.as_str()).bind(admitted.scope.run_id.as_str()).bind(admitted.scope.agent_id.as_str()).bind(horizon).bind(previous_stream).bind(previous_stream).bind(previous_sequence).bind(previous_stream).bind(previous_sequence).bind(previous_event).bind(limit + 1).fetch_all(&mut *connection).await?
             };
             let has_more = rows.len() > limit as usize;
@@ -369,10 +449,14 @@ impl EventStore {
                 last = Some((event.envelope().stream_id.as_str().to_owned(), event.envelope().sequence.parse().unwrap_or(0), event.envelope().event_id.as_str().to_owned()));
                 events.push(event);
             }
-            let next = if has_more { last.map(|(stream, sequence, event)| Cursor { kind, binding, horizon, last_stream: stream, last_sequence: sequence, last_event: event }) } else { None };
+            let next = if has_more { last.map(|(stream, sequence, event)| {
+                let mut cursor = Cursor { kind, binding, horizon, last_stream: stream, last_sequence: sequence, last_event: event, seal: String::new() };
+                cursor.seal = cursor_seal(&cursor);
+                cursor
+            }) } else { None };
             Ok(Page { events, next })
         }.await;
-        let _ = connection.execute("ROLLBACK").await;
+        let _ = connection.rollback().await;
         result
     }
 }
@@ -405,7 +489,10 @@ fn validate_row(
         && envelope.scope.agent_id.as_str() == row.get::<String, _>(11)
         && envelope.stream_id.as_str() == row.get::<String, _>(12)
         && envelope.sequence.parse::<i64>().ok() == Some(row.get(13))
-        && envelope.event_id.as_str() == row.get::<String, _>(14);
+        && envelope.event_id.as_str() == row.get::<String, _>(14)
+        && envelope.causation_id.as_ref().map(EventId::as_str)
+            == row.get::<Option<String>, _>(15).as_deref()
+        && envelope.correlation_id == row.get::<String, _>(16);
     if !consistent {
         return Err(EventStoreError::new(ErrorKind::IsolationConflict));
     }
@@ -425,6 +512,52 @@ fn validate_row(
 
 fn read_binding(read: &AdmittedRead, kind: &str) -> Result<String, EventStoreError> {
     canonical(&json!({"kind":kind,"scope":read.scope,"stream":read.stream_id,"schema_set":read.schema_set.reference(),"limits":read.limits})).map(|value| fingerprint(value.as_bytes()))
+}
+
+fn cursor_seal(cursor: &Cursor) -> String {
+    fingerprint(
+        format!(
+            "{}\0{}\0{}\0{}\0{}\0{}",
+            cursor.kind,
+            cursor.binding,
+            cursor.horizon,
+            cursor.last_stream,
+            cursor.last_sequence,
+            cursor.last_event
+        )
+        .as_bytes(),
+    )
+}
+
+async fn validate_all_stored_bytes(
+    connection: &mut SqliteConnection,
+) -> Result<(), EventStoreError> {
+    let rows = sqlx::query("SELECT envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint FROM events")
+        .fetch_all(&mut *connection).await?;
+    for row in rows {
+        let envelope_json: String = row.get(0);
+        let schema_json: String = row.get(2);
+        let limits_json: String = row.get(4);
+        if fingerprint(envelope_json.as_bytes()) != row.get::<String, _>(1)
+            || fingerprint(schema_json.as_bytes()) != row.get::<String, _>(3)
+            || fingerprint(limits_json.as_bytes()) != row.get::<String, _>(5)
+        {
+            return Err(EventStoreError::new(ErrorKind::DatabaseCorrupt));
+        }
+        let envelope: EventEnvelope = serde_json::from_str(&envelope_json)
+            .map_err(|_| EventStoreError::new(ErrorKind::DatabaseCorrupt))?;
+        let schema: SchemaSetRef = serde_json::from_str(&schema_json)
+            .map_err(|_| EventStoreError::new(ErrorKind::DatabaseCorrupt))?;
+        let limits: ProtocolLimitsRef = serde_json::from_str(&limits_json)
+            .map_err(|_| EventStoreError::new(ErrorKind::DatabaseCorrupt))?;
+        if canonical(&envelope)? != envelope_json
+            || canonical(&schema)? != schema_json
+            || canonical(&limits)? != limits_json
+        {
+            return Err(EventStoreError::new(ErrorKind::DatabaseCorrupt));
+        }
+    }
+    Ok(())
 }
 
 fn canonical<T: Serialize>(value: &T) -> Result<String, EventStoreError> {
