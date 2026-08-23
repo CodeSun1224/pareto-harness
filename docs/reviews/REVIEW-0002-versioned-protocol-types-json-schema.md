@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-23
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 6447c37610a0fd3a6ce3b8e3154b0653650f77ef
+reviewed_revision: e5d1b9b36de61a961b42b0c8148142cb98ae816f
 open_blockers: 0
 open_majors: 0
 ---
@@ -81,3 +81,4 @@ Remaining Notes/limitations:
 - Exact `201e19c` introduced validated source-inventory lineage; exact `175bed4` added recording-policy binding and closed F-007.
 - Exact `72914b7` plus Actions run `32642138568` closed F-010 after all three platforms and local completion gates passed.
 - Exact `b00928d` and `6447c37` contain only independent review/freshness records; no product or test behavior changed after the last product re-review.
+- Exact `e5d1b9b36de61a961b42b0c8148142cb98ae816f` is a lifecycle/archive-only closure: it records REQ-0003 as done, links this Review, archives the completed work directory, and synchronizes final delivery facts. No product, Schema, test, CI, permission, isolation, replay, or compatibility behavior changed; approval and zero open findings are retained at the newer exact revision.
