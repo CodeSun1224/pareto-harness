@@ -202,3 +202,21 @@ Reviewer execution on Windows passed `cargo fmt --all -- --check`; locked/offlin
 | AC-10 | failed — Linux/macOS and complete named evidence are absent |
 
 REQ-0003 remains **changes-requested** with five open Major findings (F-005, F-007, F-008, F-009, F-010). A formal approved REQ-0003 Review must not be created yet.
+
+## Focused re-review — exact commit `201e19c` — 2026-08-23
+
+- Reviewer: `/root/req0003_focused_reviewer`
+- Independence: independent; exact diff, source, tests, and raw validation evidence inspected directly
+- Reviewed revision: `201e19c65805697c279af3195c9abfca195a75e2`
+- Scope: F-007 and F-010 only; prior closures for F-005/F-008/F-009 retained
+- Verdict: **changes-requested**
+- Open after re-review: **0 Blocker, 2 Major, 0 Minor**
+
+Reviewer execution passed the exact focused boundary test, locked/offline workspace all-target/all-feature tests (9 unit + 17 contract; one observation baseline ignored), and 18 Python governance tests. Before the freshness update, `check_docs.py` failed only because REVIEW-0001 still pinned `f8275e0` while substantive protocol paths had advanced to this exact commit.
+
+| ID | Severity | Independent disposition | Status |
+|---|---|---|---|
+| F-007 | Major | The new dedicated APIs materially close the prior generic-admission gap: inventory admission first validates the source RunManifest against the expected source scope, then exact-binds source Run, SchemaSet, top-level Schema, hash-view Schema, content digest, and revision identity. Reconciliation and replay now accept only an opaque `Validated<BoundaryInventoryRevision>`; wrong scope, wrong source Run/replay source, wrong inventory revision, wrong top/hash SchemaRef, and content mutation fixtures pass. One required exact source-context binding is still absent: `validate_boundary_inventory` never compares `inventory.recording_policy_ref` with the validated source manifest's `boundary_recording_policy_ref`. An inventory can therefore claim a different policy while retaining the same validated source Run/scope/SchemaSet. Add that exact comparison and a recomputed wrong-policy negative fixture. | open |
+| F-010 | Major | Local exact-commit protocol and governance tests pass, and VALIDATION records raw Actions run `32640519929` for parent commit `72b61b7`: all three platforms passed product/protocol steps but failed document validation, so the workflow conclusion was failure. No Windows/Ubuntu/macOS run for exact `201e19c` has complete success, and the remaining F-007 fixture is incomplete. The Requirement must not claim cross-platform completion or approval. | open |
+
+REQ-0003 remains **changes-requested**. No formal approved REQ-0003 Review is created.

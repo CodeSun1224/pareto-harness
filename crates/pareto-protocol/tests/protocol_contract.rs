@@ -778,6 +778,17 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
         set.validate_boundary_inventory(inventory.clone(), source_manifest.clone(), &wrong_scope)
             .is_err()
     );
+    let mut wrong_policy = inventory.clone();
+    wrong_policy.recording_policy_ref = BoundaryRecordingPolicyRef {
+        revision_id: RevisionId::parse("rev_other-policy").unwrap(),
+        digest: digest('2'),
+    };
+    wrong_policy.metadata.content_digest = wrong_policy.content_digest().unwrap();
+    wrong_policy.metadata.revision_id = derive_revision_id(&wrong_policy.metadata).unwrap();
+    assert!(
+        set.validate_boundary_inventory(wrong_policy, source_manifest.clone(), &source_scope)
+            .is_err()
+    );
 
     let mut wrong_hash = inventory.clone();
     wrong_hash.hash_schema_ref = schema("boundary-inventory-hash-view", '9');

@@ -726,6 +726,14 @@ impl SchemaSet {
                 "inventory source run does not match the validated source manifest",
             ));
         }
+        if inventory.recording_policy_ref != validated_source.get().boundary_recording_policy_ref {
+            errors.push(ValidationError::new(
+                ErrorCode::InvariantViolation,
+                "/recording_policy_ref",
+                "boundary_inventory_revision",
+                "inventory recording policy does not match the validated source manifest",
+            ));
+        }
         if inventory.schema_set_ref != self.reference {
             errors.push(schema_error(
                 "/schema_set_ref",

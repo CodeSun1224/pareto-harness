@@ -41,6 +41,12 @@
 - 完整本地门禁：fmt passed；locked/offline clippy passed；locked/offline workspace all-target/all-feature tests passed（9 unit + 17 contract，1 ignored observation baseline）；Schema generation 与 `git diff --exit-code -- schemas/` passed；Python governance 18 passed；`git diff --check` passed。
 - `check_docs.py` 仍按设计仅报 REVIEW-0001 freshness stale；必须在 exact product commit 后由独立 reviewer 更新 review disposition/freshness，实施者不自行批准。
 
+## 2026-08-23 exact `201e19c` focused re-review delta
+
+- 同一独立 reviewer 已落盘 exact `201e19c65805697c279af3195c9abfca195a75e2` disposition：F007/F010 仍 Major open，0 Blocker/2 Major；仅修改 CODE-REVIEW.md 与 REVIEW-0001 freshness，不修改产品代码。
+- F007 唯一新增缺口：inventory `recording_policy_ref` 尚未 exact-match validated source RunManifest 的 pinned policy，替换 policy 并重算 content/revision 可通过。当前整改增加 exact check 和 recomputed wrong-policy negative。
+- GitHub run `32641532696` exact `201e19c`：Windows `97199251771`、Ubuntu `97199251701`、macOS `97199251791` 的协议/Schema/digest/governance 步骤全部 success；均只在 document freshness validation failure，workflow conclusion=failure。
+
 ## 2026-08-23 remediation working-tree evidence
 
 - `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`：passed。
