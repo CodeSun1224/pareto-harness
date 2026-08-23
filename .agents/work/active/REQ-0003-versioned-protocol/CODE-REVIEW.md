@@ -111,3 +111,31 @@ Only the independent Reviewer may close Blocker/Major findings after inspecting 
 | AC-08 | partial — Evidence exact Schema improved; general admission/limits parity remains incomplete |
 | AC-09 | partial — bootstrap/meta/context improved; evolved-set external Kernel admission proof remains open |
 | AC-10 | failed — exact revision, docs pass, Linux/macOS and full evidence are absent |
+
+## Exact-HEAD re-review — 2026-08-23
+
+- Reviewer: `/root/req0003_code_review`
+- Independence: independent; Requirement/Spec/RFC/ADR, `98e882a..ff614b5` history, `d1daa0d..ff614b5` increment, source, generated assets, dependency direction, tests, and raw evidence inspected directly
+- Reviewed revision: `ff614b59385125fd3438a725388aa15998db68e8`
+- Verdict: changes-requested
+- Open: 3 Blocker, 5 Major, 1 Minor
+- Closed: F-004 and F-006
+- Formal REQ-0003 Review: not created because open Blocker/Major findings remain
+
+Exact-HEAD local evidence passed: `cargo fmt --all -- --check`; locked/offline clippy with `-D warnings`; locked/offline workspace all-target/all-feature tests (5 unit + 12 integration); 18 Python governance tests; and `git diff-tree --check ff614b5^ ff614b5`. The three-platform workflow exists but is explicitly `pending` and has no remote run evidence.
+
+| ID | Severity | Exact-HEAD disposition | Status |
+|---|---|---|---|
+| F-001 | Blocker | Exact bootstrap/meta/member validation remains sound locally, but `SchemaSet::admit`/authority is crate-private and the only public bootstrap bundle has `event_bindings: []`. An external future Kernel can call the boundary validator but cannot admit an authorized event-bearing/evolved set; no public consumer fixture proves AC-09/AC-10. | open |
+| F-002 | Blocker | Cached exact envelope/payload Schema validation and recomputed wrong-shape digest proof pass. `variant_id` remains arbitrary manifest text; admission has no supported typed-decoder/semantic-variant registry and success retains untyped payload `Value`. | open |
+| F-003 | Blocker | Nested `$id`, composition/ref and same-version mutations are protected, but RFC-0002's no-leading-zero version grammar is not enforced: `schema_identity` parses `01`, and `old == new` returns before any identity validation (`compatibility.rs:12-63`). | open |
+| F-004 | Blocker | Implementation and CI increment are now pinned and inspected at exact HEAD `ff614b59385125fd3438a725388aa15998db68e8`. | closed by reviewer |
+| F-005 | Major | Existing hardening remains, but raw/top-level admission is incomplete outside Event/Run/Evidence and parity tests still do not cover the approved public contract matrix. `parse_bounded<T>` is limits+Serde only. | open |
+| F-006 | Major | Correct revision domains/preimages, omitted absent parent, identity validation, and fixed payload/revision/raw/artifact vectors remain present and pass at exact HEAD. | closed by reviewer |
+| F-007 | Major | Inventory/reconciliation recompute content, but use `metadata.schema_ref` without a frozen per-kind hash-view Schema; the fixture uses generic `revision-metadata`. Content-mutation and the full intent/partial/cancel/late/wrong-inventory/cross-scope matrix remain absent. | open |
+| F-008 | Major | Event ordering improved, but Run/Evidence still execute Schema before record limits. Complete record/payload/collection/object-name/escape N/N+1 coverage and a canonical limits-profile preimage remain absent. | open |
+| F-009 | Major | Schema golden file-set checking passes, but live-directory-to-backup then staging-to-live publication retains the observable missing-directory/crash window and has no fault/concurrency recovery proof. | open |
+| F-010 | Major | A Windows/Linux/macOS workflow was added at `ff614b5`, but VALIDATION correctly marks it pending; no Linux/macOS execution evidence exists. The workflow's whitespace step checks only `HEAD`, not the PR/push commit range, and official JCS vectors, complete security/limits/lineage fixtures and latency baselines remain absent. | open |
+| F-011 | Minor | PLAN/VALIDATION acknowledge exact commits and pending CI, but HANDOFF remains pre-implementation, the unit `--exact` filter remains unqualified, VALIDATION still overclaims atomic schema publication, and its review candidate is `d1daa0d` rather than exact HEAD. | open |
+
+REQ-0003 must remain `changes-requested`; F-001/F-002/F-003 and F-005/F-007/F-008/F-009/F-010 require remediation and another exact-commit independent re-review.

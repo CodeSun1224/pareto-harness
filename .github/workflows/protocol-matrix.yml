@@ -44,5 +44,13 @@ jobs:
         run: python -m unittest discover -s scripts/tests -p "test_*.py"
       - name: Validate repository documents
         run: python scripts/check_docs.py
-      - name: Check committed whitespace
-        run: git show --check --oneline --no-renames HEAD
+      - name: Check whitespace errors
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
+          elif [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            git diff --check "${{ github.event.before }}...${{ github.sha }}"
+          else
+            git show --check --oneline --no-renames HEAD
+          fi

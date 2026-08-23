@@ -38,7 +38,7 @@ cargo test --workspace --all-targets --all-features
 cargo test -p pareto-protocol --test protocol_contract checked_in_schemas_equal_deterministic_generation -- --exact
 cargo test -p pareto-protocol --test protocol_contract compatibility_proof_allows_only_optional_property_addition -- --exact
 cargo test -p pareto-protocol --test protocol_contract closed_types_reject_unknown_fields_duplicate_keys_and_floats -- --exact
-cargo test -p pareto-protocol isolation_boundaries_and_payload_schema_fail_closed -- --exact
+cargo test -p pareto-protocol validation::tests::isolation_boundaries_and_payload_schema_fail_closed -- --exact
 cargo test -p pareto-protocol --test protocol_contract replay_lineage_and_boundary_finalization_fail_closed -- --exact
 cargo tree -p pareto-protocol
 python -m unittest discover -s scripts/tests -p "test_*.py"
