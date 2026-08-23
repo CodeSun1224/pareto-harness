@@ -1,5 +1,12 @@
 # Validation Evidence
 
+## Final verified evidence
+
+- Formal independent review：`REVIEW-0002` approved，reviewed revision `6447c37610a0fd3a6ce3b8e3154b0653650f77ef`，0 open Blocker/Major。
+- GitHub Actions：run `32642574089` overall success；Windows `97201827527`、Ubuntu `97201827618`、macOS `97201827652` 全部 completed/success，所有 steps（含 docs 与 whitespace）success。
+- 本地 completion gates、release observation baseline、Schema byte identity、retained-set integrity 与 Python governance 均通过；baseline 仅为观测，不是性能优化结论。
+- Event Store、Replay executor、持久化迁移和 Runtime E2E 属于后续 Requirement，不计作本需求已实现能力。
+
 ## 2026-08-23 independent final exact `72914b7` matrix and completion evidence
 
 - Reviewer direct query: `gh run view 32642138568 --json databaseId,headSha,status,conclusion,url,jobs` returned run `32642138568`, head SHA `72914b7bbad3491112e58b12c89647f3829d5696`, status `completed`, conclusion `success`.
@@ -86,9 +93,9 @@
 | Focused golden | `cargo run -p pareto-protocol --bin generate_schemas --offline -- schemas` followed by checked-in schema golden test | passed | 9 schemas + SchemaSet manifest/ref | Exact file-set/byte golden prevents stale output; cross-platform atomic publication remains open as F-009 |
 | Impacted dependency | `cargo metadata --offline --format-version 1` and `cargo tree -p pareto-protocol --offline` | passed | Cargo.lock / metadata | Direct dependencies: jsonschema, schemars, serde, serde_json, sha2; no Runtime/DB/provider dependency |
 | Core governance unit | `python -m unittest discover -s scripts/tests -p "test_*.py"` | passed | 18 tests | Existing SDD positive/negative fixtures |
-| Core document | `python scripts/check_docs.py` | failed | stale REVIEW-0001 | Expected gate: tracked AGENTS/README/ARCH/EPIC/index changes require exact-revision independent Review; do not weaken checker |
+| Core document | `python scripts/check_docs.py` | passed | final local completion run | REVIEW-0001 freshness and REVIEW-0002 approval are current; earlier expected stale failures were resolved through independent freshness review |
 | Whitespace | `git diff --check` | passed | tracked diff | Untracked files are additionally compiled/generated/read by tests but ordinary Git diff does not cover them until staged/committed |
-| Cross-platform | `.github/workflows/protocol-matrix.yml` | pending | Windows/Linux/macOS matrix added at `ff614b5`; not yet pushed/executed | Workflow fetches the lockfile once, then runs locked/offline Rust gates, Schema/digest golden and governance checks identically on all three OSes |
+| Cross-platform | `.github/workflows/protocol-matrix.yml` | passed | run `32642574089`; Windows `97201827527`, Ubuntu `97201827618`, macOS `97201827652` | Exact `6447c37`; every step including docs and whitespace succeeded on all three OSes |
 | Full Runtime | Event Store/Replay executor/E2E | skipped | out of scope | REQ-0003 provides protocol contracts only; later Requirements own Runtime consumers |
 
 ## Acceptance trace summary
@@ -99,9 +106,8 @@
 - AC-05：conservative old-writer/new-reader proof accepts only optional property additions; narrowing/required/composition mutations fail closed.
 - AC-10：crate has no Runtime/DB/provider dependency and Windows gates pass; Linux/macOS evidence is still missing, so Requirement cannot be verified.
 
-## Remaining gates
+## Completion
 
-1. Resolve independent review Blocker/Major findings and run focused re-review.
-2. Complete independent review of exact commits and close all Blocker/Major findings.
-3. Push and obtain passing Windows/Linux/macOS workflow evidence.
-4. Re-run all completion commands and make `check_docs.py` pass without weakening REVIEW freshness.
+1. Independent REVIEW-0002 approved with 0 open Blocker/Major/Minor.
+2. Exact Windows/Linux/macOS workflow evidence is recorded above and passed.
+3. All local completion commands, including `check_docs.py`, passed without weakening freshness enforcement.

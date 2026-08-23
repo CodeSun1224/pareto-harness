@@ -1,13 +1,13 @@
 ---
 id: REQ-0003
 title: 建立版本化协议类型和 JSON Schema
-status: implementing
+status: done
 owners: [maintainers]
 created: 2026-08-22
 updated: 2026-08-22
-links: [EPIC-0002, REQ-0002, SPEC-0002, RFC-0001, RFC-0002, ADR-0001, ADR-0002, ADR-0003]
+links: [EPIC-0002, REQ-0002, SPEC-0002, RFC-0001, RFC-0002, ADR-0001, ADR-0002, ADR-0003, REVIEW-0002]
 risk: high
-work: .agents/work/active/REQ-0003-versioned-protocol
+work: .agents/work/archived/REQ-0003-versioned-protocol
 ---
 
 # Context and user

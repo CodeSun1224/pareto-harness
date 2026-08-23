@@ -1,6 +1,6 @@
 ---
 title: REQ-0003 版本化协议实施计划
-status: active
+status: completed
 owner: primary-agent
 updated: 2026-08-23
 links: [REQ-0003, SPEC-0002]
@@ -8,7 +8,7 @@ links: [REQ-0003, SPEC-0002]
 
 # Goal and acceptance
 
-交付 REQ-0003 的独立协议纵切和 AC-01 至 AC-10 证据。RFC-0002、ADR-0003 和 SPEC-0002 已获维护者接受/批准；协议实现和本地分层验证已完成，正在关闭独立评审发现。
+已交付 REQ-0003 的独立协议纵切和 AC-01 至 AC-10 证据。RFC-0002、ADR-0003 和 SPEC-0002 已获维护者接受/批准；正式 REVIEW-0002 approved，全部 finding 与三平台门禁已关闭。
 
 # Current state
 
@@ -24,9 +24,9 @@ links: [REQ-0003, SPEC-0002]
 4. 已完成：EventEnvelope、RunManifest、EvidenceRecord、隔离、limits、boundary inventory/reconciliation 与 replay lineage 本地 fixtures。
 5. 已完成：本地 Focused → Impacted → Core 验证并记录证据；已创建 exact commit `d1daa0d`。
 6. 已完成：fresh reviewer 对 exact commit `f8275e09103fe7702188c8298c5c2a791b9118b8` 聚焦复审；F001/F002/F003/F004/F006/F011 已由 reviewer 关闭。
-7. 进行中：F005/F008/F009 已由 exact `72b61b7` 独立 reviewer 关闭；继续整改 F007，将 inventory admission 绑定 validated source manifest/expected scope，并将 reconciliation admission 绑定 validated finalized inventory，补 wrong-inventory/cross-scope 负例。
-8. 进行中：核验 `f8275e0` 与下一整改 exact commit 的 GitHub Actions Windows/Linux/macOS matrix；远端结果返回前不得声明跨平台通过。
-9. 待完成：运行完整 locked/offline 门禁，提交并推送 F007 exact commit，由同一独立 reviewer focused re-review；F007/F010 和 docs freshness 关闭后才进入 verified/done。
+7. 已完成：F005/F007/F008/F009 全部由独立 reviewer 关闭，trusted boundary lineage 与完整负例通过。
+8. 已完成：exact `6447c37` GitHub Actions Windows/Linux/macOS matrix run `32642574089` 全部成功。
+9. 已完成：正式 REVIEW-0002 approved，0 open Blocker/Major/Minor；完成门禁通过并归档 work records。
 
 # Validation
 
