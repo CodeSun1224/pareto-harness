@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-23
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 201e19c65805697c279af3195c9abfca195a75e2
+reviewed_revision: 175bed4a20d02cc6d6428894deceab179b5b1727
 open_blockers: 0
 open_majors: 0
 ---
@@ -57,3 +57,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact commit `e761dc772ffb9987e57b8376d681a8c417719fbb` closure re-review：仅落盘上述独立 Review 结论与 freshness metadata，无产品、CI 或治理行为变化；0 open Blocker/Major，reviewed revision 前移至 `e761dc7`。
 - exact commit `f8275e09103fe7702188c8298c5c2a791b9118b8` freshness re-review：该增量未修改 REQ-0002/SPEC-0001 检查器、生命周期、独立性、finding 计数或完成判定规则；18 个治理测试通过。REQ-0003 产品 finding 由独立 CODE-REVIEW 继续以 changes-requested 跟踪，不冒充本治理 Review 的批准。REVIEW-0001 保持 0 open Blocker/Major，reviewed revision 前移至 exact f8275e0。
 - exact commit `201e19c65805697c279af3195c9abfca195a75e2` freshness re-review：`f8275e0..201e19c` 仅改变 REQ-0003 work evidence 与 protocol 产品类型、验证和合同测试；未修改 REQ-0002/SPEC-0001 检查器、生命周期、独立性、finding 计数或完成判定规则。18 个治理测试通过。REQ-0003 的 F-007/F-010 仍由独立 CODE-REVIEW 标为 open Major，未创建或伪装产品批准。REVIEW-0001 保持 0 open Blocker/Major，reviewed revision 前移至 exact 201e19c。
+- exact commit `175bed4a20d02cc6d6428894deceab179b5b1727` freshness re-review：增量仅补充 REQ-0003 boundary recording-policy 产品校验、负例与评审/验证证据；未改变 REQ-0002/SPEC-0001 治理规则。18 个治理测试通过。独立 CODE-REVIEW 关闭 F-007，但 F-010 仍为 open Major，未创建产品批准。REVIEW-0001 保持 0 open Blocker/Major，reviewed revision 前移至 exact 175bed4。

@@ -220,3 +220,19 @@ Reviewer execution passed the exact focused boundary test, locked/offline worksp
 | F-010 | Major | Local exact-commit protocol and governance tests pass, and VALIDATION records raw Actions run `32640519929` for parent commit `72b61b7`: all three platforms passed product/protocol steps but failed document validation, so the workflow conclusion was failure. No Windows/Ubuntu/macOS run for exact `201e19c` has complete success, and the remaining F-007 fixture is incomplete. The Requirement must not claim cross-platform completion or approval. | open |
 
 REQ-0003 remains **changes-requested**. No formal approved REQ-0003 Review is created.
+
+## Focused re-review — exact commit `175bed4` — 2026-08-23
+
+- Reviewer: `/root/req0003_focused_reviewer`
+- Independence: independent exact-diff/source/test inspection
+- Reviewed revision: `175bed4a20d02cc6d6428894deceab179b5b1727`
+- Scope: F-007 recording-policy closure and F-010 retention
+- Verdict: **changes-requested**
+- Open after re-review: **0 Blocker, 1 Major, 0 Minor**
+
+| ID | Severity | Independent disposition | Status |
+|---|---|---|---|
+| F-007 | Major | `validate_boundary_inventory` now exact-compares the inventory recording policy with the already validated source RunManifest's pinned `boundary_recording_policy_ref`. The negative fixture substitutes both policy revision and digest, then recomputes inventory content digest and revision ID before admission; it still fails, proving the new trusted source binding rather than a stale-identity failure. Together with the exact source scope/run/SchemaSet/top/hash binding and Validated-inventory-only reconciliation/replay evidence reviewed at `201e19c`, the finding is fully addressed. Reviewer reran the exact focused test successfully. | closed by reviewer |
+| F-010 | Major | Exact `175bed4` still lacks a Windows/Ubuntu/macOS workflow whose complete job, including document validation and whitespace, succeeds. The recorded exact `201e19c` run `32641532696` likewise failed document freshness on all three platforms. Cross-platform completion and REQ-0003 approval remain prohibited. | open |
+
+REQ-0003 remains **changes-requested** with F-010 as the only open Major. No formal approved REQ-0003 Review is created.
