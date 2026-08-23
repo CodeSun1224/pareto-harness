@@ -2,7 +2,7 @@
 title: REQ-0003 版本化协议实施计划
 status: active
 owner: primary-agent
-updated: 2026-08-22
+updated: 2026-08-23
 links: [REQ-0003, SPEC-0002]
 ---
 
@@ -22,9 +22,10 @@ links: [REQ-0003, SPEC-0002]
 2. 已完成：REQ-0003 进入 `implementing`，建立最小 Rust workspace 和独立 protocol crate。
 3. 已完成：公共类型、验证错误、确定性 Schema/manifest、规范化/digest vectors 和保守兼容检查。
 4. 已完成：EventEnvelope、RunManifest、EvidenceRecord、隔离、limits、boundary inventory/reconciliation 与 replay lineage 本地 fixtures。
-5. 已完成：本地 Focused → Impacted → Core 验证并记录证据；Linux/macOS 与 exact-revision 证据仍待完成。
-6. 进行中：由 fresh reviewer 聚焦复审；实现者不自行关闭 Blocker/Major。
-7. 待完成：维护者授权提交后评审 exact commit，补齐跨平台证据与文档 freshness，再进入 verified/done。
+5. 已完成：本地 Focused → Impacted → Core 验证并记录证据；已创建 exact commit `d1daa0d`。
+6. 进行中：由 fresh reviewer 对 exact commit 聚焦复审；实现者不自行关闭 Blocker/Major。
+7. 进行中：增加 GitHub Actions Windows/Linux/macOS matrix；远端执行结果返回前只记录为 planned，不声明通过。
+8. 待完成：关闭独立 Review findings、刷新文档 freshness、取得三平台证据，再进入 verified/done。
 
 # Validation
 
@@ -46,7 +47,7 @@ git diff --check
 git status --short
 ```
 
-Windows、Linux、macOS CI 执行 Schema/digest golden 与 workspace tests。Schema 生成后执行 `git diff --exit-code -- schemas/`；若最终路径不同，先更新 Spec/Plan。
+`.github/workflows/protocol-matrix.yml` 在 Windows、Linux、macOS 执行同一组 locked/offline workspace、Schema/digest golden 与治理测试。依赖先通过 `cargo fetch --locked` 获取，后续 Cargo 门禁均使用 `--locked --offline`。Schema 生成后执行 `git diff --exit-code -- schemas/`。
 
 # Handoff notes
 

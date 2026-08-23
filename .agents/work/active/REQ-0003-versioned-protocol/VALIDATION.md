@@ -5,7 +5,7 @@
 - Requirement: REQ-0003 (`implementing`)
 - Spec: SPEC-0002 (`approved`)
 - RFC/ADR: RFC-0002 / ADR-0003 (`accepted`)
-- Reviewed revision: unavailable; working tree is not committed
+- Reviewed revision candidate: `d1daa0dafeba0905ca8eb35f476403e06ad84c2a`（exact independent review in progress）
 - Environment: Windows, Rust/Cargo 1.96.0, rustfmt 1.9.0, Python 3.14.5, Git 2.43.0
 
 ## Results
@@ -20,7 +20,7 @@
 | Core governance unit | `python -m unittest discover -s scripts/tests -p "test_*.py"` | passed | 18 tests | Existing SDD positive/negative fixtures |
 | Core document | `python scripts/check_docs.py` | failed | stale REVIEW-0001 | Expected gate: tracked AGENTS/README/ARCH/EPIC/index changes require exact-revision independent Review; do not weaken checker |
 | Whitespace | `git diff --check` | passed | tracked diff | Untracked files are additionally compiled/generated/read by tests but ordinary Git diff does not cover them until staged/committed |
-| Cross-platform | Windows/Linux/macOS CI | skipped | no remote CI execution in local workspace | Windows passed; Linux/macOS remain required before verification |
+| Cross-platform | `.github/workflows/protocol-matrix.yml` | pending | Windows/Linux/macOS matrix added after `d1daa0d`; not yet pushed/executed | Workflow fetches the lockfile once, then runs locked/offline Rust gates, Schema/digest golden and governance checks identically on all three OSes |
 | Full Runtime | Event Store/Replay executor/E2E | skipped | out of scope | REQ-0003 provides protocol contracts only; later Requirements own Runtime consumers |
 
 ## Acceptance trace summary
@@ -34,6 +34,6 @@
 ## Remaining gates
 
 1. Resolve independent review Blocker/Major findings and run focused re-review.
-2. Review an exact Git commit; working-tree review cannot satisfy the formal Review revision contract.
-3. Run Windows/Linux/macOS CI or record equivalent independent cross-platform evidence.
+2. Complete independent review of exact commits and close all Blocker/Major findings.
+3. Push and obtain passing Windows/Linux/macOS workflow evidence.
 4. Re-run all completion commands and make `check_docs.py` pass without weakening REVIEW freshness.

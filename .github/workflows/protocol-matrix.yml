@@ -1,0 +1,48 @@
+name: protocol-matrix
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  protocol:
+    name: protocol (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Fetch locked Rust dependencies
+        run: cargo fetch --locked
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Lint protocol workspace
+        run: cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings
+      - name: Test protocol workspace
+        run: cargo test --workspace --all-targets --all-features --locked --offline
+      - name: Verify Schema golden files
+        run: cargo run -p pareto-protocol --bin generate_schemas --locked --offline -- schemas
+      - name: Verify Schema directory is unchanged
+        run: git diff --exit-code -- schemas/
+      - name: Verify digest golden vectors
+        run: cargo test -p pareto-protocol --test protocol_contract --locked --offline digest_golden_vectors_bind_schema_type_and_revision_metadata -- --exact
+      - name: Test governance checks
+        run: python -m unittest discover -s scripts/tests -p "test_*.py"
+      - name: Validate repository documents
+        run: python scripts/check_docs.py
+      - name: Check committed whitespace
+        run: git show --check --oneline --no-renames HEAD
