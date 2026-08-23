@@ -621,9 +621,9 @@ impl ExecutionMode {
     /// Binds replay/re-execution to the exact finalized source inventory supplied by the Kernel.
     pub fn validate_inventory(
         &self,
-        inventory: &BoundaryInventoryRevision,
+        inventory: &crate::Validated<BoundaryInventoryRevision>,
     ) -> Result<(), crate::ValidationError> {
-        inventory.validate()?;
+        let inventory = inventory.get();
         let expected = &inventory.metadata.revision_id;
         let matches = match self {
             Self::RecordedReplay {

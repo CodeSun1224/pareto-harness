@@ -24,9 +24,9 @@ links: [REQ-0003, SPEC-0002]
 4. 已完成：EventEnvelope、RunManifest、EvidenceRecord、隔离、limits、boundary inventory/reconciliation 与 replay lineage 本地 fixtures。
 5. 已完成：本地 Focused → Impacted → Core 验证并记录证据；已创建 exact commit `d1daa0d`。
 6. 已完成：fresh reviewer 对 exact commit `f8275e09103fe7702188c8298c5c2a791b9118b8` 聚焦复审；F001/F002/F003/F004/F006/F011 已由 reviewer 关闭。
-7. 进行中：整改 F005/F007/F008/F009：封闭顶层 record admission、对 admitted set 精确绑定 boundary 顶层/hash-view Schema、补齐 typed RECORD/PAYLOAD N/N+1，以及逐个保留 set/并发/失败发布门禁。
+7. 进行中：F005/F008/F009 已由 exact `72b61b7` 独立 reviewer 关闭；继续整改 F007，将 inventory admission 绑定 validated source manifest/expected scope，并将 reconciliation admission 绑定 validated finalized inventory，补 wrong-inventory/cross-scope 负例。
 8. 进行中：核验 `f8275e0` 与下一整改 exact commit 的 GitHub Actions Windows/Linux/macOS matrix；远端结果返回前不得声明跨平台通过。
-9. 待完成：运行完整 locked/offline 门禁，提交并推送整改 exact commit，由同一独立 reviewer focused re-review；全部 Major 和 F010 证据关闭后才进入 verified/done。
+9. 待完成：运行完整 locked/offline 门禁，提交并推送 F007 exact commit，由同一独立 reviewer focused re-review；F007/F010 和 docs freshness 关闭后才进入 verified/done。
 
 # Validation
 

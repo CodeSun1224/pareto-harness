@@ -25,6 +25,22 @@
 - 完整本地 Rust 结果：9 unit + 17 contract passed；1 个 release observation baseline 在普通 suite 中按设计 ignored。Python governance：18 passed。fmt、locked/offline clippy、locked/offline all-target/all-feature tests、Schema generation、`git diff --exit-code -- schemas/`、`git diff --check` passed。
 - `python scripts/check_docs.py` 在 pre-commit 工作树仍只因 REVIEW-0001 freshness 对未提交 substantive paths 报错。下一步提交 exact revision 后交独立 reviewer 更新 freshness 和 finding disposition；在此之前不声明 completion。
 
+## 2026-08-23 independent exact `72b61b7` disposition and Actions
+
+- 独立 reviewer 只读复审 `72b61b70abef8c6ba1bd448aad5b59638a791b47`：F005/F008/F009 closed；F007/F010 Major open；0 Blocker、2 Major。reviewer 未修改文件，实施者未自行关闭 finding。
+- F007 剩余原因：reconciliation 通用 admission 尚未把 `inventory_revision` 对照可信 finalized inventory；inventory 尚缺 source manifest/expected scope 的 cross-scope binding。下一轮以 dedicated admission API 修复。
+- GitHub run `32640519929` exact head SHA `72b61b70abef8c6ba1bd448aad5b59638a791b47`：Windows job `97196795698`、Ubuntu `97196795800`、macOS `97196795835` 的 checkout/toolchain/fetch/fmt/clippy/Rust tests/Schema generation+diff/digest/Python governance 全部 success；三者均仅 `Validate repository documents` failure，whitespace 因前序失败 skipped。workflow conclusion=failure，不能声明三平台完整通过。
+- 历史 run `32638266269` exact head SHA `f8275e09103fe7702188c8298c5c2a791b9118b8` 呈相同结论：三平台协议/产品步骤通过、document validation 失败。
+
+## 2026-08-23 F007 trusted-lineage remediation (pre-commit)
+
+- `SchemaSet::validate_boundary_inventory` 先执行 inventory record limits，再验证 source RunManifest 与 expected source scope，随后 exact 绑定 source run、SchemaSet、top-level Schema 和 inventory hash-view Schema。
+- `SchemaSet::validate_boundary_reconciliation` 只接受 `Validated<BoundaryInventoryRevision>`，并 exact 对照 `inventory_revision`、top-level Schema、reconciliation hash-view Schema、content/revision identity。
+- `ExecutionMode::validate_inventory` 同样只接受 `Validated<BoundaryInventoryRevision>`，阻止 replay lineage 使用未经过 source scope/SchemaSet admission 的自报 inventory。
+- focused negative matrix：wrong expected workspace scope、wrong source run、wrong replay source、wrong inventory revision、wrong top/hash SchemaRef、content mutation 均 fail closed；received、partial-effect-without-receipt、cancelled、late-result reconciliation 正例通过。
+- 完整本地门禁：fmt passed；locked/offline clippy passed；locked/offline workspace all-target/all-feature tests passed（9 unit + 17 contract，1 ignored observation baseline）；Schema generation 与 `git diff --exit-code -- schemas/` passed；Python governance 18 passed；`git diff --check` passed。
+- `check_docs.py` 仍按设计仅报 REVIEW-0001 freshness stale；必须在 exact product commit 后由独立 reviewer 更新 review disposition/freshness，实施者不自行批准。
+
 ## 2026-08-23 remediation working-tree evidence
 
 - `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`：passed。

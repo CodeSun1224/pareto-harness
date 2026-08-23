@@ -701,6 +701,120 @@ impl SchemaSet {
             Err(errors)
         }
     }
+
+    /// Admits a finalized boundary inventory only when it matches the validated source run.
+    pub fn validate_boundary_inventory(
+        &self,
+        inventory: crate::BoundaryInventoryRevision,
+        source_manifest: crate::RunManifest,
+        expected_source_scope: &IsolationScope,
+    ) -> Result<Validated<crate::BoundaryInventoryRevision>, Vec<ValidationError>> {
+        let mut errors = Vec::new();
+        if let Ok(value) = serde_json::to_value(&inventory) {
+            if let Err(error) = validate_value_limits(&value, ProtocolLimitsV1::RECORD_BYTES) {
+                errors.push(error);
+            }
+        }
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+        let validated_source =
+            self.validate_run_manifest(source_manifest, expected_source_scope)?;
+        if inventory.source_run_id != validated_source.get().scope.run_id {
+            errors.push(scope_error(
+                "/source_run_id",
+                "inventory source run does not match the validated source manifest",
+            ));
+        }
+        if inventory.schema_set_ref != self.reference {
+            errors.push(schema_error(
+                "/schema_set_ref",
+                "inventory does not pin the exact admitted SchemaSet",
+            ));
+        }
+        if self.exact_schema("boundary-inventory-revision") != Some(&inventory.metadata.schema_ref)
+        {
+            errors.push(schema_error(
+                "/metadata/schema_ref",
+                "inventory does not use the exact admitted top-level Schema",
+            ));
+        } else if let (Some(validator), Ok(value)) = (
+            self.validators.get(&inventory.metadata.schema_ref),
+            serde_json::to_value(&inventory),
+        ) {
+            validate_json_schema(validator, &value, "", &mut errors);
+        }
+        if self.exact_schema("boundary-inventory-hash-view") != Some(&inventory.hash_schema_ref) {
+            errors.push(schema_error(
+                "/hash_schema_ref",
+                "inventory hash view does not use the exact admitted Schema",
+            ));
+        }
+        if let Err(error) = inventory.validate() {
+            errors.push(error);
+        }
+        sort_and_truncate(&mut errors);
+        if errors.is_empty() {
+            Ok(Validated(inventory))
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// Admits a late-result reconciliation against one already validated finalized inventory.
+    pub fn validate_boundary_reconciliation(
+        &self,
+        reconciliation: crate::BoundaryReconciliationRevision,
+        inventory: &Validated<crate::BoundaryInventoryRevision>,
+    ) -> Result<Validated<crate::BoundaryReconciliationRevision>, Vec<ValidationError>> {
+        let mut errors = Vec::new();
+        if let Ok(value) = serde_json::to_value(&reconciliation) {
+            if let Err(error) = validate_value_limits(&value, ProtocolLimitsV1::RECORD_BYTES) {
+                errors.push(error);
+            }
+        }
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+        if reconciliation.inventory_revision != inventory.get().metadata.revision_id {
+            errors.push(ValidationError::new(
+                ErrorCode::InvariantViolation,
+                "/inventory_revision",
+                "boundary_reconciliation_revision",
+                "reconciliation does not reference the validated finalized inventory",
+            ));
+        }
+        if self.exact_schema("boundary-reconciliation-revision")
+            != Some(&reconciliation.metadata.schema_ref)
+        {
+            errors.push(schema_error(
+                "/metadata/schema_ref",
+                "reconciliation does not use the exact admitted top-level Schema",
+            ));
+        } else if let (Some(validator), Ok(value)) = (
+            self.validators.get(&reconciliation.metadata.schema_ref),
+            serde_json::to_value(&reconciliation),
+        ) {
+            validate_json_schema(validator, &value, "", &mut errors);
+        }
+        if self.exact_schema("boundary-reconciliation-hash-view")
+            != Some(&reconciliation.hash_schema_ref)
+        {
+            errors.push(schema_error(
+                "/hash_schema_ref",
+                "reconciliation hash view does not use the exact admitted Schema",
+            ));
+        }
+        if let Err(error) = reconciliation.validate() {
+            errors.push(error);
+        }
+        sort_and_truncate(&mut errors);
+        if errors.is_empty() {
+            Ok(Validated(reconciliation))
+        } else {
+            Err(errors)
+        }
+    }
 }
 
 /// Parses a closed typed record and applies raw and canonical semantic limits.
@@ -1159,40 +1273,6 @@ impl ProtocolRecord for crate::RevisionMetadata {
     const SCHEMA_TYPE: &'static str = "revision-metadata";
     fn validate_semantics(&self, _set: &SchemaSet) -> Result<(), ValidationError> {
         self.validate_identity()
-    }
-}
-
-impl sealed::ProtocolRecord for crate::BoundaryInventoryRevision {}
-impl ProtocolRecord for crate::BoundaryInventoryRevision {
-    const SCHEMA_TYPE: &'static str = "boundary-inventory-revision";
-    fn validate_semantics(&self, set: &SchemaSet) -> Result<(), ValidationError> {
-        if set.exact_schema("boundary-inventory-hash-view") != Some(&self.hash_schema_ref) {
-            return Err(schema_error(
-                "/hash_schema_ref",
-                "inventory hash view does not use the exact admitted Schema",
-            ));
-        }
-        if self.schema_set_ref != set.reference {
-            return Err(schema_error(
-                "/schema_set_ref",
-                "inventory does not pin the exact admitted SchemaSet",
-            ));
-        }
-        self.validate()
-    }
-}
-
-impl sealed::ProtocolRecord for crate::BoundaryReconciliationRevision {}
-impl ProtocolRecord for crate::BoundaryReconciliationRevision {
-    const SCHEMA_TYPE: &'static str = "boundary-reconciliation-revision";
-    fn validate_semantics(&self, set: &SchemaSet) -> Result<(), ValidationError> {
-        if set.exact_schema("boundary-reconciliation-hash-view") != Some(&self.hash_schema_ref) {
-            return Err(schema_error(
-                "/hash_schema_ref",
-                "reconciliation hash view does not use the exact admitted Schema",
-            ));
-        }
-        self.validate()
     }
 }
 

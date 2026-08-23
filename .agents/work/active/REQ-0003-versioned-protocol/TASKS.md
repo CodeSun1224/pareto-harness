@@ -15,3 +15,4 @@
 - [x] TASK-REQ-0003-13：整改 F008，补 Event/Run/Evidence typed `RECORD_BYTES` 与 Event `PAYLOAD_BYTES` 精确 N/N+1、pretty/minified/escape 和错误顺序证据。Validation: `typed_event_payload_and_record_bytes_are_exact` and `typed_run_and_evidence_record_bytes_are_exact`。
 - [x] TASK-REQ-0003-14：整改 F009，逐个验证所有保留 set 的目录/manifest/member digest/精确文件集合，并覆盖并发、冲突和 stale staging。Validation: retained-set and publisher focused tests。
 - [ ] TASK-REQ-0003-15：运行完整门禁、提交推送 exact commit、取得三平台 raw Actions 结果并请求独立 focused re-review。Validation: VALIDATION raw commands, GitHub run/job IDs, CODE-REVIEW disposition。
+- [x] TASK-REQ-0003-16：按 `72b61b7` 独立复审整改 F007：inventory 绑定 validated source manifest/expected scope，reconciliation 绑定 validated finalized inventory；补 wrong-inventory/cross-scope。Validation: `boundary_record_admission_binds_exact_top_and_hash_schemas` and full local gates；exact re-review pending next commit。

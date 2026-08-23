@@ -669,6 +669,7 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
     let reconciliation_top = member("boundary-reconciliation-revision");
     let reconciliation_hash = member("boundary-reconciliation-hash-view");
     let revision_metadata = member("revision-metadata");
+    let run_schema = member("run-manifest");
     let set_ref = bundle.reference.clone();
     let set =
         SchemaSet::bootstrap_initial(bundle.manifest, bundle.schemas, &bundle.reference).unwrap();
@@ -688,7 +689,7 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
         hash_schema_ref: inventory_hash.clone(),
         source_run_id: RunId::parse("run_source").unwrap(),
         final_event_sequence: "4".to_owned(),
-        schema_set_ref: set_ref,
+        schema_set_ref: set_ref.clone(),
         recording_policy_ref: BoundaryRecordingPolicyRef {
             revision_id: RevisionId::parse("rev_policy").unwrap(),
             digest: digest('f'),
@@ -717,10 +718,65 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
     };
     inventory.metadata.content_digest = inventory.content_digest().unwrap();
     inventory.metadata.revision_id = derive_revision_id(&inventory.metadata).unwrap();
-    let bytes = serde_json::to_vec(&inventory).unwrap();
+    let mut source_scope = scope();
+    source_scope.run_id = RunId::parse("run_source").unwrap();
+    let revisions = [
+        "task",
+        "behavior",
+        "workspace",
+        "environment",
+        "context_graph",
+        "model_snapshot",
+        "tool_set",
+        "kernel",
+    ]
+    .into_iter()
+    .map(|role| {
+        (
+            role.to_owned(),
+            RevisionId::parse(format!("rev_{}", role.replace('_', "-"))).unwrap(),
+        )
+    })
+    .collect();
+    let source_manifest = RunManifest {
+        schema_ref: run_schema,
+        scope: source_scope.clone(),
+        revisions,
+        plan_revision: None,
+        schema_set_ref: set_ref.clone(),
+        budget_revision: RevisionId::parse("rev_budget").unwrap(),
+        protocol_limits_ref: ProtocolLimitsRef {
+            profile: "protocol-limits-v1".to_owned(),
+            digest: Digest::parse(ProtocolLimitsV1::DIGEST).unwrap(),
+        },
+        boundary_recording_policy_ref: inventory.recording_policy_ref.clone(),
+        execution_mode: ExecutionMode::Live {},
+    };
+    let validated_inventory = set
+        .validate_boundary_inventory(inventory.clone(), source_manifest.clone(), &source_scope)
+        .unwrap();
     assert!(
-        set.parse_record::<BoundaryInventoryRevision>(&bytes)
-            .is_ok()
+        ExecutionMode::RecordedReplay {
+            source_run_id: inventory.source_run_id.clone(),
+            boundary_inventory_revision: inventory.metadata.revision_id.clone(),
+        }
+        .validate_inventory(&validated_inventory)
+        .is_ok()
+    );
+    assert!(
+        ExecutionMode::RecordedReplay {
+            source_run_id: RunId::parse("run_other").unwrap(),
+            boundary_inventory_revision: inventory.metadata.revision_id.clone(),
+        }
+        .validate_inventory(&validated_inventory)
+        .is_err()
+    );
+
+    let mut wrong_scope = source_scope.clone();
+    wrong_scope.workspace_id = WorkspaceId::parse("workspace_other").unwrap();
+    assert!(
+        set.validate_boundary_inventory(inventory.clone(), source_manifest.clone(), &wrong_scope)
+            .is_err()
     );
 
     let mut wrong_hash = inventory.clone();
@@ -728,20 +784,20 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
     wrong_hash.metadata.content_digest = wrong_hash.content_digest().unwrap();
     wrong_hash.metadata.revision_id = derive_revision_id(&wrong_hash.metadata).unwrap();
     assert!(
-        set.parse_record::<BoundaryInventoryRevision>(&serde_json::to_vec(&wrong_hash).unwrap())
+        set.validate_boundary_inventory(wrong_hash, source_manifest.clone(), &source_scope)
             .is_err()
     );
     let mut mutated = inventory.clone();
     mutated.final_event_sequence = "5".to_owned();
     assert!(
-        set.parse_record::<BoundaryInventoryRevision>(&serde_json::to_vec(&mutated).unwrap())
+        set.validate_boundary_inventory(mutated, source_manifest.clone(), &source_scope)
             .is_err()
     );
     let mut wrong_top = inventory.clone();
     wrong_top.metadata.schema_ref = revision_metadata;
     wrong_top.metadata.revision_id = derive_revision_id(&wrong_top.metadata).unwrap();
     assert!(
-        set.parse_record::<BoundaryInventoryRevision>(&serde_json::to_vec(&wrong_top).unwrap())
+        set.validate_boundary_inventory(wrong_top, source_manifest, &source_scope)
             .is_err()
     );
 
@@ -764,19 +820,23 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
     reconciliation.metadata.content_digest = reconciliation.content_digest().unwrap();
     reconciliation.metadata.revision_id = derive_revision_id(&reconciliation.metadata).unwrap();
     assert!(
-        set.parse_record::<BoundaryReconciliationRevision>(
-            &serde_json::to_vec(&reconciliation).unwrap()
-        )
-        .is_ok()
+        set.validate_boundary_reconciliation(reconciliation.clone(), &validated_inventory)
+            .is_ok()
+    );
+    let mut wrong_inventory = reconciliation.clone();
+    wrong_inventory.inventory_revision = RevisionId::parse("rev_other-inventory").unwrap();
+    wrong_inventory.metadata.content_digest = wrong_inventory.content_digest().unwrap();
+    wrong_inventory.metadata.revision_id = derive_revision_id(&wrong_inventory.metadata).unwrap();
+    assert!(
+        set.validate_boundary_reconciliation(wrong_inventory, &validated_inventory)
+            .is_err()
     );
     reconciliation.hash_schema_ref = schema("boundary-reconciliation-hash-view", '8');
     reconciliation.metadata.content_digest = reconciliation.content_digest().unwrap();
     reconciliation.metadata.revision_id = derive_revision_id(&reconciliation.metadata).unwrap();
     assert!(
-        set.parse_record::<BoundaryReconciliationRevision>(
-            &serde_json::to_vec(&reconciliation).unwrap()
-        )
-        .is_err()
+        set.validate_boundary_reconciliation(reconciliation, &validated_inventory)
+            .is_err()
     );
 }
 
