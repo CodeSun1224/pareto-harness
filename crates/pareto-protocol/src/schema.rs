@@ -3,9 +3,10 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    ArtifactManifest, BoundaryInventoryRevision, BoundaryReconciliationRevision, EventEnvelope,
-    EvidenceRecord, RevisionHashView, RevisionMetadata, RunManifest, SchemaRef, SchemaSetManifest,
-    SchemaSetRef, ValidationError, digest_json, digest_schema,
+    ArtifactManifest, BoundaryInventoryHashView, BoundaryInventoryRevision,
+    BoundaryReconciliationHashView, BoundaryReconciliationRevision, EventEnvelope, EvidenceRecord,
+    ProtocolLimitsProfileV1, RevisionHashView, RevisionMetadata, RunManifest, SchemaRef,
+    SchemaSetManifest, SchemaSetRef, ValidationError, digest_json, digest_schema,
 };
 
 /// A generated public JSON Schema and its stable filename.
@@ -32,10 +33,13 @@ pub struct GeneratedSchemaBundle {
 pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
     let mut schemas = vec![
         generate::<ArtifactManifest>("artifact-manifest", 1, 0)?,
+        generate::<BoundaryInventoryHashView>("boundary-inventory-hash-view", 1, 0)?,
         generate::<BoundaryInventoryRevision>("boundary-inventory-revision", 1, 0)?,
+        generate::<BoundaryReconciliationHashView>("boundary-reconciliation-hash-view", 1, 0)?,
         generate::<BoundaryReconciliationRevision>("boundary-reconciliation-revision", 1, 0)?,
         generate::<EventEnvelope>("event-envelope", 1, 0)?,
         generate::<EvidenceRecord>("evidence-record", 1, 0)?,
+        generate::<ProtocolLimitsProfileV1>("protocol-limits-profile", 1, 0)?,
         generate::<RevisionHashView>("revision-hash-view", 1, 0)?,
         generate::<RevisionMetadata>("revision-metadata", 1, 0)?,
         generate::<RunManifest>("run-manifest", 1, 0)?,

@@ -1,9 +1,14 @@
+use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::sync::Arc;
 
+use schemars::JsonSchema;
 use serde::Deserializer as _;
 use serde::de::{DeserializeOwned, MapAccess, SeqAccess, Visitor};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::Digest as _;
 
 use crate::{
     AgentId, Digest, ErrorCode, EventEnvelope, EventTypeBinding, EvidenceRecord, IsolationScope,
@@ -21,10 +26,30 @@ type AdmittedSchemas = (
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProtocolLimitsV1;
 
+/// Published immutable preimage for the V1 resource-limits identity.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProtocolLimitsProfileV1 {
+    /// Raw transport bytes.
+    pub raw_record_bytes: usize,
+    /// Canonical record bytes.
+    pub record_bytes: usize,
+    /// Canonical payload bytes.
+    pub payload_bytes: usize,
+    /// Decoded UTF-8 string bytes.
+    pub string_bytes: usize,
+    /// Maximum value depth.
+    pub depth: usize,
+    /// Maximum members in one array or object.
+    pub collection: usize,
+    /// Maximum returned errors.
+    pub errors: usize,
+}
+
 impl ProtocolLimitsV1 {
     /// Digest of the canonical V1 limits profile published by RFC-0002.
     pub const DIGEST: &'static str =
-        "sha256:75f04f5d173aa822efca55f8233c8e09e57a731ee3987b69bb8a86efcf35080f";
+        "sha256:503a7fd1d3d1d93412ce8f3a0f5bdfd1298afa1c2289a60b97bd00dea73fadc0";
     /// Raw JSON transport ceiling before parsing.
     pub const RAW_RECORD_BYTES: usize = 1_048_576;
     /// Canonical semantic record ceiling.
@@ -39,6 +64,29 @@ impl ProtocolLimitsV1 {
     pub const COLLECTION: usize = 16_384;
     /// Maximum deterministic errors returned by a batch API.
     pub const ERRORS: usize = 32;
+
+    /// Returns the complete published profile preimage.
+    pub const fn profile() -> ProtocolLimitsProfileV1 {
+        ProtocolLimitsProfileV1 {
+            raw_record_bytes: Self::RAW_RECORD_BYTES,
+            record_bytes: Self::RECORD_BYTES,
+            payload_bytes: Self::PAYLOAD_BYTES,
+            string_bytes: Self::STRING_BYTES,
+            depth: Self::DEPTH,
+            collection: Self::COLLECTION,
+            errors: Self::ERRORS,
+        }
+    }
+
+    /// Recomputes the profile identity from the canonical published preimage.
+    pub fn computed_digest() -> Result<String, ValidationError> {
+        let value = serde_json::to_value(Self::profile())
+            .map_err(|_| invariant("limits profile serialization failed"))?;
+        Ok(format!(
+            "sha256:{:x}",
+            sha2::Sha256::digest(canonical_json_bytes(&value)?)
+        ))
+    }
 }
 
 /// A value that passed protocol validation. Its field is private to prevent extension forgery.
@@ -58,10 +106,20 @@ impl<T> Validated<T> {
 }
 
 /// Event admitted through one exact registry variant and its payload schema.
-#[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedEvent {
     envelope: EventEnvelope,
     variant_id: String,
+    decoded: Box<dyn Any + Send + Sync>,
+}
+
+impl fmt::Debug for ValidatedEvent {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ValidatedEvent")
+            .field("envelope", &self.envelope)
+            .field("variant_id", &self.variant_id)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ValidatedEvent {
@@ -74,31 +132,72 @@ impl ValidatedEvent {
     pub fn variant_id(&self) -> &str {
         &self.variant_id
     }
+
+    /// Borrows the payload as the exact Rust type produced by the admitted decoder.
+    pub fn downcast_payload<T: Any>(&self) -> Option<&T> {
+        self.decoded.downcast_ref()
+    }
 }
 
-/// Opaque Kernel capability required to admit a schema set.
-#[derive(Debug)]
-pub(crate) struct SchemaAdmissionAuthority {
-    _private: (),
+/// Kernel-owned policy boundary that authorizes a structurally valid schema-set transition.
+pub trait SchemaAdmissionAuthorizer {
+    /// Authorizes the candidate after all bytes, identities, digests, and compatibility checks pass.
+    fn authorize(
+        &self,
+        parent: Option<&SchemaSetRef>,
+        candidate: &SchemaSetRef,
+    ) -> Result<(), ValidationError>;
 }
 
-impl SchemaAdmissionAuthority {
-    /// SHA-256 of the exact Draft 2020-12 root meta-schema embedded by jsonschema 0.50.0.
-    pub const METASCHEMA_DIGEST: &'static str =
-        "sha256:483c0526fdeb85e072d9cca4eee4ba7f1179d1ce89cb21c42b3c01296442f9e6";
-    #[allow(dead_code)] // Consumed by the future in-crate kernel module; unit tests exercise it now.
-    pub(crate) fn kernel_owned() -> Self {
-        Self { _private: () }
+/// Typed decoder bound to exactly one event variant and payload schema.
+pub trait EventVariantDecoder: Send + Sync {
+    /// Stable language-independent variant identifier.
+    fn variant_id(&self) -> &str;
+    /// Exact payload schema accepted by this decoder.
+    fn payload_schema_ref(&self) -> &SchemaRef;
+    /// Decodes a schema-valid payload into its closed typed representation.
+    fn decode(&self, payload: &Value) -> Result<Box<dyn Any + Send + Sync>, ValidationError>;
+}
+
+/// Closed top-level protocol record that can cross an untrusted JSON boundary.
+pub trait ProtocolRecord: DeserializeOwned + Serialize {
+    /// Exact public Schema type name.
+    const SCHEMA_TYPE: &'static str;
+    /// Applies cross-field semantics after limits, Schema, and Serde validation.
+    fn validate_semantics(&self) -> Result<(), ValidationError> {
+        Ok(())
     }
 }
 
 /// Immutable admitted schema set with event type bindings.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SchemaSet {
     reference: SchemaSetRef,
     manifest: SchemaSetManifest,
     _documents: BTreeMap<SchemaRef, Value>,
     validators: BTreeMap<SchemaRef, Arc<jsonschema::Validator>>,
+    decoders: BTreeMap<String, Arc<dyn EventVariantDecoder>>,
+}
+
+impl fmt::Debug for SchemaSet {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SchemaSet")
+            .field("reference", &self.reference)
+            .field("manifest", &self.manifest)
+            .finish_non_exhaustive()
+    }
+}
+
+struct BootstrapAuthorizer;
+impl SchemaAdmissionAuthorizer for BootstrapAuthorizer {
+    fn authorize(
+        &self,
+        _parent: Option<&SchemaSetRef>,
+        _candidate: &SchemaSetRef,
+    ) -> Result<(), ValidationError> {
+        Ok(())
+    }
 }
 
 impl SchemaSet {
@@ -115,20 +214,24 @@ impl SchemaSet {
                 "initial schema set does not match the embedded trust root",
             ));
         }
-        Self::admit(
-            &SchemaAdmissionAuthority::kernel_owned(),
+        Self::admit_with(
+            &BootstrapAuthorizer,
+            None,
             manifest,
             documents,
             expected_reference,
+            Vec::new(),
         )
     }
 
-    /// Admits a manifest only when its members are sorted, unique, and match the expected digest.
-    pub(crate) fn admit(
-        _authority: &SchemaAdmissionAuthority,
+    /// Admits a complete set after structural proof and an explicit Kernel policy decision.
+    pub fn admit_with(
+        authorizer: &dyn SchemaAdmissionAuthorizer,
+        parent: Option<&SchemaSet>,
         manifest: SchemaSetManifest,
         documents: Vec<SchemaDocument>,
         expected_reference: &SchemaSetRef,
+        decoders: Vec<Arc<dyn EventVariantDecoder>>,
     ) -> Result<Self, ValidationError> {
         validate_manifest_order(&manifest)?;
         let (verified_documents, validators) = validate_schema_documents(&manifest, documents)?;
@@ -156,11 +259,40 @@ impl SchemaSet {
                 "manifest digest mismatch",
             ));
         }
+        if let Some(parent) = parent {
+            validate_schema_evolution(parent, &verified_documents)?;
+        }
+        let mut decoder_map = BTreeMap::new();
+        for decoder in decoders {
+            let id = decoder.variant_id().to_owned();
+            if id.is_empty() || decoder_map.insert(id.clone(), decoder).is_some() {
+                return Err(schema_error(
+                    "/event_bindings",
+                    "decoder IDs must be non-empty and unique",
+                ));
+            }
+        }
+        for binding in &manifest.event_bindings {
+            let decoder = decoder_map.get(&binding.variant_id).ok_or_else(|| {
+                schema_error("/event_bindings", "event binding has no typed decoder")
+            })?;
+            if decoder.payload_schema_ref() != &binding.payload_schema_ref {
+                return Err(schema_error(
+                    "/event_bindings",
+                    "typed decoder schema does not match binding",
+                ));
+            }
+        }
+        if decoder_map.len() != manifest.event_bindings.len() {
+            return Err(schema_error("/event_bindings", "unbound typed decoder"));
+        }
+        authorizer.authorize(parent.map(SchemaSet::reference), expected_reference)?;
         Ok(Self {
             reference: expected_reference.clone(),
             manifest,
             _documents: verified_documents,
             validators,
+            decoders: decoder_map,
         })
     }
 
@@ -172,6 +304,56 @@ impl SchemaSet {
     /// Returns true only for a complete member SchemaRef.
     pub fn contains(&self, schema: &SchemaRef) -> bool {
         self.manifest.schemas.binary_search(schema).is_ok()
+    }
+
+    /// Parses one untrusted top-level record in limits → Schema → Serde → semantic order.
+    pub fn parse_record<T: ProtocolRecord>(
+        &self,
+        bytes: &[u8],
+    ) -> Result<Validated<T>, Vec<ValidationError>> {
+        let value = parse_bounded_value(bytes).map_err(|error| vec![error])?;
+        let schema_ref = self.exact_schema(T::SCHEMA_TYPE).ok_or_else(|| {
+            vec![schema_error(
+                "/schema_ref",
+                "record Schema is not uniquely admitted",
+            )]
+        })?;
+        let declared_schema = value.get("schema_ref").or_else(|| {
+            value
+                .get("metadata")
+                .and_then(|item| item.get("schema_ref"))
+        });
+        if let Some(declared) = declared_schema {
+            if !matches!(
+                serde_json::from_value::<SchemaRef>(declared.clone()),
+                Ok(ref declared) if declared == schema_ref
+            ) {
+                return Err(vec![schema_error(
+                    "/schema_ref",
+                    "record does not declare its exact admitted Schema",
+                )]);
+            }
+        }
+        let validator = self
+            .validators
+            .get(schema_ref)
+            .expect("admitted member validator");
+        let mut errors = Vec::new();
+        validate_json_schema(validator, &value, "", &mut errors);
+        if !errors.is_empty() {
+            sort_and_truncate(&mut errors);
+            return Err(errors);
+        }
+        let record: T = serde_json::from_value(value).map_err(|_| {
+            vec![ValidationError::new(
+                ErrorCode::InvalidJson,
+                "",
+                "typed_record",
+                "record does not match closed typed contract",
+            )]
+        })?;
+        record.validate_semantics().map_err(|error| vec![error])?;
+        Ok(Validated(record))
     }
 
     fn event_binding(&self, envelope: &EventEnvelope) -> Option<&EventTypeBinding> {
@@ -234,7 +416,6 @@ impl SchemaSet {
         context: &TrustedValidationContext,
     ) -> Result<ValidatedEvent, Vec<ValidationError>> {
         let mut errors = Vec::new();
-        let mut selected_variant = None;
         if let Err(error) = validate_limits_ref(&context.protocol_limits_ref) {
             errors.push(error);
         }
@@ -297,7 +478,6 @@ impl SchemaSet {
                         "typed variant identifier is empty",
                     ));
                 }
-                selected_variant = Some(binding.variant_id.clone());
                 if let Some(validator) = self.validators.get(&binding.payload_schema_ref) {
                     validate_json_schema(validator, &envelope.payload, "/payload", &mut errors);
                 } else {
@@ -348,9 +528,21 @@ impl SchemaSet {
         }
         sort_and_truncate(&mut errors);
         if errors.is_empty() {
+            let variant_id = self
+                .event_binding(&envelope)
+                .expect("successful binding")
+                .variant_id
+                .clone();
+            let decoded = self
+                .decoders
+                .get(&variant_id)
+                .expect("admission requires decoder")
+                .decode(&envelope.payload)
+                .map_err(|error| vec![error])?;
             Ok(ValidatedEvent {
                 envelope,
-                variant_id: selected_variant.expect("successful binding selects a variant"),
+                variant_id,
+                decoded,
             })
         } else {
             Err(errors)
@@ -364,6 +556,14 @@ impl SchemaSet {
         expected_scope: &IsolationScope,
     ) -> Result<Validated<RunManifest>, Vec<ValidationError>> {
         let mut errors = Vec::new();
+        if let Ok(value) = serde_json::to_value(&manifest) {
+            if let Err(error) = validate_value_limits(&value, ProtocolLimitsV1::RECORD_BYTES) {
+                errors.push(error);
+            }
+        }
+        if !errors.is_empty() {
+            return Err(errors);
+        }
         validate_scope(&manifest.scope, expected_scope, &mut errors);
         if manifest.schema_set_ref != self.reference {
             errors.push(schema_error(
@@ -415,11 +615,6 @@ impl SchemaSet {
         if let Err(error) = manifest.execution_mode.validate(&manifest.scope.run_id) {
             errors.push(error);
         }
-        if let Ok(value) = serde_json::to_value(&manifest) {
-            if let Err(error) = validate_value_limits(&value, ProtocolLimitsV1::RECORD_BYTES) {
-                errors.push(error);
-            }
-        }
         sort_and_truncate(&mut errors);
         if errors.is_empty() {
             Ok(Validated(manifest))
@@ -438,6 +633,15 @@ impl SchemaSet {
         let mut errors = Vec::new();
         if let Err(error) = validate_limits_ref(protocol_limits_ref) {
             errors.push(error);
+        }
+        if let Ok(value) = serde_json::to_value(&evidence) {
+            if let Err(error) = validate_value_limits(&value, ProtocolLimitsV1::RECORD_BYTES) {
+                errors.push(error);
+            }
+        }
+        if !errors.is_empty() {
+            sort_and_truncate(&mut errors);
+            return Err(errors);
         }
         validate_scope(&evidence.scope, expected_scope, &mut errors);
         if self.exact_schema("evidence-record") != Some(&evidence.schema_ref) {
@@ -474,11 +678,6 @@ impl SchemaSet {
                 ));
             }
         }
-        if let Ok(value) = serde_json::to_value(&evidence) {
-            if let Err(error) = validate_value_limits(&value, ProtocolLimitsV1::RECORD_BYTES) {
-                errors.push(error);
-            }
-        }
         sort_and_truncate(&mut errors);
         if errors.is_empty() {
             Ok(Validated(evidence))
@@ -490,6 +689,18 @@ impl SchemaSet {
 
 /// Parses a closed typed record and applies raw and canonical semantic limits.
 pub fn parse_bounded<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, ValidationError> {
+    let value = parse_bounded_value(bytes)?;
+    serde_json::from_value(value).map_err(|_| {
+        ValidationError::new(
+            ErrorCode::InvalidJson,
+            "",
+            "typed_record",
+            "record does not match closed typed contract",
+        )
+    })
+}
+
+fn parse_bounded_value(bytes: &[u8]) -> Result<Value, ValidationError> {
     if bytes.len() > ProtocolLimitsV1::RAW_RECORD_BYTES {
         return Err(limit("raw record byte ceiling exceeded"));
     }
@@ -508,14 +719,7 @@ pub fn parse_bounded<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, ValidationE
         ValidationError::new(ErrorCode::InvalidJson, "", "json", "trailing JSON data")
     })?;
     validate_value_limits(&value, ProtocolLimitsV1::RECORD_BYTES)?;
-    serde_json::from_value(value).map_err(|_| {
-        ValidationError::new(
-            ErrorCode::InvalidJson,
-            "",
-            "typed_record",
-            "record does not match closed typed contract",
-        )
-    })
+    Ok(value)
 }
 
 fn validate_schema_documents(
@@ -544,7 +748,9 @@ fn validate_schema_documents(
                 "schema document does not use the fixed metaschema",
             ));
         }
-        let _pinned_metaschema_digest = SchemaAdmissionAuthority::METASCHEMA_DIGEST;
+        // SHA-256 of the Draft 2020-12 root meta-schema embedded by jsonschema 0.50.0.
+        let _pinned_metaschema_digest =
+            "sha256:483c0526fdeb85e072d9cca4eee4ba7f1179d1ce89cb21c42b3c01296442f9e6";
         if !jsonschema::draft202012::meta::is_valid(&document.document) {
             return Err(schema_error(
                 "",
@@ -564,6 +770,17 @@ fn validate_schema_documents(
         let (major, minor) = version
             .split_once('.')
             .ok_or_else(|| schema_error("/$id", "schema ID lacks major/minor"))?;
+        for component in [major, minor] {
+            if component.is_empty()
+                || (component.len() > 1 && component.starts_with('0'))
+                || !component.bytes().all(|byte| byte.is_ascii_digit())
+            {
+                return Err(schema_error(
+                    "/$id",
+                    "schema version is not canonical decimal",
+                ));
+            }
+        }
         let digest = digest_schema(schema_id, &document.document)?;
         let reference = SchemaRef {
             r#type: name.to_owned(),
@@ -590,6 +807,22 @@ fn validate_schema_documents(
         validators.insert(reference, Arc::new(validator));
     }
     Ok((verified, validators))
+}
+
+fn validate_schema_evolution(
+    parent: &SchemaSet,
+    candidate: &BTreeMap<SchemaRef, Value>,
+) -> Result<(), ValidationError> {
+    for (new_ref, new_schema) in candidate {
+        if let Some((_, old_schema)) = parent
+            ._documents
+            .iter()
+            .find(|(old_ref, _)| old_ref.r#type == new_ref.r#type && old_ref.major == new_ref.major)
+        {
+            crate::prove_old_writer_new_reader(old_schema, new_schema)?;
+        }
+    }
+    Ok(())
 }
 
 fn validate_json_schema(
@@ -869,6 +1102,51 @@ impl<'de> serde::de::DeserializeSeed<'de> for UniqueValueSeed {
     }
 }
 
+macro_rules! protocol_record {
+    ($type:ty, $schema:literal) => {
+        impl ProtocolRecord for $type {
+            const SCHEMA_TYPE: &'static str = $schema;
+        }
+    };
+}
+
+protocol_record!(crate::ArtifactManifest, "artifact-manifest");
+protocol_record!(
+    crate::BoundaryInventoryHashView,
+    "boundary-inventory-hash-view"
+);
+protocol_record!(
+    crate::BoundaryReconciliationHashView,
+    "boundary-reconciliation-hash-view"
+);
+protocol_record!(crate::EventEnvelope, "event-envelope");
+protocol_record!(crate::EvidenceRecord, "evidence-record");
+protocol_record!(ProtocolLimitsProfileV1, "protocol-limits-profile");
+protocol_record!(crate::RevisionHashView, "revision-hash-view");
+protocol_record!(crate::RunManifest, "run-manifest");
+protocol_record!(crate::SchemaSetManifest, "schema-set-manifest");
+
+impl ProtocolRecord for crate::RevisionMetadata {
+    const SCHEMA_TYPE: &'static str = "revision-metadata";
+    fn validate_semantics(&self) -> Result<(), ValidationError> {
+        self.validate_identity()
+    }
+}
+
+impl ProtocolRecord for crate::BoundaryInventoryRevision {
+    const SCHEMA_TYPE: &'static str = "boundary-inventory-revision";
+    fn validate_semantics(&self) -> Result<(), ValidationError> {
+        self.validate()
+    }
+}
+
+impl ProtocolRecord for crate::BoundaryReconciliationRevision {
+    const SCHEMA_TYPE: &'static str = "boundary-reconciliation-revision";
+    fn validate_semantics(&self) -> Result<(), ValidationError> {
+        self.validate()
+    }
+}
+
 #[allow(dead_code)]
 fn _assert_send_sync() {
     fn check<T: Send + Sync>() {}
@@ -881,6 +1159,7 @@ fn _assert_send_sync() {
 
 #[cfg(test)]
 mod tests {
+    use serde::Deserialize;
     use serde_json::json;
 
     use super::*;
@@ -923,6 +1202,37 @@ mod tests {
         }
     }
 
+    struct AllowAdmission;
+    impl SchemaAdmissionAuthorizer for AllowAdmission {
+        fn authorize(
+            &self,
+            _parent: Option<&SchemaSetRef>,
+            _candidate: &SchemaSetRef,
+        ) -> Result<(), ValidationError> {
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct RunStartedPayload {
+        message: String,
+    }
+
+    struct RunStartedDecoder(SchemaRef);
+    impl EventVariantDecoder for RunStartedDecoder {
+        fn variant_id(&self) -> &str {
+            "run-started-v1"
+        }
+        fn payload_schema_ref(&self) -> &SchemaRef {
+            &self.0
+        }
+        fn decode(&self, payload: &Value) -> Result<Box<dyn Any + Send + Sync>, ValidationError> {
+            serde_json::from_value::<RunStartedPayload>(payload.clone())
+                .map(|value| Box::new(value) as Box<dyn Any + Send + Sync>)
+                .map_err(|_| schema_error("/payload", "typed payload decoding failed"))
+        }
+    }
+
     fn admitted() -> (SchemaSet, SchemaRef, SchemaRef) {
         let (payload_doc, payload_ref) = document(
             "run-started-payload",
@@ -957,12 +1267,13 @@ mod tests {
             .unwrap(),
             manifest_schema_ref: manifest_ref,
         };
-        let authority = SchemaAdmissionAuthority::kernel_owned();
-        let set = SchemaSet::admit(
-            &authority,
+        let set = SchemaSet::admit_with(
+            &AllowAdmission,
+            None,
             manifest,
             vec![payload_doc, envelope_doc, manifest_doc],
             &reference,
+            vec![Arc::new(RunStartedDecoder(payload_ref.clone()))],
         )
         .unwrap();
         (set, payload_ref, envelope_ref)
@@ -1016,26 +1327,44 @@ mod tests {
             )
             .is_ok()
         );
-        let authority = SchemaAdmissionAuthority::kernel_owned();
         assert!(
-            SchemaSet::admit(
-                &authority,
+            SchemaSet::admit_with(
+                &AllowAdmission,
+                None,
                 bundle.manifest.clone(),
                 Vec::new(),
-                &bundle.reference
+                &bundle.reference,
+                Vec::new(),
             )
             .is_err()
         );
         let mut wrong = bundle.reference.clone();
         wrong.manifest_digest = digest('f');
-        assert!(SchemaSet::admit(&authority, bundle.manifest, bundle.schemas, &wrong).is_err());
+        assert!(
+            SchemaSet::admit_with(
+                &AllowAdmission,
+                None,
+                bundle.manifest,
+                bundle.schemas,
+                &wrong,
+                Vec::new()
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn isolation_boundaries_and_payload_schema_fail_closed() {
         let (set, payload_ref, envelope_ref) = admitted();
         let (event, context) = valid_event(&set, payload_ref, envelope_ref);
-        assert!(set.validate_event(event.clone(), &context).is_ok());
+        let validated = set.validate_event(event.clone(), &context).unwrap();
+        assert_eq!(
+            validated
+                .downcast_payload::<RunStartedPayload>()
+                .unwrap()
+                .message,
+            "started"
+        );
         for mutate in 0..5 {
             let mut candidate = event.clone();
             match mutate {

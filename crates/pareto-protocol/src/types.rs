@@ -369,6 +369,8 @@ pub struct BoundaryRecord {
 pub struct BoundaryInventoryRevision {
     /// Inventory revision metadata.
     pub metadata: RevisionMetadata,
+    /// Exact Schema for the immutable inventory content hash preimage.
+    pub hash_schema_ref: SchemaRef,
     /// Completed source run.
     pub source_run_id: RunId,
     /// Inclusive last event sequence used for finalization.
@@ -387,7 +389,35 @@ pub struct BoundaryInventoryRevision {
 pub struct BoundaryReconciliationRevision {
     /// Reconciliation revision metadata.
     pub metadata: RevisionMetadata,
+    /// Exact Schema for the immutable reconciliation content hash preimage.
+    pub hash_schema_ref: SchemaRef,
     /// Inventory being reconciled without mutation.
+    pub inventory_revision: RevisionId,
+    /// Ordered late-result audit events.
+    pub late_result_events: Vec<EventId>,
+}
+
+/// Frozen content-only preimage for a boundary inventory revision digest.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BoundaryInventoryHashView {
+    /// Completed source run.
+    pub source_run_id: RunId,
+    /// Inclusive final event sequence.
+    pub final_event_sequence: String,
+    /// Source schema set.
+    pub schema_set_ref: SchemaSetRef,
+    /// Boundary recording policy.
+    pub recording_policy_ref: BoundaryRecordingPolicyRef,
+    /// Ordered finalized boundary facts.
+    pub boundaries: Vec<BoundaryRecord>,
+}
+
+/// Frozen content-only preimage for a boundary reconciliation revision digest.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BoundaryReconciliationHashView {
+    /// Inventory being reconciled.
     pub inventory_revision: RevisionId,
     /// Ordered late-result audit events.
     pub late_result_events: Vec<EventId>,
@@ -396,23 +426,26 @@ pub struct BoundaryReconciliationRevision {
 impl BoundaryInventoryRevision {
     /// Computes the behavior-content digest excluding revision metadata.
     pub fn content_digest(&self) -> Result<Digest, crate::ValidationError> {
-        let value = serde_json::json!({
-            "source_run_id": self.source_run_id,
-            "final_event_sequence": self.final_event_sequence,
-            "schema_set_ref": self.schema_set_ref,
-            "recording_policy_ref": self.recording_policy_ref,
-            "boundaries": self.boundaries,
-        });
-        crate::digest_json(
-            "revision:boundary_inventory",
-            &self.metadata.schema_ref,
-            &value,
-        )
+        let value = serde_json::to_value(BoundaryInventoryHashView {
+            source_run_id: self.source_run_id.clone(),
+            final_event_sequence: self.final_event_sequence.clone(),
+            schema_set_ref: self.schema_set_ref.clone(),
+            recording_policy_ref: self.recording_policy_ref.clone(),
+            boundaries: self.boundaries.clone(),
+        })
+        .map_err(|_| crate::ValidationError {
+            code: crate::ErrorCode::InvariantViolation,
+            path: String::new(),
+            contract: "boundary_inventory_hash_view".to_owned(),
+            detail: "hash view serialization failed".to_owned(),
+        })?;
+        crate::digest_json("revision:boundary_inventory", &self.hash_schema_ref, &value)
     }
 
     /// Validates finalization-only invariants; an empty boundary list is valid and explicit.
     pub fn validate(&self) -> Result<(), crate::ValidationError> {
         if self.metadata.revision_kind != "boundary_inventory"
+            || self.hash_schema_ref.r#type != "boundary-inventory-hash-view"
             || self.content_digest()? != self.metadata.content_digest
             || self.metadata.validate_identity().is_err()
         {
@@ -458,13 +491,19 @@ impl BoundaryInventoryRevision {
 impl BoundaryReconciliationRevision {
     /// Computes the immutable reconciliation delta digest excluding revision metadata.
     pub fn content_digest(&self) -> Result<Digest, crate::ValidationError> {
-        let value = serde_json::json!({
-            "inventory_revision": self.inventory_revision,
-            "late_result_events": self.late_result_events,
-        });
+        let value = serde_json::to_value(BoundaryReconciliationHashView {
+            inventory_revision: self.inventory_revision.clone(),
+            late_result_events: self.late_result_events.clone(),
+        })
+        .map_err(|_| crate::ValidationError {
+            code: crate::ErrorCode::InvariantViolation,
+            path: String::new(),
+            contract: "boundary_reconciliation_hash_view".to_owned(),
+            detail: "hash view serialization failed".to_owned(),
+        })?;
         crate::digest_json(
             "revision:boundary_reconciliation",
-            &self.metadata.schema_ref,
+            &self.hash_schema_ref,
             &value,
         )
     }
@@ -472,6 +511,7 @@ impl BoundaryReconciliationRevision {
     /// Validates that reconciliation is an explicit, non-duplicated late-result delta.
     pub fn validate(&self) -> Result<(), crate::ValidationError> {
         if self.metadata.revision_kind != "boundary_reconciliation"
+            || self.hash_schema_ref.r#type != "boundary-reconciliation-hash-view"
             || self.content_digest()? != self.metadata.content_digest
             || self.metadata.validate_identity().is_err()
         {

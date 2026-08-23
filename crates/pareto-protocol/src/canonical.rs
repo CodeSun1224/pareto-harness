@@ -103,4 +103,14 @@ mod tests {
         assert!(canonical_json(&json!(1.5)).is_err());
         assert!(canonical_json(&json!(9_007_199_254_740_992_u64)).is_err());
     }
+
+    #[test]
+    fn matches_rfc_8785_property_sorting_vector() {
+        // RFC 8785 section 3.2.3: UTF-16 code-unit ordering of the official sample names.
+        let value = json!({"€":"Euro Sign","\r":"Carriage Return","דּ":"Hebrew Letter Dalet With Dagesh","1":"One","😀":"Emoji: Grinning Face","\u{80}":"Control","ö":"Latin Small Letter O With Diaeresis"});
+        assert_eq!(
+            canonical_json(&value).unwrap(),
+            "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}"
+        );
+    }
 }

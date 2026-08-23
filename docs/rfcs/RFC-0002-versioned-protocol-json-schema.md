@@ -168,6 +168,14 @@ untrusted producer / plugin / adapter
 | stale/removed Schema | 已被持久化记录或 RunManifest 引用的 Schema 永不原位修改或物理删除；可停止新写入但保留 reader |
 | error disclosure | 默认错误仅含 code/path/contract/safe digest；详细诊断必须在受控日志策略中另行授权 |
 
+## Accepted implementation clarification: immutable publication
+
+Schema 目录不维护可变 `current` 指针，也不原位替换完整目录。每个完整 SchemaSet 发布到
+`schemas/sets/sha256-<manifest-digest>/`：生成器先在同一父目录写完 staging，完成全部字节后仅把 staging
+rename 到尚不存在的 digest 目标。目标已存在时必须逐文件、逐字节相等才可幂等成功；不同 digest 共存，旧 set
+不得由发布器删除。消费者必须使用 RunManifest 固定的 `SchemaSetRef.manifest_digest` 解析目录，因此发布新 set
+不会改变既有 reader 的选择，也不存在“当前目录缺失”的切换窗口。此澄清取代“原位替换 Schema 目录”的解释。
+
 # Alternatives considered
 
 1. **Serde 默认 JSON + 结构体派生 Schema**：实现最少，但字段顺序、default、unknown fields 和 Rust 布局容易成为偶然合同，也无法独立证明跨语言兼容；拒绝。

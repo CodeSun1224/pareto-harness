@@ -1,5 +1,17 @@
 # Validation Evidence
 
+## 2026-08-23 remediation working-tree evidence
+
+- `cargo clippy --workspace --all-targets --all-features --locked --offline -- -D warnings`：passed。
+- `cargo test --workspace --all-targets --all-features --locked --offline`：passed，6 unit + 14 contract；另有 1 个 ignored observation baseline。
+- `python -m unittest discover -s scripts/tests -p "test_*.py"`：passed，18 tests。
+- 生成器发布 12 个当前公共 Schema 到 `schemas/sets/sha256-<manifest-digest>/`；旧 digest set 保留。幂等发布和既有目标 byte drift 负例通过。
+- limits N/N+1 覆盖 depth、decoded string、array/object collection、object-name、raw pretty transport 与 escape；Run/Evidence 在 Schema 前执行 record limits；V1 profile digest 从公开 preimage 重算。
+- RFC 8785 §3.2.3 官方 property-sorting vector 通过。
+- release baseline 命令：`cargo test -p pareto-protocol --test protocol_baseline --release --locked --offline -- --ignored --nocapture`。Windows 本次观测：parse 1,779,200 ns/1000；Schema validate 4,214,000 ns/1000；canonicalize 1,281,600 ns/1000；digest 4,401,000 ns/1000；Schema generation 100,885,400 ns/100。仅为可复现基线，无性能通过阈值或优化声明。
+- `python scripts/check_docs.py` 当前预期失败：工作树尚未形成 exact commit，REVIEW-0001 freshness gate 检出本轮 substantive paths；commit 后由独立 reviewer 更新 exact revision，禁止实现者自行绕过。
+- GitHub Windows/Linux/macOS matrix 必须在本轮 exact commit push 后取得结果；当前仍 pending。
+
 ## Subject
 
 - Requirement: REQ-0003 (`implementing`)

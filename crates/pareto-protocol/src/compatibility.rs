@@ -10,11 +10,11 @@ use crate::{ErrorCode, ValidationError};
 /// non-required object properties. Every other change fails closed and requires a major bump or
 /// a future reviewed proof rule.
 pub fn prove_old_writer_new_reader(old: &Value, new: &Value) -> Result<(), ValidationError> {
+    let (old_name, old_major, old_minor) = schema_identity(old)?;
+    let (new_name, new_major, new_minor) = schema_identity(new)?;
     if old == new {
         return Ok(());
     }
-    let (old_name, old_major, old_minor) = schema_identity(old)?;
-    let (new_name, new_major, new_minor) = schema_identity(new)?;
     if old_name != new_name || old_major != new_major || new_minor <= old_minor {
         return Err(incompatible(
             "/$id",
@@ -51,14 +51,24 @@ fn schema_identity(schema: &Value) -> Result<(String, u32, u32), ValidationError
     {
         return Err(incompatible("/$id", "schema type is invalid"));
     }
+    let parse_component = |component: &str, label: &str| {
+        if component.is_empty()
+            || (component.len() > 1 && component.starts_with('0'))
+            || !component.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return Err(incompatible(
+                "/$id",
+                &format!("invalid canonical {label} version"),
+            ));
+        }
+        component
+            .parse()
+            .map_err(|_| incompatible("/$id", &format!("invalid {label} version")))
+    };
     Ok((
         name.to_owned(),
-        major
-            .parse()
-            .map_err(|_| incompatible("/$id", "invalid major version"))?,
-        minor
-            .parse()
-            .map_err(|_| incompatible("/$id", "invalid minor version"))?,
+        parse_component(major, "major")?,
+        parse_component(minor, "minor")?,
     ))
 }
 

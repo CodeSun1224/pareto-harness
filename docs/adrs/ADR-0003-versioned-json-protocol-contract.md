@@ -32,6 +32,9 @@ Schema 兼容只允许保守 checker 能证明的白名单变化；无法证明�
 
 # Consequences
 
+SchemaSet 的文件发布采用不可变内容地址目录 `schemas/sets/sha256-<manifest-digest>/`，不设置跨平台可变
+`current` 指针。并发发布同一 digest 只在字节完全相同时幂等成功，不同 digest 保留并由 RunManifest 精确选择。
+
 获得明确的跨语言身份、兼容、隔离、Replay 与失败语义，并能用 golden、mutation 和负向 fixture 验证。代价是协议实现必须维护 Schema generator、保守 compatibility checker、多版本 writer/reader、bootstrap trust root、严格 limits 和更多测试资产。
 
 协议层保持无文件、网络、进程、时钟或秘密访问；Event Store 原子顺序、ID 唯一性、状态迁移和实际 capability 判定仍属于后续 Kernel Requirement，不能由本 ADR 的结构验证替代。

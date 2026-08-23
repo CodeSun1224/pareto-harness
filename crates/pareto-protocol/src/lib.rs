@@ -22,4 +22,7 @@ pub use schema::{
     GeneratedSchemaBundle, SchemaDocument, generate_schema_bundle, generate_schema_set,
 };
 pub use types::*;
-pub use validation::{ProtocolLimitsV1, SchemaSet, Validated, ValidatedEvent, parse_bounded};
+pub use validation::{
+    EventVariantDecoder, ProtocolLimitsProfileV1, ProtocolLimitsV1, ProtocolRecord,
+    SchemaAdmissionAuthorizer, SchemaSet, Validated, ValidatedEvent, parse_bounded,
+};

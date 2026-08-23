@@ -1,5 +1,6 @@
 use pareto_protocol::*;
 use serde_json::json;
+use std::{any::Any, sync::Arc};
 
 fn digest(hex: char) -> Digest {
     Digest::parse(format!("sha256:{}", hex.to_string().repeat(64))).unwrap()
@@ -20,6 +21,119 @@ fn scope() -> IsolationScope {
         run_id: RunId::parse("run_one").unwrap(),
         agent_id: AgentId::parse("agent_primary").unwrap(),
     }
+}
+
+struct AdmissionPolicy(bool);
+impl SchemaAdmissionAuthorizer for AdmissionPolicy {
+    fn authorize(
+        &self,
+        parent: Option<&SchemaSetRef>,
+        _candidate: &SchemaSetRef,
+    ) -> Result<(), ValidationError> {
+        if self.0 && parent.is_some() {
+            Ok(())
+        } else {
+            Err(ValidationError {
+                code: ErrorCode::InvariantViolation,
+                path: String::new(),
+                contract: "schema_admission_policy".to_owned(),
+                detail: "transition denied".to_owned(),
+            })
+        }
+    }
+}
+
+struct IntegrationDecoder(SchemaRef);
+impl EventVariantDecoder for IntegrationDecoder {
+    fn variant_id(&self) -> &str {
+        "integration-payload-v1"
+    }
+    fn payload_schema_ref(&self) -> &SchemaRef {
+        &self.0
+    }
+    fn decode(
+        &self,
+        payload: &serde_json::Value,
+    ) -> Result<Box<dyn Any + Send + Sync>, ValidationError> {
+        serde_json::from_value::<std::collections::BTreeMap<String, String>>(payload.clone())
+            .map(|value| Box::new(value) as Box<dyn Any + Send + Sync>)
+            .map_err(|_| ValidationError {
+                code: ErrorCode::SchemaMismatch,
+                path: "/payload".to_owned(),
+                contract: "typed_decoder".to_owned(),
+                detail: "decode failed".to_owned(),
+            })
+    }
+}
+
+#[test]
+fn external_kernel_can_authorize_evolved_event_schema_set() {
+    let initial_bundle = generate_schema_bundle().unwrap();
+    let initial = SchemaSet::bootstrap_initial(
+        initial_bundle.manifest,
+        initial_bundle.schemas,
+        &initial_bundle.reference,
+    )
+    .unwrap();
+    let id = "urn:pareto-harness:schema:integration-payload:1.0";
+    let document = json!({
+        "$schema":"https://json-schema.org/draft/2020-12/schema", "$id":id,
+        "type":"object", "properties":{"message":{"type":"string"}},
+        "required":["message"], "unevaluatedProperties":false
+    });
+    let payload_ref = SchemaRef {
+        r#type: "integration-payload".to_owned(),
+        major: 1,
+        minor: 0,
+        schema_digest: digest_schema(id, &document).unwrap(),
+    };
+    let mut bundle = generate_schema_bundle().unwrap();
+    bundle.manifest.schemas.push(payload_ref.clone());
+    bundle.manifest.schemas.sort();
+    bundle.manifest.event_bindings.push(EventTypeBinding {
+        event_type: "integration".to_owned(),
+        major: 1,
+        minor: 0,
+        payload_schema_ref: payload_ref.clone(),
+        variant_id: "integration-payload-v1".to_owned(),
+    });
+    bundle.schemas.push(SchemaDocument {
+        filename: "integration-payload-v1.0.schema.json".to_owned(),
+        document,
+    });
+    let candidate = SchemaSetRef {
+        manifest_schema_ref: bundle.reference.manifest_schema_ref.clone(),
+        manifest_digest: digest_json(
+            "schema-set",
+            &bundle.reference.manifest_schema_ref,
+            &serde_json::to_value(&bundle.manifest).unwrap(),
+        )
+        .unwrap(),
+    };
+    let make_decoders =
+        || vec![Arc::new(IntegrationDecoder(payload_ref.clone())) as Arc<dyn EventVariantDecoder>];
+    assert!(
+        SchemaSet::admit_with(
+            &AdmissionPolicy(false),
+            Some(&initial),
+            bundle.manifest.clone(),
+            bundle.schemas.clone(),
+            &candidate,
+            make_decoders()
+        )
+        .is_err()
+    );
+    assert!(
+        SchemaSet::admit_with(
+            &AdmissionPolicy(true),
+            Some(&initial),
+            bundle.manifest,
+            bundle.schemas,
+            &candidate,
+            make_decoders()
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -58,7 +172,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 9);
+    assert_eq!(first.len(), 12);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -78,6 +192,8 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
 fn checked_in_schemas_equal_deterministic_generation() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let bundle = generate_schema_bundle().unwrap();
+    let set_name = bundle.reference.manifest_digest.as_str().replace(':', "-");
+    let published = root.join("schemas").join("sets").join(set_name);
     let expected: std::collections::BTreeSet<_> = bundle
         .schemas
         .iter()
@@ -87,7 +203,7 @@ fn checked_in_schemas_equal_deterministic_generation() {
             "schema-set-v1.0.ref.json".to_owned(),
         ])
         .collect();
-    let actual: std::collections::BTreeSet<_> = std::fs::read_dir(root.join("schemas"))
+    let actual: std::collections::BTreeSet<_> = std::fs::read_dir(&published)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
@@ -96,27 +212,63 @@ fn checked_in_schemas_equal_deterministic_generation() {
         "schema directory contains missing or stale files"
     );
     for schema in bundle.schemas {
-        let checked_in =
-            std::fs::read_to_string(root.join("schemas").join(&schema.filename)).unwrap();
+        let checked_in = std::fs::read_to_string(published.join(&schema.filename)).unwrap();
         assert_eq!(
             checked_in,
             format!("{}\n", canonical_json(&schema.document).unwrap())
         );
     }
     assert_eq!(
-        std::fs::read_to_string(root.join("schemas/schema-set-v1.0.manifest.json")).unwrap(),
+        std::fs::read_to_string(published.join("schema-set-v1.0.manifest.json")).unwrap(),
         format!(
             "{}\n",
             canonical_json(&serde_json::to_value(bundle.manifest).unwrap()).unwrap()
         )
     );
     assert_eq!(
-        std::fs::read_to_string(root.join("schemas/schema-set-v1.0.ref.json")).unwrap(),
+        std::fs::read_to_string(published.join("schema-set-v1.0.ref.json")).unwrap(),
         format!(
             "{}\n",
             canonical_json(&serde_json::to_value(bundle.reference).unwrap()).unwrap()
         )
     );
+}
+
+#[test]
+fn schema_publisher_is_idempotent_and_rejects_existing_byte_drift() {
+    let temporary =
+        std::env::temp_dir().join(format!("pareto-schema-publish-{}", std::process::id()));
+    if temporary.exists() {
+        std::fs::remove_dir_all(&temporary).unwrap();
+    }
+    let executable = env!("CARGO_BIN_EXE_generate_schemas");
+    assert!(
+        std::process::Command::new(executable)
+            .arg(&temporary)
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        std::process::Command::new(executable)
+            .arg(&temporary)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let bundle = generate_schema_bundle().unwrap();
+    let published = temporary
+        .join("sets")
+        .join(bundle.reference.manifest_digest.as_str().replace(':', "-"));
+    std::fs::write(published.join("schema-set-v1.0.ref.json"), b"corrupt\n").unwrap();
+    assert!(
+        !std::process::Command::new(executable)
+            .arg(&temporary)
+            .status()
+            .unwrap()
+            .success()
+    );
+    std::fs::remove_dir_all(temporary).unwrap();
 }
 
 #[test]
@@ -151,6 +303,9 @@ fn compatibility_proof_allows_only_optional_property_addition() {
     assert!(prove_old_writer_new_reader(&generated_old, &generated_new).is_ok());
     generated_old["$id"] = json!("urn:pareto-harness:schema:event-envelope:1.1");
     assert!(prove_old_writer_new_reader(&generated_old, &generated_new).is_err());
+
+    let malformed = json!({"$id":"urn:pareto-harness:schema:test:01.0","type":"object"});
+    assert!(prove_old_writer_new_reader(&malformed, &malformed).is_err());
 }
 
 #[test]
@@ -343,6 +498,7 @@ fn replay_lineage_and_boundary_finalization_fail_closed() {
     };
     let mut empty_finalized = BoundaryInventoryRevision {
         metadata: metadata.clone(),
+        hash_schema_ref: schema("boundary-inventory-hash-view", '7'),
         source_run_id: RunId::parse("run_source").unwrap(),
         final_event_sequence: "1".to_owned(),
         schema_set_ref: SchemaSetRef {
@@ -358,6 +514,9 @@ fn replay_lineage_and_boundary_finalization_fail_closed() {
     empty_finalized.metadata.content_digest = empty_finalized.content_digest().unwrap();
     empty_finalized.metadata.revision_id = derive_revision_id(&empty_finalized.metadata).unwrap();
     empty_finalized.validate().unwrap();
+    let mut changed_inventory = empty_finalized.clone();
+    changed_inventory.source_run_id = RunId::parse("run_changed").unwrap();
+    assert!(changed_inventory.validate().is_err());
     let mut invalid_sequence = empty_finalized;
     invalid_sequence.final_event_sequence = "00".to_owned();
     assert!(invalid_sequence.validate().is_err());
@@ -366,16 +525,26 @@ fn replay_lineage_and_boundary_finalization_fail_closed() {
     reconciliation_metadata.revision_kind = "boundary_reconciliation".to_owned();
     let mut reconciliation = BoundaryReconciliationRevision {
         metadata: reconciliation_metadata,
+        hash_schema_ref: schema("boundary-reconciliation-hash-view", '8'),
         inventory_revision: RevisionId::parse("rev_inventory").unwrap(),
-        late_result_events: Vec::new(),
+        late_result_events: vec![EventId::parse("event_late").unwrap()],
     };
     reconciliation.metadata.content_digest = reconciliation.content_digest().unwrap();
     reconciliation.metadata.revision_id = derive_revision_id(&reconciliation.metadata).unwrap();
-    assert!(reconciliation.validate().is_err());
+    reconciliation.validate().unwrap();
+    let mut changed_reconciliation = reconciliation;
+    changed_reconciliation
+        .late_result_events
+        .push(EventId::parse("event_later").unwrap());
+    assert!(changed_reconciliation.validate().is_err());
 }
 
 #[test]
 fn limits_reject_depth_at_n_plus_one_and_accept_n() {
+    assert_eq!(
+        ProtocolLimitsV1::computed_digest().unwrap(),
+        ProtocolLimitsV1::DIGEST
+    );
     fn nested(depth: usize) -> serde_json::Value {
         let mut value = json!(true);
         for _ in 1..depth {
@@ -416,4 +585,49 @@ fn limits_reject_depth_at_n_plus_one_and_accept_n() {
             .code,
         ErrorCode::LimitExceeded
     );
+
+    let array_at_limit = vec![json!(null); ProtocolLimitsV1::COLLECTION];
+    assert!(
+        parse_bounded::<serde_json::Value>(&serde_json::to_vec(&array_at_limit).unwrap()).is_ok()
+    );
+    let array_over_limit = vec![json!(null); ProtocolLimitsV1::COLLECTION + 1];
+    assert_eq!(
+        parse_bounded::<serde_json::Value>(&serde_json::to_vec(&array_over_limit).unwrap())
+            .unwrap_err()
+            .code,
+        ErrorCode::LimitExceeded
+    );
+
+    let object_at_limit: serde_json::Map<_, _> = (0..ProtocolLimitsV1::COLLECTION)
+        .map(|index| (format!("k{index}"), json!(null)))
+        .collect();
+    assert!(
+        parse_bounded::<serde_json::Value>(&serde_json::to_vec(&object_at_limit).unwrap()).is_ok()
+    );
+    let object_over_limit: serde_json::Map<_, _> = (0..=ProtocolLimitsV1::COLLECTION)
+        .map(|index| (format!("k{index}"), json!(null)))
+        .collect();
+    assert_eq!(
+        parse_bounded::<serde_json::Value>(&serde_json::to_vec(&object_over_limit).unwrap())
+            .unwrap_err()
+            .code,
+        ErrorCode::LimitExceeded
+    );
+
+    let object_name_at_limit = "x".repeat(ProtocolLimitsV1::STRING_BYTES);
+    let object_at_limit = json!({object_name_at_limit: null});
+    assert!(
+        parse_bounded::<serde_json::Value>(&serde_json::to_vec(&object_at_limit).unwrap()).is_ok()
+    );
+    let object_name_over_limit = "x".repeat(ProtocolLimitsV1::STRING_BYTES + 1);
+    let object_over_limit = json!({object_name_over_limit: null});
+    assert_eq!(
+        parse_bounded::<serde_json::Value>(&serde_json::to_vec(&object_over_limit).unwrap())
+            .unwrap_err()
+            .code,
+        ErrorCode::LimitExceeded
+    );
+
+    let escaped = br#""\u0078""#;
+    assert_eq!(parse_bounded::<String>(escaped).unwrap(), "x");
 }
