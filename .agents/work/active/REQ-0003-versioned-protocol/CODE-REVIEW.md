@@ -236,3 +236,18 @@ REQ-0003 remains **changes-requested**. No formal approved REQ-0003 Review is cr
 | F-010 | Major | Exact `175bed4` still lacks a Windows/Ubuntu/macOS workflow whose complete job, including document validation and whitespace, succeeds. The recorded exact `201e19c` run `32641532696` likewise failed document freshness on all three platforms. Cross-platform completion and REQ-0003 approval remain prohibited. | open |
 
 REQ-0003 remains **changes-requested** with F-010 as the only open Major. No formal approved REQ-0003 Review is created.
+
+## Final focused re-review — exact commit `72914b7` — 2026-08-23
+
+- Reviewer: `/root/req0003_focused_reviewer`
+- Independence: independent exact-revision source/evidence review and direct GitHub Actions query
+- Reviewed revision: `72914b7bbad3491112e58b12c89647f3829d5696`
+- Scope: F-010 final cross-platform, completion, JCS, and baseline evidence
+- Verdict: **approved for code-review gate**
+- Open after re-review: **0 Blocker, 0 Major, 0 Minor**
+
+| ID | Severity | Independent disposition | Status |
+|---|---|---|---|
+| F-010 | Major | Reviewer directly queried Actions run `32642138568`: status `completed`, conclusion `success`, exact head SHA `72914b7bbad3491112e58b12c89647f3829d5696`. Windows job `97200754378`, macOS `97200754479`, and Ubuntu `97200754491` are each completed/success; on every platform checkout, Python/Rust setup, locked dependency fetch, fmt, clippy, workspace tests, Schema generation and unchanged-directory check, digest golden, governance tests, document validation, and whitespace check all concluded success. Reviewer also reran all local completion gates successfully: 9 unit + 17 contract tests, 18 Python tests, Schema byte identity, docs, fmt, clippy, and whitespace. The two applicable official RFC 8785 vectors remain present and passing; the protocol deliberately rejects floats/unsafe integers outside its frozen JCS subset. The ignored release observation baseline was explicitly rerun and reported parse/schema-validation/canonicalize/digest/schema-generation totals without threshold or optimization claim. All earlier F-005/F-007/F-008/F-009 closures remain supported at the exact revision. | closed by reviewer |
+
+The independent code-review gate has no open findings. This disposition does not itself change REQ-0003 lifecycle metadata or substitute for final documentation/handoff completion.

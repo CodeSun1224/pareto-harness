@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-23
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 2224772597b465b26d46a713f402e1bef0ebec5b
+reviewed_revision: 72914b7bbad3491112e58b12c89647f3829d5696
 open_blockers: 0
 open_majors: 0
 ---
@@ -59,3 +59,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact commit `201e19c65805697c279af3195c9abfca195a75e2` freshness re-review：`f8275e0..201e19c` 仅改变 REQ-0003 work evidence 与 protocol 产品类型、验证和合同测试；未修改 REQ-0002/SPEC-0001 检查器、生命周期、独立性、finding 计数或完成判定规则。18 个治理测试通过。REQ-0003 的 F-007/F-010 仍由独立 CODE-REVIEW 标为 open Major，未创建或伪装产品批准。REVIEW-0001 保持 0 open Blocker/Major，reviewed revision 前移至 exact 201e19c。
 - exact commit `175bed4a20d02cc6d6428894deceab179b5b1727` freshness re-review：增量仅补充 REQ-0003 boundary recording-policy 产品校验、负例与评审/验证证据；未改变 REQ-0002/SPEC-0001 治理规则。18 个治理测试通过。独立 CODE-REVIEW 关闭 F-007，但 F-010 仍为 open Major，未创建产品批准。REVIEW-0001 保持 0 open Blocker/Major，reviewed revision 前移至 exact 175bed4。
 - exact commit `2224772597b465b26d46a713f402e1bef0ebec5b` freshness-only re-review：`175bed4..2224772` 只提交独立 Reviewer 已完成的 F-007 disposition 与 REVIEW-0001 freshness 记录，无产品、测试、CI 或治理行为变化。F-010 继续作为 REQ-0003 唯一 open Major，未创建产品批准。REVIEW-0001 保持 0 open Blocker/Major，reviewed revision 前移至 exact 2224772。
+- exact commit `72914b7bbad3491112e58b12c89647f3829d5696` freshness re-review：`2224772..72914b7` 仅提交上一轮 REVIEW-0001 freshness closure，无产品、测试、CI 或治理行为变化；exact Actions matrix 随后在 Windows/macOS/Ubuntu 完整成功。独立 REQ-0003 CODE-REVIEW 据此关闭最后的 F-010，但本治理 Review 不替代 Requirement 生命周期收尾。REVIEW-0001 保持 0 open Blocker/Major，reviewed revision 前移至 exact 72914b7。

@@ -1,5 +1,14 @@
 # Validation Evidence
 
+## 2026-08-23 independent final exact `72914b7` matrix and completion evidence
+
+- Reviewer direct query: `gh run view 32642138568 --json databaseId,headSha,status,conclusion,url,jobs` returned run `32642138568`, head SHA `72914b7bbad3491112e58b12c89647f3829d5696`, status `completed`, conclusion `success`.
+- Windows job `97200754378` (`protocol (windows-latest)`), macOS job `97200754479`, and Ubuntu job `97200754491` each returned status `completed`, conclusion `success`.
+- Every platform reported success for checkout, Python/Rust setup, locked dependency fetch, fmt, clippy, workspace tests, Schema generation, Schema unchanged check, digest golden, governance tests, document validation, whitespace, post-actions, and complete-job steps. Run URL: `https://github.com/CodeSun1224/pareto-harness/actions/runs/32642138568`.
+- Reviewer local exact completion rerun passed: `cargo fmt --all -- --check`; locked/offline all-target/all-feature clippy; locked/offline workspace tests (9 unit + 17 contract, 1 ordinary-suite ignored observation baseline); Schema generation plus `git diff --exit-code -- schemas/`; 18 Python governance tests; `check_docs.py` (127 Markdown files, 28 formal IDs); and `git diff --check`.
+- Reviewer explicitly reran the release observation baseline: parse `2,057,700 ns/1000`, Schema validate `3,868,400 ns/1000`, canonicalize `997,800 ns/1000`, digest `3,871,100 ns/1000`, Schema generation `106,130,800 ns/100`. These are environment-specific reproducibility observations, not performance thresholds or optimization claims.
+- Independent final disposition: F010 closed; REQ-0003 code review now has 0 open Blocker and 0 open Major. Lifecycle status is not changed by this evidence entry.
+
 ## 2026-08-23 exact `f8275e0` re-review and CI preflight
 
 - 独立 reviewer 已对 `f8275e09103fe7702188c8298c5c2a791b9118b8` 完成 exact re-review：F001/F002/F003/F004/F006/F011 closed；F005/F007/F008/F009/F010 Major open。实现者未自行改变 finding disposition。
