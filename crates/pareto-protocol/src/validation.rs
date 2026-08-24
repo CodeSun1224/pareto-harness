@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use schemars::JsonSchema;
@@ -159,6 +160,57 @@ pub trait EventVariantDecoder: Send + Sync {
     fn decode(&self, payload: &Value) -> Result<Box<dyn Any + Send + Sync>, ValidationError>;
 }
 
+struct BuiltinEventDecoder<T> {
+    variant_id: String,
+    payload_schema_ref: SchemaRef,
+    marker: PhantomData<T>,
+}
+
+impl<T> EventVariantDecoder for BuiltinEventDecoder<T>
+where
+    T: Any + DeserializeOwned + Send + Sync,
+{
+    fn variant_id(&self) -> &str {
+        &self.variant_id
+    }
+
+    fn payload_schema_ref(&self) -> &SchemaRef {
+        &self.payload_schema_ref
+    }
+
+    fn decode(&self, payload: &Value) -> Result<Box<dyn Any + Send + Sync>, ValidationError> {
+        serde_json::from_value::<T>(payload.clone())
+            .map(|value| Box::new(value) as Box<dyn Any + Send + Sync>)
+            .map_err(|_| schema_error("/payload", "typed lifecycle payload decoding failed"))
+    }
+}
+
+fn builtin_event_decoder(binding: &EventTypeBinding) -> Option<Arc<dyn EventVariantDecoder>> {
+    macro_rules! decoder {
+        ($type:ty) => {
+            Arc::new(BuiltinEventDecoder::<$type> {
+                variant_id: binding.variant_id.clone(),
+                payload_schema_ref: binding.payload_schema_ref.clone(),
+                marker: PhantomData,
+            })
+        };
+    }
+    match (
+        binding.variant_id.as_str(),
+        binding.payload_schema_ref.r#type.as_str(),
+    ) {
+        ("run-created-v1", "run-created-payload") => Some(decoder!(crate::RunCreatedPayload)),
+        ("task-created-v1", "task-created-payload") => Some(decoder!(crate::TaskCreatedPayload)),
+        ("run-state-transitioned-v1", "run-state-transitioned-payload") => {
+            Some(decoder!(crate::RunStateTransitionedPayload))
+        }
+        ("task-state-transitioned-v1", "task-state-transitioned-payload") => {
+            Some(decoder!(crate::TaskStateTransitionedPayload))
+        }
+        _ => None,
+    }
+}
+
 mod sealed {
     pub trait ProtocolRecord {}
 }
@@ -277,7 +329,11 @@ impl SchemaSet {
             validate_schema_evolution(parent, &verified_documents)?;
         }
         let mut decoder_map = BTreeMap::new();
-        for decoder in decoders {
+        let builtin_decoders = manifest
+            .event_bindings
+            .iter()
+            .filter_map(builtin_event_decoder);
+        for decoder in builtin_decoders.chain(decoders) {
             let id = decoder.variant_id().to_owned();
             if id.is_empty() || decoder_map.insert(id.clone(), decoder).is_some() {
                 return Err(schema_error(
@@ -318,6 +374,23 @@ impl SchemaSet {
     /// Returns true only for a complete member SchemaRef.
     pub fn contains(&self, schema: &SchemaRef) -> bool {
         self.manifest.schemas.binary_search(schema).is_ok()
+    }
+
+    /// Returns a schema only when this immutable set has exactly one member of the given type.
+    pub fn schema_ref(&self, schema_type: &str) -> Option<&SchemaRef> {
+        self.exact_schema(schema_type)
+    }
+
+    /// Returns the exact immutable event binding selected by type and version.
+    pub fn event_type_binding(
+        &self,
+        event_type: &str,
+        major: u32,
+        minor: u32,
+    ) -> Option<&EventTypeBinding> {
+        self.manifest.event_bindings.iter().find(|binding| {
+            binding.event_type == event_type && binding.major == major && binding.minor == minor
+        })
     }
 
     /// Parses one untrusted top-level record in limits → Schema → Serde → semantic order.

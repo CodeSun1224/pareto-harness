@@ -48,6 +48,7 @@ wire_id!(TenantId, "tenant_", "Tenant isolation identifier.");
 wire_id!(UserId, "user_", "User isolation identifier.");
 wire_id!(WorkspaceId, "workspace_", "Workspace isolation identifier.");
 wire_id!(RunId, "run_", "Run identifier.");
+wire_id!(TaskId, "task_", "Task identifier within one run lifecycle.");
 wire_id!(AgentId, "agent_", "Agent or actor identifier.");
 wire_id!(StreamId, "stream_", "Event stream identifier.");
 wire_id!(EventId, "event_", "Event identifier.");
@@ -721,6 +722,95 @@ pub struct RunManifest {
     pub boundary_recording_policy_ref: BoundaryRecordingPolicyRef,
     /// Execution/replay contract.
     pub execution_mode: ExecutionMode,
+}
+
+/// Authoritative state of a Run lifecycle aggregate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunState {
+    /// Manifest is fixed but execution has not started.
+    Created,
+    /// The run is actively executing.
+    Running,
+    /// The run is explicitly paused.
+    Paused,
+    /// The run completed successfully.
+    Succeeded,
+    /// The run completed with failure.
+    Failed,
+    /// The run was cancelled.
+    Cancelled,
+}
+
+/// Authoritative state of a Task owned by one Run lifecycle.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskState {
+    /// The task exists but is not ready to run.
+    Created,
+    /// The task is ready to be scheduled.
+    Ready,
+    /// The task is actively executing.
+    Running,
+    /// The task is explicitly paused.
+    Paused,
+    /// The task completed successfully.
+    Succeeded,
+    /// The task completed with failure.
+    Failed,
+    /// The task was cancelled.
+    Cancelled,
+}
+
+/// Sequence-one payload that atomically fixes a complete Run Manifest.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunCreatedPayload {
+    /// Complete immutable manifest for the new Run.
+    pub manifest: RunManifest,
+}
+
+/// Payload recording immutable Task ownership within a Run.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskCreatedPayload {
+    /// Task identifier unique within the Run.
+    pub task_id: TaskId,
+    /// Optional earlier-created parent Task in the same lifecycle stream.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub parent_task_id: Option<TaskId>,
+    /// Fixed initial state; lifecycle validation requires `created`.
+    pub initial_state: TaskState,
+}
+
+/// Payload recording one authoritative Run state transition.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunStateTransitionedPayload {
+    /// Folded state before the transition.
+    pub from: RunState,
+    /// Requested state after the transition.
+    pub to: RunState,
+    /// Stable non-empty reason code fixed by the command.
+    pub reason_code: String,
+}
+
+/// Payload recording one authoritative Task state transition.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskStateTransitionedPayload {
+    /// Target Task within the lifecycle aggregate.
+    pub task_id: TaskId,
+    /// Folded state before the transition.
+    pub from: TaskState,
+    /// Requested state after the transition.
+    pub to: TaskState,
+    /// Stable non-empty reason code fixed by the command.
+    pub reason_code: String,
 }
 
 /// Structured evidence verdict; natural language cannot introduce a passing state.

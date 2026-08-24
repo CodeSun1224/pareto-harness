@@ -177,6 +177,7 @@ impl AdmittedRead {
     }
 }
 
+#[derive(Clone)]
 struct SchemaRegistry(Vec<Arc<SchemaSet>>);
 
 impl SchemaRegistry {
@@ -210,6 +211,44 @@ struct Page {
 struct EventStore {
     pool: SqlitePool,
     store_id: String,
+}
+
+struct PreparedEvent {
+    envelope: EventEnvelope,
+    envelope_json: String,
+    envelope_fingerprint: String,
+    schema_set_json: String,
+    schema_set_fingerprint: String,
+    limits_json: String,
+    limits_fingerprint: String,
+    sequence: i64,
+}
+
+impl PreparedEvent {
+    fn new(
+        event: &ValidatedEvent,
+        schema_set: &SchemaSet,
+        limits: &ProtocolLimitsRef,
+    ) -> Result<Self, EventStoreError> {
+        let envelope = event.envelope().clone();
+        let sequence = envelope
+            .sequence
+            .parse::<i64>()
+            .map_err(|_| EventStoreError::new(ErrorKind::SequenceConflict))?;
+        let envelope_json = canonical(&envelope)?;
+        let schema_set_json = canonical(schema_set.reference())?;
+        let limits_json = canonical(limits)?;
+        Ok(Self {
+            envelope,
+            envelope_fingerprint: fingerprint(envelope_json.as_bytes()),
+            schema_set_fingerprint: fingerprint(schema_set_json.as_bytes()),
+            limits_fingerprint: fingerprint(limits_json.as_bytes()),
+            envelope_json,
+            schema_set_json,
+            limits_json,
+            sequence,
+        })
+    }
 }
 
 impl EventStore {
@@ -362,47 +401,15 @@ impl EventStore {
     }
 
     async fn append(&self, admitted: AdmittedAppend) -> Result<AppendResult, EventStoreError> {
-        let envelope = admitted.event.envelope();
-        let sequence = envelope
-            .sequence
-            .parse::<i64>()
-            .map_err(|_| EventStoreError::new(ErrorKind::SequenceConflict))?;
-        let envelope_json = canonical(envelope)?;
-        let schema_json = canonical(admitted.schema_set.reference())?;
-        let limits_json = canonical(&admitted.limits)?;
-        let envelope_fp = fingerprint(envelope_json.as_bytes());
-        let schema_fp = fingerprint(schema_json.as_bytes());
-        let limits_fp = fingerprint(limits_json.as_bytes());
-        let (user_present, user_id) = user_key(&envelope.scope);
+        let prepared = PreparedEvent::new(&admitted.event, &admitted.schema_set, &admitted.limits)?;
         let mut connection = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = async {
-            if let Some(row) = sqlx::query("SELECT envelope_fingerprint,schema_set_fingerprint,limits_fingerprint,sequence_i64 FROM events WHERE event_id=?")
-                .bind(envelope.event_id.as_str()).fetch_optional(&mut *connection).await? {
-                if row.get::<String,_>(0) == envelope_fp && row.get::<String,_>(1) == schema_fp && row.get::<String,_>(2) == limits_fp {
-                    return Ok(AppendResult::AlreadyCommitted { event_id: envelope.event_id.clone(), sequence: row.get(3) });
-                }
-                return Err(EventStoreError::new(ErrorKind::IdempotencyConflict));
+            if let Some(result) = check_prepared_idempotency(&mut connection, &prepared).await? {
+                return Ok(result);
             }
-            let next: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(sequence_i64),0)+1 FROM events WHERE tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND stream_id=?")
-                .bind(envelope.scope.tenant_id.as_str()).bind(user_present).bind(user_id)
-                .bind(envelope.scope.workspace_id.as_str()).bind(envelope.scope.run_id.as_str())
-                .bind(envelope.scope.agent_id.as_str()).bind(envelope.stream_id.as_str())
-                .fetch_one(&mut *connection).await?;
-            if sequence != next { return Err(EventStoreError::new(ErrorKind::SequenceConflict)); }
-            if let Some(cause) = &envelope.causation_id {
-                let found: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_id=? AND tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND stream_id=?")
-                    .bind(cause.as_str()).bind(envelope.scope.tenant_id.as_str()).bind(user_present).bind(user_id)
-                    .bind(envelope.scope.workspace_id.as_str()).bind(envelope.scope.run_id.as_str())
-                    .bind(envelope.scope.agent_id.as_str()).bind(envelope.stream_id.as_str()).fetch_one(&mut *connection).await?;
-                if found != 1 { return Err(EventStoreError::new(ErrorKind::CausationConflict)); }
-            }
-            sqlx::query("INSERT INTO events(event_id,envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,causation_id,correlation_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                .bind(envelope.event_id.as_str()).bind(&envelope_json).bind(&envelope_fp).bind(&schema_json).bind(&schema_fp).bind(&limits_json).bind(&limits_fp)
-                .bind(envelope.scope.tenant_id.as_str()).bind(user_present).bind(user_id).bind(envelope.scope.workspace_id.as_str()).bind(envelope.scope.run_id.as_str())
-                .bind(envelope.scope.agent_id.as_str()).bind(envelope.stream_id.as_str()).bind(sequence).bind(envelope.causation_id.as_ref().map(EventId::as_str)).bind(&envelope.correlation_id)
-                .execute(&mut *connection).await?;
-            Ok(AppendResult::Appended { event_id: envelope.event_id.clone(), sequence })
-        }.await;
+            insert_prepared(&mut connection, &prepared).await
+        }
+        .await;
         match result {
             Ok(value) => {
                 connection.commit().await?;
@@ -466,6 +473,68 @@ impl EventStore {
         let _ = connection.rollback().await;
         result
     }
+}
+
+async fn check_prepared_idempotency(
+    connection: &mut SqliteConnection,
+    prepared: &PreparedEvent,
+) -> Result<Option<AppendResult>, EventStoreError> {
+    let row = sqlx::query("SELECT envelope_fingerprint,schema_set_fingerprint,limits_fingerprint,sequence_i64 FROM events WHERE event_id=?")
+        .bind(prepared.envelope.event_id.as_str())
+        .fetch_optional(&mut *connection)
+        .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    if row.get::<String, _>(0) == prepared.envelope_fingerprint
+        && row.get::<String, _>(1) == prepared.schema_set_fingerprint
+        && row.get::<String, _>(2) == prepared.limits_fingerprint
+    {
+        Ok(Some(AppendResult::AlreadyCommitted {
+            event_id: prepared.envelope.event_id.clone(),
+            sequence: row.get(3),
+        }))
+    } else {
+        Err(EventStoreError::new(ErrorKind::IdempotencyConflict))
+    }
+}
+
+async fn insert_prepared(
+    connection: &mut SqliteConnection,
+    prepared: &PreparedEvent,
+) -> Result<AppendResult, EventStoreError> {
+    let envelope = &prepared.envelope;
+    let (user_present, user_id) = user_key(&envelope.scope);
+    let next: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(sequence_i64),0)+1 FROM events WHERE tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND stream_id=?")
+        .bind(envelope.scope.tenant_id.as_str()).bind(user_present).bind(user_id)
+        .bind(envelope.scope.workspace_id.as_str()).bind(envelope.scope.run_id.as_str())
+        .bind(envelope.scope.agent_id.as_str()).bind(envelope.stream_id.as_str())
+        .fetch_one(&mut *connection).await?;
+    if prepared.sequence != next {
+        return Err(EventStoreError::new(ErrorKind::SequenceConflict));
+    }
+    if let Some(cause) = &envelope.causation_id {
+        let found: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_id=? AND tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND stream_id=?")
+            .bind(cause.as_str()).bind(envelope.scope.tenant_id.as_str()).bind(user_present).bind(user_id)
+            .bind(envelope.scope.workspace_id.as_str()).bind(envelope.scope.run_id.as_str())
+            .bind(envelope.scope.agent_id.as_str()).bind(envelope.stream_id.as_str()).fetch_one(&mut *connection).await?;
+        if found != 1 {
+            return Err(EventStoreError::new(ErrorKind::CausationConflict));
+        }
+    }
+    sqlx::query("INSERT INTO events(event_id,envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,causation_id,correlation_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(envelope.event_id.as_str()).bind(&prepared.envelope_json).bind(&prepared.envelope_fingerprint)
+        .bind(&prepared.schema_set_json).bind(&prepared.schema_set_fingerprint)
+        .bind(&prepared.limits_json).bind(&prepared.limits_fingerprint)
+        .bind(envelope.scope.tenant_id.as_str()).bind(user_present).bind(user_id)
+        .bind(envelope.scope.workspace_id.as_str()).bind(envelope.scope.run_id.as_str())
+        .bind(envelope.scope.agent_id.as_str()).bind(envelope.stream_id.as_str())
+        .bind(prepared.sequence).bind(envelope.causation_id.as_ref().map(EventId::as_str))
+        .bind(&envelope.correlation_id).execute(&mut *connection).await?;
+    Ok(AppendResult::Appended {
+        event_id: envelope.event_id.clone(),
+        sequence: prepared.sequence,
+    })
 }
 
 fn validate_row(
@@ -586,3 +655,5 @@ fn user_key(scope: &IsolationScope) -> (i64, &str) {
 
 #[cfg(test)]
 mod tests;
+
+mod lifecycle;

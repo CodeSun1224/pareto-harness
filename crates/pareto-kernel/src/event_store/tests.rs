@@ -76,6 +76,7 @@ impl Fixture {
             payload_schema_ref: payload_schema.clone(),
             variant_id: "kernel-test-v1".into(),
         });
+        bundle.manifest.event_bindings.sort();
         bundle.schemas.push(SchemaDocument {
             filename: "kernel-test-v1.0.schema.json".into(),
             document,

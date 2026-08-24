@@ -97,6 +97,7 @@ fn external_kernel_can_authorize_evolved_event_schema_set() {
         payload_schema_ref: payload_ref.clone(),
         variant_id: "integration-payload-v1".to_owned(),
     });
+    bundle.manifest.event_bindings.sort();
     bundle.schemas.push(SchemaDocument {
         filename: "integration-payload-v1.0.schema.json".to_owned(),
         document,
@@ -172,7 +173,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 12);
+    assert_eq!(first.len(), 16);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -186,6 +187,136 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
         );
         assert_eq!(schema.document["unevaluatedProperties"], false);
     }
+}
+
+#[test]
+fn lifecycle_manifest_contract() {
+    let bundle = generate_schema_bundle().unwrap();
+    let expected_bindings = [
+        ("run-created", "run-created-payload", "run-created-v1"),
+        (
+            "run-state-transitioned",
+            "run-state-transitioned-payload",
+            "run-state-transitioned-v1",
+        ),
+        ("task-created", "task-created-payload", "task-created-v1"),
+        (
+            "task-state-transitioned",
+            "task-state-transitioned-payload",
+            "task-state-transitioned-v1",
+        ),
+    ];
+    assert_eq!(
+        bundle.manifest.event_bindings.len(),
+        expected_bindings.len()
+    );
+    for (binding, expected) in bundle.manifest.event_bindings.iter().zip(expected_bindings) {
+        assert_eq!(
+            (
+                binding.event_type.as_str(),
+                binding.payload_schema_ref.r#type.as_str(),
+                binding.variant_id.as_str(),
+            ),
+            expected
+        );
+        assert_eq!((binding.major, binding.minor), (1, 0));
+    }
+
+    let member = |name: &str| {
+        bundle
+            .manifest
+            .schemas
+            .iter()
+            .find(|item| item.r#type == name)
+            .unwrap()
+            .clone()
+    };
+    let revisions = [
+        "task",
+        "behavior",
+        "workspace",
+        "environment",
+        "context_graph",
+        "model_snapshot",
+        "tool_set",
+        "kernel",
+    ]
+    .into_iter()
+    .map(|role| {
+        (
+            role.to_owned(),
+            RevisionId::parse(format!("rev_{}", role.replace('_', "-"))).unwrap(),
+        )
+    })
+    .collect();
+    let manifest = RunManifest {
+        schema_ref: member("run-manifest"),
+        scope: scope(),
+        revisions,
+        plan_revision: None,
+        schema_set_ref: bundle.reference.clone(),
+        budget_revision: RevisionId::parse("rev_budget").unwrap(),
+        protocol_limits_ref: ProtocolLimitsRef {
+            profile: "protocol-limits-v1".to_owned(),
+            digest: Digest::parse(ProtocolLimitsV1::DIGEST).unwrap(),
+        },
+        boundary_recording_policy_ref: BoundaryRecordingPolicyRef {
+            revision_id: RevisionId::parse("rev_policy").unwrap(),
+            digest: digest('f'),
+        },
+        execution_mode: ExecutionMode::Live {},
+    };
+    let payload = RunCreatedPayload {
+        manifest: manifest.clone(),
+    };
+    let payload_value = serde_json::to_value(&payload).unwrap();
+    let payload_schema = member("run-created-payload");
+    let event = EventEnvelope {
+        schema_ref: bundle.manifest.event_envelope_schema_ref.clone(),
+        scope: scope(),
+        event_id: EventId::parse("event_run-created").unwrap(),
+        stream_id: StreamId::parse("stream_lifecycle-one").unwrap(),
+        run_id: RunId::parse("run_one").unwrap(),
+        sequence: "1".to_owned(),
+        causation_id: None,
+        correlation_id: "corr-run-create".to_owned(),
+        event_type: "run-created".to_owned(),
+        event_major: 1,
+        event_minor: 0,
+        occurred_at: "2026-08-24T00:00:00.000Z".to_owned(),
+        actor: AgentId::parse("agent_primary").unwrap(),
+        payload_schema_ref: payload_schema.clone(),
+        payload_digest: digest_json("event-payload", &payload_schema, &payload_value).unwrap(),
+        payload: payload_value,
+    };
+    let set =
+        SchemaSet::bootstrap_initial(bundle.manifest, bundle.schemas, &bundle.reference).unwrap();
+    let validated = set
+        .validate_event_at_boundary(
+            event,
+            scope(),
+            AgentId::parse("agent_primary").unwrap(),
+            StreamId::parse("stream_lifecycle-one").unwrap(),
+            manifest.protocol_limits_ref.clone(),
+        )
+        .unwrap();
+    assert_eq!(validated.variant_id(), "run-created-v1");
+    assert_eq!(
+        validated.downcast_payload::<RunCreatedPayload>().unwrap(),
+        &payload
+    );
+
+    assert!(TaskId::parse("task_root").is_ok());
+    assert!(TaskId::parse("run_root").is_err());
+    assert!(serde_json::from_value::<RunState>(json!("created")).is_ok());
+    assert!(serde_json::from_value::<RunState>(json!("ready")).is_err());
+    assert!(serde_json::from_value::<TaskState>(json!("ready")).is_ok());
+    assert!(
+        serde_json::from_value::<TaskCreatedPayload>(json!({
+            "task_id":"task_root", "initial_state":"created", "extra":true
+        }))
+        .is_err()
+    );
 }
 
 #[test]

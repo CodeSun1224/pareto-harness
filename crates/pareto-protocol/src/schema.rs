@@ -4,9 +4,11 @@ use serde_json::Value;
 
 use crate::{
     ArtifactManifest, BoundaryInventoryHashView, BoundaryInventoryRevision,
-    BoundaryReconciliationHashView, BoundaryReconciliationRevision, EventEnvelope, EvidenceRecord,
-    ProtocolLimitsProfileV1, RevisionHashView, RevisionMetadata, RunManifest, SchemaRef,
-    SchemaSetManifest, SchemaSetRef, ValidationError, digest_json, digest_schema,
+    BoundaryReconciliationHashView, BoundaryReconciliationRevision, EventEnvelope,
+    EventTypeBinding, EvidenceRecord, ProtocolLimitsProfileV1, RevisionHashView, RevisionMetadata,
+    RunCreatedPayload, RunManifest, RunStateTransitionedPayload, SchemaRef, SchemaSetManifest,
+    SchemaSetRef, TaskCreatedPayload, TaskStateTransitionedPayload, ValidationError, digest_json,
+    digest_schema,
 };
 
 /// A generated public JSON Schema and its stable filename.
@@ -42,8 +44,12 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<ProtocolLimitsProfileV1>("protocol-limits-profile", 1, 0)?,
         generate::<RevisionHashView>("revision-hash-view", 1, 0)?,
         generate::<RevisionMetadata>("revision-metadata", 1, 0)?,
+        generate::<RunCreatedPayload>("run-created-payload", 1, 0)?,
         generate::<RunManifest>("run-manifest", 1, 0)?,
+        generate::<RunStateTransitionedPayload>("run-state-transitioned-payload", 1, 0)?,
         generate::<SchemaSetManifest>("schema-set-manifest", 1, 0)?,
+        generate::<TaskCreatedPayload>("task-created-payload", 1, 0)?,
+        generate::<TaskStateTransitionedPayload>("task-state-transitioned-payload", 1, 0)?,
     ];
     schemas.sort_by(|left, right| left.filename.cmp(&right.filename));
     Ok(schemas)
@@ -71,10 +77,48 @@ pub fn generate_schema_bundle() -> Result<GeneratedSchemaBundle, ValidationError
         .find(|schema| schema.r#type == "event-envelope")
         .cloned()
         .expect("event envelope schema is generated");
+    let payload = |name: &str| {
+        members
+            .iter()
+            .find(|schema| schema.r#type == name)
+            .cloned()
+            .expect("lifecycle payload schema is generated")
+    };
+    let mut event_bindings = vec![
+        EventTypeBinding {
+            event_type: "run-created".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("run-created-payload"),
+            variant_id: "run-created-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "run-state-transitioned".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("run-state-transitioned-payload"),
+            variant_id: "run-state-transitioned-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "task-created".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("task-created-payload"),
+            variant_id: "task-created-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "task-state-transitioned".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("task-state-transitioned-payload"),
+            variant_id: "task-state-transitioned-v1".to_owned(),
+        },
+    ];
+    event_bindings.sort();
     let manifest = SchemaSetManifest {
         schemas: members,
         event_envelope_schema_ref,
-        event_bindings: Vec::new(),
+        event_bindings,
     };
     let manifest_schema_ref = manifest
         .schemas
@@ -356,6 +400,7 @@ fn id_prefix(definition: &str) -> Option<&'static str> {
         "UserId" => Some("user_"),
         "WorkspaceId" => Some("workspace_"),
         "RunId" => Some("run_"),
+        "TaskId" => Some("task_"),
         "AgentId" => Some("agent_"),
         "StreamId" => Some("stream_"),
         "EventId" => Some("event_"),
