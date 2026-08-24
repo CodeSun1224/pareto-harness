@@ -578,7 +578,7 @@ async fn load_established(
                 .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?,
         );
     }
-    let state = fold_lifecycle(&events)?;
+    let state = fold_lifecycle(&schema_set, &events)?;
     Ok(EstablishedAggregate {
         state,
         schema_set,
@@ -600,7 +600,10 @@ async fn aggregate_event_count(
         .fetch_one(&mut *connection).await?)
 }
 
-fn fold_lifecycle(events: &[ValidatedEvent]) -> Result<LifecycleState, LifecycleError> {
+fn fold_lifecycle(
+    schema_set: &SchemaSet,
+    events: &[ValidatedEvent],
+) -> Result<LifecycleState, LifecycleError> {
     let first = events
         .first()
         .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateNotFound))?;
@@ -608,6 +611,9 @@ fn fold_lifecycle(events: &[ValidatedEvent]) -> Result<LifecycleState, Lifecycle
         .downcast_payload::<RunCreatedPayload>()
         .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
     let first_envelope = first.envelope();
+    schema_set
+        .validate_run_manifest(created.manifest.clone(), &first_envelope.scope)
+        .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
     let expected_stream = lifecycle_stream_id(&created.manifest.scope)
         .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
     if first_envelope.event_type != "run-created"
@@ -615,6 +621,7 @@ fn fold_lifecycle(events: &[ValidatedEvent]) -> Result<LifecycleState, Lifecycle
         || first_envelope.event_minor != 0
         || first_envelope.sequence != "1"
         || first.variant_id() != "run-created-v1"
+        || first.schema_set_ref() != schema_set.reference()
         || created.manifest.scope != first_envelope.scope
         || created.manifest.schema_set_ref != *first.schema_set_ref()
         || created.manifest.protocol_limits_ref != *first.protocol_limits_ref()

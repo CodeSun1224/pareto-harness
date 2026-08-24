@@ -5,7 +5,7 @@
 - Requirement: REQ-0005 (`reviewing`)
 - Spec: SPEC-0004 (`approved`)
 - RFC/ADR: RFC-0004 / ADR-0005 (`accepted`)
-- Git revision or diff: initial exact implementation `d0011d064b88cf4be8e6b70ae781f3637bb15161`; REVIEW-0004 remediation currently in working tree and must be committed to a new exact revision before re-review
+- Git revision or diff: initial exact implementation `d0011d064b88cf4be8e6b70ae781f3637bb15161`; first remediation/re-reviewed exact revision `38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79`; F-003 second remediation currently in working tree pending a new exact revision
 - Environment: Windows PowerShell, 2026-08-24, Asia/Shanghai
 
 ## Results
@@ -36,6 +36,8 @@
 | REVIEW-0004 F-004 Event Store evidence | `cargo test -p pareto-kernel event_store --offline` | passed | 33 passed | REQ-0004 fixture now evolves from actual checked-in old set `sha256-68535b...`; persisted old-writer event reopens with exact registry, current alternate reader is rejected, and `PRAGMA user_version` remains 1. Lifecycle compatibility additionally injects an internally consistent unknown major row and proves exact load fails closed. |
 | Remediation static check (first run) | workspace clippy `-D warnings` | failed, corrected | unused test-only imports | Moved `canonical`/`fingerprint` imports into the included test scope; no product suppression added. |
 | Remediation static check (rerun) | `cargo clippy --workspace --all-targets --all-features --offline -- -D warnings` | passed | 0 warnings | No dependency, DDL, public raw SQL/transaction, or scope expansion added. |
+| Independent REVIEW-0004 focused re-review of `38f0beb` | Reviewer inspected exact `d0011d0..38f0beb` and independently reran priority/sequence/fold/old-reader/compatibility, Event Store 33, workspace 33+9+19, doctest, governance, fmt, clippy, schema and diff gates | changes requested | REVIEW-0004: 0 Blocker / 1 Major | F-001/F-002/F-004 closed; F-003 remains open because standalone fold did not execute full RunManifest semantic admission. F-005 remains accepted Minor. |
+| REVIEW-0004 F-003 semantic remediation | `cargo test -p pareto-kernel lifecycle::fold_identity --offline`; `cargo test -p pareto-kernel lifecycle::fold_contract --offline`; `cargo test -p pareto-kernel lifecycle::model_sequences --offline`; workspace clippy `-D warnings` | passed | 1 + 1 + 1 tests; clippy 0 warnings | Fold now receives the exact SchemaSet and calls `validate_run_manifest` before folding. Negative events deliberately pass Event JSON admission but are rejected by fold for wrong Manifest schema_ref, self-referential recorded replay, and invalid derived simulation lineage; mixed aggregate identity tests remain. Independent re-review still required. |
 
 ## Pending final reruns
 

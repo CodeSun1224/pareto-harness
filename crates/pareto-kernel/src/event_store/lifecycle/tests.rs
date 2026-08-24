@@ -1316,8 +1316,8 @@ fn base_fold_events(fixture: &Fixture) -> Vec<ValidatedEvent> {
 fn fold_contract() {
     let fixture = Fixture::new("run_fold-contract");
     let events = base_fold_events(&fixture);
-    let first = fold_lifecycle(&events).unwrap();
-    let second = fold_lifecycle(&events).unwrap();
+    let first = fold_lifecycle(&fixture.set, &events).unwrap();
+    let second = fold_lifecycle(&fixture.set, &events).unwrap();
     assert_eq!(first, second);
     assert_eq!(
         fingerprint(canonical(&first).unwrap().as_bytes()),
@@ -1349,7 +1349,7 @@ fn fold_contract() {
     let mut corrupt = events;
     corrupt.push(gap);
     assert_eq!(
-        fold_lifecycle(&corrupt).unwrap_err().kind,
+        fold_lifecycle(&fixture.set, &corrupt).unwrap_err().kind,
         LifecycleErrorKind::AggregateCorrupt
     );
 }
@@ -1416,7 +1416,9 @@ fn fold_identity() {
             &format!("event_fold-mixed-scope-{index}"),
         );
         assert_eq!(
-            fold_lifecycle(&[first, second]).unwrap_err().kind,
+            fold_lifecycle(&fixture.set, &[first, second])
+                .unwrap_err()
+                .kind,
             LifecycleErrorKind::AggregateCorrupt
         );
         first = base_fold_events(&fixture).remove(0);
@@ -1432,7 +1434,9 @@ fn fold_identity() {
         "event_fold-mixed-actor",
     );
     assert_eq!(
-        fold_lifecycle(&[first, actor_mixed]).unwrap_err().kind,
+        fold_lifecycle(&fixture.set, &[first, actor_mixed])
+            .unwrap_err()
+            .kind,
         LifecycleErrorKind::AggregateCorrupt
     );
 
@@ -1446,7 +1450,9 @@ fn fold_identity() {
         "event_fold-mixed-stream",
     );
     assert_eq!(
-        fold_lifecycle(&[first, stream_mixed]).unwrap_err().kind,
+        fold_lifecycle(&fixture.set, &[first, stream_mixed])
+            .unwrap_err()
+            .kind,
         LifecycleErrorKind::AggregateCorrupt
     );
 
@@ -1469,9 +1475,50 @@ fn fold_identity() {
     )
     .unwrap();
     assert_eq!(
-        fold_lifecycle(&[mismatched_first]).unwrap_err().kind,
+        fold_lifecycle(&fixture.set, &[mismatched_first])
+            .unwrap_err()
+            .kind,
         LifecycleErrorKind::AggregateCorrupt
     );
+
+    let mut wrong_schema = fixture.manifest.clone();
+    wrong_schema.schema_ref = fixture.set.schema_ref("evidence-record").unwrap().clone();
+    let mut self_replay = fixture.manifest.clone();
+    self_replay.execution_mode = ExecutionMode::RecordedReplay {
+        source_run_id: fixture.scope.run_id.clone(),
+        boundary_inventory_revision: RevisionId::parse("rev_inventory").unwrap(),
+    };
+    let mut invalid_derived = fixture.manifest.clone();
+    invalid_derived.execution_mode = ExecutionMode::Simulated {
+        fixture_revisions: vec![RevisionId::parse("rev_fixture").unwrap()],
+        simulation_origin: pareto_protocol::SimulationOrigin::Derived,
+        source_run_id: None,
+    };
+    for (index, manifest) in [wrong_schema, self_replay, invalid_derived]
+        .into_iter()
+        .enumerate()
+    {
+        let admitted_event = lifecycle_event(
+            &fixture.set,
+            &fixture.limits,
+            &fixture.scope,
+            &fixture.scope.agent_id,
+            &stream,
+            &EventId::parse(format!("event_fold-invalid-manifest-{index}")).unwrap(),
+            1,
+            "2026-08-24T01:01:00.000Z",
+            &format!("corr-fold-invalid-manifest-{index}"),
+            "run-created",
+            &RunCreatedPayload { manifest },
+        )
+        .expect("event JSON admission intentionally precedes Manifest semantics");
+        assert_eq!(
+            fold_lifecycle(&fixture.set, &[admitted_event])
+                .unwrap_err()
+                .kind,
+            LifecycleErrorKind::AggregateCorrupt
+        );
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1590,7 +1637,7 @@ fn model_sequences() {
                         }
                     };
                     events.push(event);
-                    let folded = fold_lifecycle(&events);
+                    let folded = fold_lifecycle(&fixture.set, &events);
                     assert_eq!(folded.is_ok(), valid, "model divergence for {left:?}/{middle:?}/{right:?} at {index}");
                     if !valid {
                         break;

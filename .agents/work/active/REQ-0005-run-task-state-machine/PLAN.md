@@ -12,7 +12,7 @@ links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005]
 
 # Current state
 
-REQ-0003 与 REQ-0004 均为 done，且没有其他 Runtime Requirement implementing。RFC-0004/ADR-0005 已接受，SPEC-0004 approved。REQ-0005 当前为 `reviewing`：exact implementation revision `d0011d064b88cf4be8e6b70ae781f3637bb15161` 已完成实现和首轮分层测试；独立 REVIEW-0004 对该 revision 提出 4 个 Major。实现者已补入冲突优先级、序号边界、aggregate-bound fold 与真实旧 reader/unknown-major 证据，正等待新 exact remediation revision 的独立复审。独立批准前不得进入 verified/done。
+REQ-0003 与 REQ-0004 均为 done，且没有其他 Runtime Requirement implementing。RFC-0004/ADR-0005 已接受，SPEC-0004 approved。REQ-0005 当前为 `reviewing`：首轮 exact implementation `d0011d0` 的 4 个 Major 经 `38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79` remediation 后，独立 focused re-review 已关闭 F-001、F-002、F-004，保留 F-003 这 1 个 Major。实现者正在补全 standalone fold 与 loader 相同的 exact SchemaSet RunManifest semantic admission 及负测。独立复审关闭 F-003 前不得进入 verified/done。
 
 # Plan
 

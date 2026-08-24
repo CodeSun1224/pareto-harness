@@ -1,6 +1,6 @@
 # REQ-0005 Handoff
 
-当前阶段：reviewing，TASK-REQ-0005-01 至 05 已完成。独立 REVIEW-0004 对 exact revision `d0011d064b88cf4be8e6b70ae781f3637bb15161` 给出 `changes-requested`（0 Blocker / 4 open Major / 1 accepted Minor）。实现者已完成 F-001 冲突优先级、F-002 checked sequence/边界分类、F-003 aggregate-bound fold、F-004 真实旧set exact reader/旧Event fixture/unknown-major 证据的 remediation；当前 focused lifecycle 18/18、受影响 Event Store 33/33、协议旧reader定向测试和 workspace clippy 均通过。下一步固定新 exact revision并由同一独立 reviewer re-review；实现者不得自行关闭 finding。
+当前阶段：reviewing，TASK-REQ-0005-01 至 05 已完成。独立 REVIEW-0004 已对 exact `38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79` focused re-review：F-001/F-002/F-004 closed，F-003 保持 open Major，计数 0 Blocker / 1 Major。第二次 remediation 让 pure fold 显式接收 exact SchemaSet 并执行与 loader 相同的 `validate_run_manifest`，新增 wrong Manifest schema_ref、self-referential replay 和 invalid derived-lineage 负测；定向 fold/model 与 workspace clippy 已通过。下一步固定新 exact revision并交同一 reviewer 复审；实现者不得自行关闭 F-003。
 
 已冻结设计：完整Manifest作为derived lifecycle stream的sequence-1 `RunCreated` payload；状态只由单流事件pure fold；先由persisted exact reader建立owner-only authority，再在同一 `BEGIN IMMEDIATE` 内revalidate binding → validate/fold aggregate → idempotency → expected sequence/state/guards → one append；不得在authority/fold前查询全局event ID或让retry掩盖损坏历史。terminal不可逆且无隐式Task cascade。新SchemaSet必须保留旧set；SQLite `user_version`保持1。
 
