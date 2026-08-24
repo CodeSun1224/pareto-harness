@@ -1,6 +1,6 @@
 # REQ-0005 Handoff
 
-当前阶段：reviewing，TASK-REQ-0005-01 至 05 已完成。独立 REVIEW-0004 已对 exact `38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79` focused re-review：F-001/F-002/F-004 closed，F-003 保持 open Major，计数 0 Blocker / 1 Major。第二次 remediation 让 pure fold 显式接收 exact SchemaSet 并执行与 loader 相同的 `validate_run_manifest`，新增 wrong Manifest schema_ref、self-referential replay 和 invalid derived-lineage 负测；定向 fold/model 与 workspace clippy 已通过。下一步固定新 exact revision并交同一 reviewer 复审；实现者不得自行关闭 F-003。
+当前阶段：done。独立 REVIEW-0004 已批准 exact `675e3f8fe6888c1d01fec14dda8e0f9164bb8a1b`，F-001/F-002/F-003/F-004 全部由 reviewer closed，最终 0 Blocker / 0 Major；F-005 accepted Minor 的陈旧 revision 表述已在本 handoff 同步。实现、remediation、全仓回归、独立复审、durable docs 同步与工作归档均完成，REQ-0006 未开始。
 
 已冻结设计：完整Manifest作为derived lifecycle stream的sequence-1 `RunCreated` payload；状态只由单流事件pure fold；先由persisted exact reader建立owner-only authority，再在同一 `BEGIN IMMEDIATE` 内revalidate binding → validate/fold aggregate → idempotency → expected sequence/state/guards → one append；不得在authority/fold前查询全局event ID或让retry掩盖损坏历史。terminal不可逆且无隐式Task cascade。新SchemaSet必须保留旧set；SQLite `user_version`保持1。
 

@@ -1,6 +1,6 @@
 # 文档导航
 
-本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-20。
+本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-24。
 
 ## 产品
 
@@ -13,6 +13,8 @@
 - [SPEC-0002：版本化协议类型和 JSON Schema 规范](specs/SPEC-0002-versioned-protocol-types-json-schema.md)
 - [REQ-0004：SQLite append-only Event Store](requirements/REQ-0004-sqlite-append-only-event-store.md)
 - [SPEC-0003：SQLite append-only Event Store 规范](specs/SPEC-0003-sqlite-append-only-event-store.md)
+- [REQ-0005：Run/Task 状态机与 Run Manifest](requirements/REQ-0005-run-task-state-machine-run-manifest.md)
+- [SPEC-0004：Run/Task 状态机与 Run Manifest 规范](specs/SPEC-0004-run-task-state-machine-run-manifest.md)
 
 ## 研究
 
@@ -32,13 +34,17 @@
 - [ADR-0003：闭合版本化 JSON 协议与可信上下文验证](adrs/ADR-0003-versioned-json-protocol-contract.md)
 - [RFC-0003：SQLite Event Store 事务、幂等与读取合同](rfcs/RFC-0003-sqlite-event-store-contract.md)
 - [ADR-0004：Kernel 私有 SQLite append-only Event Store 合同](adrs/ADR-0004-sqlite-event-store-transaction-contract.md)
+- [RFC-0004：事件溯源 Run/Task 生命周期](rfcs/RFC-0004-event-sourced-run-task-lifecycle.md)
+- [ADR-0005：采用事件溯源 Run/Task 生命周期](adrs/ADR-0005-event-sourced-run-task-lifecycle.md)
 
 ## 交付
 
 - [评测协议](benchmarks/protocol.md)
 - [Evidence-gated 路线图](roadmap/roadmap.md)
 - [Requirement Backlog](roadmap/requirement-backlog.md)
-- [Epic 目录](epics/EPIC-0001-engineering-foundation.md)
+- [工程基础 Epic](epics/EPIC-0001-engineering-foundation.md)
+- [可信内核 Epic](epics/EPIC-0002-trusted-kernel.md)
+- [REQ-0005 独立评审](reviews/REVIEW-0004-run-task-state-machine-run-manifest.md)
 
 ## 记录类型
 

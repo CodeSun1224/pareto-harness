@@ -5,7 +5,7 @@ status: accepted
 owners: [maintainers]
 created: 2026-08-20
 updated: 2026-08-24
-links: [RFC-0001, RFC-0002, RFC-0003, ADR-0001, ADR-0003, ADR-0004, REQ-0003, REQ-0004, SPEC-0002, SPEC-0003]
+links: [RFC-0001, RFC-0002, RFC-0003, RFC-0004, ADR-0001, ADR-0003, ADR-0004, ADR-0005, REQ-0003, REQ-0004, REQ-0005, SPEC-0002, SPEC-0003, SPEC-0004, REVIEW-0004]
 ---
 
 # 版本、事件与证据模型
@@ -58,11 +58,11 @@ ModelSnapshot          ToolSetRevision
 - `hypothesis`, `target_metrics`, `quality_floor`
 - `evaluation_suite_revision`, `budget`, `risk`, `rollback_condition`
 
-字段名是设计契约；序列化、SchemaSet、规范化/digest、可信验证上下文、兼容与 Replay lineage 已由 RFC-0002/ADR-0003 冻结。公开数据携带完整 SchemaRef 和 IsolationScope，不直接暴露 Rust 内部布局。REQ-0004 已实现 Kernel 私有 SQLite append-only Event Store：固定完整隔离键、exact SchemaSet/limits、连续 Stream sequence、幂等事务、显式 append ordinal horizon 与读取重验证；状态机、Projection 与 Replay executor 仍由后续 Requirement 交付。
+字段名是设计契约；序列化、SchemaSet、规范化/digest、可信验证上下文、兼容与 Replay lineage 已由 RFC-0002/ADR-0003 冻结。公开数据携带完整 SchemaRef 和 IsolationScope，不直接暴露 Rust 内部布局。REQ-0004 已实现 Kernel 私有 SQLite append-only Event Store；REQ-0005 已实现 derived lifecycle stream 的 sequence-1 完整 Manifest、Run/Task 闭合状态机、owner-only authority、exact reader、pure fold 与同一 `BEGIN IMMEDIATE` 内的幂等/版本/guard/单事件追加。Projection、Snapshot 与 Replay executor 仍由 REQ-0006 交付，且只能复用相同 exact SchemaSet/Manifest admission 与 fold 合同。
 
 ## 事件族
 
-- 生命周期：Run/Task/Node started, paused, resumed, completed, failed, cancelled。
+- 生命周期：已实现 `run-created`、`task-created`、`run-state-transitioned`、`task-state-transitioned` 1.0；Run/Task 状态集合与合法边由 RFC-0004/ADR-0005 冻结。Node lifecycle 留待后续 Requirement。
 - 决策：Plan proposed, context projected, model routed, retry selected。
 - 效果：Capability requested/granted/denied，Effect intended/received/failed。
 - 证据：Evidence requested/recorded/verified/invalidated。

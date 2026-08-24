@@ -1,15 +1,15 @@
 ---
 id: REVIEW-0004
 title: REQ-0005 Run/Task 状态机与 Run Manifest 独立代码评审
-status: changes-requested
+status: approved
 owners: [independent-reviewer]
 created: 2026-08-24
 updated: 2026-08-24
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: 38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79
+reviewed_revision: 675e3f8fe6888c1d01fec14dda8e0f9164bb8a1b
 open_blockers: 0
-open_majors: 1
+open_majors: 0
 ---
 
 # Findings
@@ -18,15 +18,15 @@ open_majors: 1
 |---|---|---|---|---|---|
 | F-001 | Major | `crates/pareto-kernel/src/event_store/lifecycle.rs:355-368`; `crates/pareto-kernel/src/event_store/lifecycle/tests.rs:733-788` | 初审发现 `transition_task` 在 aggregate sequence 前查询 Task。`38f0beb` 先判 sequence，再解析 Task并判 expected state；真实 SQLite test 同时覆盖 stale+existing、stale+missing 和 current+missing，拒绝后event count保持2。 | 独立复跑 `cargo test -p pareto-kernel lifecycle::conflict_priority --offline`：1 passed；源码顺序与SPEC固定优先级一致。 | closed |
 | F-002 | Major | `crates/pareto-kernel/src/event_store/lifecycle.rs:225-230,273-278,325-330,397-419`; `crates/pareto-kernel/src/event_store/lifecycle/tests.rs:790-858` | 初审的unchecked `expected_sequence + 1` 已替换为同事务 `command_sequence`：checked add只接受可形成established event的sequence；非法数值在authority/fold之后按全局ID存在性保持idempotency-conflict优先，否则返回optimistic conflict。新增矩阵覆盖三种命令的MAX/-1/0、正常exact retry、ID collision和无append。 | 独立复跑 `cargo test -p pareto-kernel lifecycle::sequence_boundaries --offline`：1 passed；workspace debug测试无panic，代码不存在release wrap。 | closed |
-| F-003 | Major | `crates/pareto-kernel/src/event_store/lifecycle.rs:603-648`; `crates/pareto-protocol/src/validation.rs:109-150,645-650`; `crates/pareto-kernel/src/event_store/lifecycle/tests.rs:1385-1476` | `38f0beb` 为opaque `ValidatedEvent`保留trusted SchemaSet/limits admission identity，并让fold拒绝mixed scope/run/actor/stream/reader及Manifest scope/envelope mismatch；这关闭了初审的大部分cross-aggregate问题。但 fold仍直接接受bare `ValidatedEvent` slice，且只比较nested Manifest的scope/SchemaSet/limits，不执行`SchemaSet::validate_run_manifest`等价语义。`RunCreatedPayload` event admission只验证payload JSON Schema；因此错误的`manifest.schema_ref`或self-referential replay/execution lineage可成为合法`ValidatedEvent`并被pure fold接受，虽然`load_established`会在lines 554-556另行拒绝。REQ-0006仍必须复制bootstrap Manifest admission，尚不能把该函数作为独立correctness oracle。 | 让fold消费只能在exact retained SchemaSet上通过`validate_run_manifest`后构造的opaque aggregate range，或向fold提供exact SchemaSet并重验完整Manifest语义；新增wrong Manifest schema_ref、execution-mode self-reference/derived-lineage及现有mixed identity负测，证明load和standalone fold使用同一admission且无需REQ-0006重释。 | open |
+| F-003 | Major | `crates/pareto-kernel/src/event_store/lifecycle.rs:581,603-655`; `crates/pareto-protocol/src/validation.rs:658-722`; `crates/pareto-kernel/src/event_store/lifecycle/tests.rs:1385-1521` | `675e3f8` 让crate-private `fold_lifecycle`显式接收persisted identity解析出的exact `SchemaSet`，在构造任何`LifecycleState`前对首事件nested Manifest执行`validate_run_manifest`，再校验该set与opaque `ValidatedEvent` admission identity一致。loader与standalone fold因此复用同一完整Manifest semantic admission；scope/run/actor/stream/reader binding、determinism和model oracle保持不变。新增wrong Manifest schema_ref、self-referential `RecordedReplay`、缺source的Derived simulation三种负测，均先成功通过Event JSON admission，再由fold返回`AggregateCorrupt`。 | 独立逐行检查exact diff `38f0beb..675e3f8`；复跑`cargo test -p pareto-kernel lifecycle:: --offline`为18 passed，workspace为Kernel 33、Protocol unit 9、contract 19 passed，doctest/clippy/fmt/governance及diff/schema/dependency检查均passed。未改变事务边界、public API、wire/Schema、DDL、reader identity表示或依赖。 | closed |
 | F-004 | Major | `crates/pareto-protocol/tests/protocol_contract.rs:440-543`; `crates/pareto-kernel/src/event_store/tests.rs:42-132,883-945`; `crates/pareto-kernel/src/event_store/lifecycle/tests.rs:1173-1284` | `38f0beb` 现在从两个真实checked-in旧目录加载manifest/documents并用各自exact reader验证旧Manifest、拒绝current reader；REQ-0004 Event fixture从历史`sha256-68535b...` set演化，持久事件重开后exact reader成功、current/错误reader失败且`user_version=1`；lifecycle测试还注入unknown major并确认load fail closed。 | 独立复跑旧Manifest定向测试1 passed、`lifecycle::compatibility` 1 passed、`cargo test -p pareto-kernel event_store --offline` 33 passed；retained路径、digest、reader方向和DB版本均由assertion而非日志声明证明。 | closed |
 | F-005 | Minor | `.agents/work/active/REQ-0005-run-task-state-machine/VALIDATION.md:3-9,44-70`; `.agents/work/active/REQ-0005-run-task-state-machine/PLAN.md:12-14`; `HANDOFF.md`; `TASKS.md` | 旧的design-only/Runtime未开始/全部skipped矛盾已删除，四份work记录一致承认reviewing与首轮open findings。残余陈旧点是exact `38f0beb` 已提交后，VALIDATION/PLAN/TASKS/HANDOFF仍称remediation在working tree、等待“新exact revision”；这是非产品Minor，不能冒充最终handoff新鲜度。 | 最终handoff前把remediation subject和四份记录固定到`38f0beb...`或后续closure revision；保持accepted Minor，不影响本轮Major计数。 | accepted |
 
 # Verdict
 
-Changes requested。focused independent re-review 的精确 remediation revision `38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79` 有 0 个 open Blocker、1 个 open Major，尚不能通过 REQ-0005 independent code-review gate。F-001、F-002和F-004已由源码、真实SQLite/retained fixture及reviewer独立执行关闭；F-003只关闭mixed aggregate identity部分，standalone pure fold仍未携带完整Manifest semantic admission，REQ-0006仍需复制bootstrap规则。
+Approved。第二次focused independent re-review的精确 remediation revision `675e3f8fe6888c1d01fec14dda8e0f9164bb8a1b` 有0个open Blocker、0个open Major，通过REQ-0005 independent code-review gate。F-003 required proof完整：standalone fold显式接收exact SchemaSet并在任何状态fold前执行与loader相同的完整Manifest semantic admission；JSON-admitted但Manifest语义非法的三类首事件均fail closed，原mixed identity、determinism、model、load及全仓回归不退化。F-005仍是accepted Minor，留待最终handoff freshness更新，不阻断批准。
 
-首轮评审按用户指定基线检查了 `5ef949dd084b1e6ae82015f4c66adb8281aebf65..d0011d064b88cf4be8e6b70ae781f3637bb15161` 全 diff；本轮逐行检查exact remediation diff `d0011d064b88cf4be8e6b70ae781f3637bb15161..38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79`并独立复跑required proof。`38f0beb` 的direct parent与re-review baseline均为exact `d0011d0`。
+首轮评审按用户指定基线检查了`5ef949dd084b1e6ae82015f4c66adb8281aebf65..d0011d064b88cf4be8e6b70ae781f3637bb15161`全diff；第一次focused re-review检查`d0011d0..38f0beb`；本轮逐行检查exact remediation diff `38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79..675e3f8fe6888c1d01fec14dda8e0f9164bb8a1b`并独立复跑required proof。`675e3f8`的direct parent与本轮baseline均为exact `38f0beb`。
 
 # Acceptance trace
 
@@ -95,3 +95,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 
 - 2026-08-24：fresh independent review of exact `d0011d064b88cf4be8e6b70ae781f3637bb15161` against requested baseline `5ef949dd084b1e6ae82015f4c66adb8281aebf65`；0 Blocker、4 Major、1 Minor，结论 changes requested。后续必须在新exact revision上检查remediation diff与原始测试证据；实现者不能自行关闭F-001至F-004。
 - 2026-08-24：focused independent re-review of exact `38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79` and diff `d0011d0..38f0beb`；F-001/F-002/F-004 closed，F-003 partial remediation后保持open，F-005 residual stale exact-revision wording保持accepted Minor。最终0 Blocker、1 Major，仍为changes requested。
+- 2026-08-24：second focused independent re-review of exact `675e3f8fe6888c1d01fec14dda8e0f9164bb8a1b` and diff `38f0beb..675e3f8`；F-003 required proof完整并closed，F-005保持accepted Minor。最终0 Blocker、0 Major，结论approved；REQ-0006可直接复用带exact SchemaSet完整Manifest admission的pure fold，无需重释历史准入合同。

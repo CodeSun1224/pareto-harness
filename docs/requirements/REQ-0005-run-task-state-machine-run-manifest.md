@@ -1,13 +1,13 @@
 ---
 id: REQ-0005
 title: Run/Task 状态机与 Run Manifest
-status: reviewing
+status: done
 owners: [maintainers]
 created: 2026-08-24
 updated: 2026-08-24
-links: [EPIC-0002, REQ-0003, REQ-0004, SPEC-0004, RFC-0004, ADR-0001, ADR-0003, ADR-0004, ADR-0005]
+links: [EPIC-0002, REQ-0003, REQ-0004, SPEC-0004, RFC-0004, ADR-0001, ADR-0003, ADR-0004, ADR-0005, REVIEW-0004]
 risk: high
-work: .agents/work/active/REQ-0005-run-task-state-machine
+work: .agents/work/archived/REQ-0005-run-task-state-machine
 ---
 
 # Context and user

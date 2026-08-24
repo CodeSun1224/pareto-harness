@@ -5,7 +5,7 @@ status: active
 owners: [maintainers]
 created: 2026-08-22
 updated: 2026-08-24
-links: [PRD-0001, RFC-0001, RFC-0002, RFC-0003, ADR-0001, ADR-0003, ADR-0004, BACKLOG-0001, REQ-0003, REQ-0004, SPEC-0002, SPEC-0003]
+links: [PRD-0001, RFC-0001, RFC-0002, RFC-0003, RFC-0004, ADR-0001, ADR-0003, ADR-0004, ADR-0005, BACKLOG-0001, REQ-0003, REQ-0004, REQ-0005, SPEC-0002, SPEC-0003, SPEC-0004, REVIEW-0004]
 ---
 
 # Outcome
@@ -16,7 +16,7 @@ links: [PRD-0001, RFC-0001, RFC-0002, RFC-0003, ADR-0001, ADR-0003, ADR-0004, BA
 
 REQ-0003 至 REQ-0009：协议与 Revision、Event Store、状态机与 Run Manifest、Snapshot/Replay、Capability/Budget、Hook 骨架、Effect Intent/Receipt。详细顺序见 Requirement Backlog。
 
-已交付 REQ-0003 协议基础与 REQ-0004 SQLite append-only Event Store；REQ-0005 起的状态机、Projection/Replay 和权限能力仍未实现。
+已交付 REQ-0003 协议基础、REQ-0004 SQLite append-only Event Store 与 REQ-0005 Run/Task 状态机及完整 Run Manifest。REQ-0006 Projection/Snapshot/Replay、REQ-0007 权限能力及后续切片仍未实现。
 
 # Exit criteria
 
