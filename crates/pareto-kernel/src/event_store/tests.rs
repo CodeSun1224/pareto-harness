@@ -1,8 +1,8 @@
 use super::*;
 use pareto_protocol::{
-    AgentId, Digest, EventTypeBinding, EventVariantDecoder, ProtocolLimitsV1,
-    SchemaAdmissionAuthorizer, SchemaDocument, SchemaRef, SchemaSetRef, ValidationError,
-    digest_json, digest_schema, generate_schema_bundle,
+    AgentId, Digest, EventTypeBinding, EventVariantDecoder, GeneratedSchemaBundle,
+    ProtocolLimitsV1, SchemaAdmissionAuthorizer, SchemaDocument, SchemaRef, SchemaSetRef,
+    ValidationError, digest_json, digest_schema, generate_schema_bundle,
 };
 use serde_json::json;
 use sqlx::Executor;
@@ -40,6 +40,44 @@ impl EventVariantDecoder for Decoder {
     }
 }
 
+const RETAINED_EVENT_BASE: &str =
+    "sha256-68535bfc61b49a5bac4c8f9fd6c405bca32dc60b662196c6668a3de4c1badac3";
+
+fn retained_event_base() -> GeneratedSchemaBundle {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../schemas/sets")
+        .join(RETAINED_EVENT_BASE);
+    let manifest: pareto_protocol::SchemaSetManifest = serde_json::from_slice(
+        &std::fs::read(directory.join("schema-set-v1.0.manifest.json")).unwrap(),
+    )
+    .unwrap();
+    let reference: SchemaSetRef =
+        serde_json::from_slice(&std::fs::read(directory.join("schema-set-v1.0.ref.json")).unwrap())
+            .unwrap();
+    let schemas = manifest
+        .schemas
+        .iter()
+        .map(|schema| {
+            let filename = format!(
+                "{}-v{}.{}.schema.json",
+                schema.r#type, schema.major, schema.minor
+            );
+            SchemaDocument {
+                document: serde_json::from_slice(
+                    &std::fs::read(directory.join(&filename)).unwrap(),
+                )
+                .unwrap(),
+                filename,
+            }
+        })
+        .collect();
+    GeneratedSchemaBundle {
+        schemas,
+        manifest,
+        reference,
+    }
+}
+
 struct Fixture {
     _temp: TempDir,
     path: std::path::PathBuf,
@@ -51,14 +89,17 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let initial_bundle = generate_schema_bundle().unwrap();
-        let initial = SchemaSet::bootstrap_initial(
+        let initial_bundle = retained_event_base();
+        let initial = SchemaSet::admit_with(
+            &Allow,
+            None,
             initial_bundle.manifest,
             initial_bundle.schemas,
             &initial_bundle.reference,
+            Vec::new(),
         )
         .unwrap();
-        let mut bundle = generate_schema_bundle().unwrap();
+        let mut bundle = retained_event_base();
         let document = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:pareto-harness:schema:kernel-test:1.0","type":"object","properties":{"message":{"type":"string"}},"required":["message"],"unevaluatedProperties":false});
         let payload_schema = SchemaRef {
             r#type: "kernel-test".into(),
@@ -865,6 +906,21 @@ async fn retained_schema_registry_drives_exact_reader_and_rejects_substitution()
     let store = EventStore::open_pinned(&fixture.path, &store_id)
         .await
         .unwrap();
+    assert_eq!(
+        retained_event_base()
+            .reference
+            .manifest_digest
+            .as_str()
+            .replace(':', "-"),
+        RETAINED_EVENT_BASE
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap(),
+        1
+    );
     assert_eq!(
         store
             .read(&exact_read, None, 10)

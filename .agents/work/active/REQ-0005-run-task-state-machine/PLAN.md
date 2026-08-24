@@ -12,7 +12,7 @@ links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005]
 
 # Current state
 
-REQ-0003 与 REQ-0004 均为 done；工作树在本需求启动前干净，active 目录此前仅 `.gitkeep`，无其他 Runtime Requirement implementing。RFC-0004/ADR-0005 已接受，SPEC-0004 approved；架构专项自审 0 open Blocker/Major，但非独立实现评审。当前为 `planned`，尚未修改 Runtime、Schema 或依赖。
+REQ-0003 与 REQ-0004 均为 done，且没有其他 Runtime Requirement implementing。RFC-0004/ADR-0005 已接受，SPEC-0004 approved。REQ-0005 当前为 `reviewing`：exact implementation revision `d0011d064b88cf4be8e6b70ae781f3637bb15161` 已完成实现和首轮分层测试；独立 REVIEW-0004 对该 revision 提出 4 个 Major。实现者已补入冲突优先级、序号边界、aggregate-bound fold 与真实旧 reader/unknown-major 证据，正等待新 exact remediation revision 的独立复审。独立批准前不得进入 verified/done。
 
 # Plan
 

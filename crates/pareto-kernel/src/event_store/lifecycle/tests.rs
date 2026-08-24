@@ -5,6 +5,8 @@ use sqlx::Connection;
 use std::str::FromStr;
 use tempfile::TempDir;
 
+use super::{canonical, fingerprint};
+
 struct Fixture {
     _temp: TempDir,
     path: std::path::PathBuf,
@@ -728,6 +730,134 @@ async fn idempotency() {
 }
 
 #[tokio::test]
+async fn conflict_priority() {
+    let fixture = Fixture::new("run_conflict-priority");
+    let store = open_created(&fixture, "event_priority-create").await;
+    store
+        .create_task(
+            &fixture.registry(),
+            &fixture.target(),
+            &fixture.create_task("event_priority-task", 1, "task_existing", None),
+        )
+        .await
+        .unwrap();
+
+    for (event, task) in [
+        ("event_priority-stale-existing", "task_existing"),
+        ("event_priority-stale-missing", "task_missing"),
+    ] {
+        assert_eq!(
+            store
+                .transition_task(
+                    &fixture.registry(),
+                    &fixture.target(),
+                    &fixture.transition_task(
+                        event,
+                        1,
+                        task,
+                        TaskState::Created,
+                        TaskState::Ready,
+                    ),
+                )
+                .await
+                .unwrap_err()
+                .kind,
+            LifecycleErrorKind::OptimisticConcurrencyConflict
+        );
+    }
+    assert_eq!(
+        store
+            .transition_task(
+                &fixture.registry(),
+                &fixture.target(),
+                &fixture.transition_task(
+                    "event_priority-current-missing",
+                    2,
+                    "task_missing",
+                    TaskState::Created,
+                    TaskState::Ready,
+                ),
+            )
+            .await
+            .unwrap_err()
+            .kind,
+        LifecycleErrorKind::InvalidTransition
+    );
+    assert_eq!(event_count(&store).await, 2);
+}
+
+#[tokio::test]
+async fn sequence_boundaries() {
+    let fixture = Fixture::new("run_sequence-boundaries");
+    let store = open_created(&fixture, "event_sequence-create").await;
+    let task = fixture.create_task("event_sequence-task", 1, "task_boundary", None);
+    store
+        .create_task(&fixture.registry(), &fixture.target(), &task)
+        .await
+        .unwrap();
+    assert!(matches!(
+        store
+            .create_task(&fixture.registry(), &fixture.target(), &task)
+            .await
+            .unwrap(),
+        LifecycleResult::AlreadyApplied { sequence: 2, .. }
+    ));
+
+    for (index, expected) in [i64::MAX, -1, 0].into_iter().enumerate() {
+        let create = fixture.create_task(
+            &format!("event_sequence-invalid-create-{index}"),
+            expected,
+            &format!("task_invalid-{index}"),
+            None,
+        );
+        let run = fixture.transition_run(
+            &format!("event_sequence-invalid-run-{index}"),
+            expected,
+            RunState::Created,
+            RunState::Running,
+        );
+        let task = fixture.transition_task(
+            &format!("event_sequence-invalid-task-{index}"),
+            expected,
+            "task_boundary",
+            TaskState::Created,
+            TaskState::Ready,
+        );
+        for result in [
+            store
+                .create_task(&fixture.registry(), &fixture.target(), &create)
+                .await,
+            store
+                .transition_run(&fixture.registry(), &fixture.target(), &run)
+                .await,
+            store
+                .transition_task(&fixture.registry(), &fixture.target(), &task)
+                .await,
+        ] {
+            assert_eq!(
+                result.unwrap_err().kind,
+                LifecycleErrorKind::OptimisticConcurrencyConflict
+            );
+        }
+    }
+
+    for collision in [
+        fixture.create_task("event_sequence-create", i64::MAX, "task_collision", None),
+        fixture.create_task("event_sequence-task", -1, "task_collision", None),
+    ] {
+        assert_eq!(
+            store
+                .create_task(&fixture.registry(), &fixture.target(), &collision)
+                .await
+                .unwrap_err()
+                .kind,
+            LifecycleErrorKind::IdempotencyConflict
+        );
+    }
+    assert_eq!(event_count(&store).await, 2);
+}
+
+#[tokio::test]
 async fn terminal_and_late() {
     let fixture = Fixture::new("run_terminal");
     let store = open_created(&fixture, "event_terminal-create").await;
@@ -1085,6 +1215,62 @@ async fn compatibility() {
             .kind,
         LifecycleErrorKind::AggregateCorrupt
     );
+
+    let unknown = Fixture::new("run_unknown-major");
+    let unknown_store = open_created(&unknown, "event_unknown-create").await;
+    let payload = RunStateTransitionedPayload {
+        from: RunState::Created,
+        to: RunState::Cancelled,
+        reason_code: "unknown-major".to_owned(),
+    };
+    let validated = lifecycle_event(
+        &unknown.set,
+        &unknown.limits,
+        &unknown.scope,
+        &unknown.scope.agent_id,
+        &lifecycle_stream_id(&unknown.scope).unwrap(),
+        &EventId::parse("event_unknown-major").unwrap(),
+        2,
+        "2026-08-24T01:00:21.000Z",
+        "corr-unknown-major",
+        "run-state-transitioned",
+        &payload,
+    )
+    .unwrap();
+    let mut envelope = validated.envelope().clone();
+    envelope.event_major = 2;
+    let envelope_json = canonical(&envelope).unwrap();
+    let schema_set_json = canonical(unknown.set.reference()).unwrap();
+    let limits_json = canonical(&unknown.limits).unwrap();
+    let prepared = PreparedEvent {
+        envelope,
+        envelope_fingerprint: fingerprint(envelope_json.as_bytes()),
+        schema_set_fingerprint: fingerprint(schema_set_json.as_bytes()),
+        limits_fingerprint: fingerprint(limits_json.as_bytes()),
+        envelope_json,
+        schema_set_json,
+        limits_json,
+        sequence: 2,
+    };
+    let mut tx = unknown_store
+        .pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .unwrap();
+    insert_prepared(&mut tx, &prepared).await.unwrap();
+    tx.commit().await.unwrap();
+    let mut tx = unknown_store
+        .pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .unwrap();
+    assert_eq!(
+        load_established(&mut tx, &unknown.registry(), &unknown.target())
+            .await
+            .unwrap_err()
+            .kind,
+        LifecycleErrorKind::AggregateCorrupt
+    );
 }
 
 fn base_fold_events(fixture: &Fixture) -> Vec<ValidatedEvent> {
@@ -1133,6 +1319,10 @@ fn fold_contract() {
     let first = fold_lifecycle(&events).unwrap();
     let second = fold_lifecycle(&events).unwrap();
     assert_eq!(first, second);
+    assert_eq!(
+        fingerprint(canonical(&first).unwrap().as_bytes()),
+        fingerprint(canonical(&second).unwrap().as_bytes())
+    );
     assert_eq!(first.manifest, fixture.manifest);
     assert_eq!(first.sequence, 2);
 
@@ -1160,6 +1350,126 @@ fn fold_contract() {
     corrupt.push(gap);
     assert_eq!(
         fold_lifecycle(&corrupt).unwrap_err().kind,
+        LifecycleErrorKind::AggregateCorrupt
+    );
+}
+
+fn fold_task_event(
+    fixture: &Fixture,
+    scope: &IsolationScope,
+    actor: &AgentId,
+    stream: &StreamId,
+    event_id: &str,
+) -> ValidatedEvent {
+    lifecycle_event(
+        &fixture.set,
+        &fixture.limits,
+        scope,
+        actor,
+        stream,
+        &EventId::parse(event_id).unwrap(),
+        2,
+        "2026-08-24T01:01:01.000Z",
+        &format!("corr-{event_id}"),
+        "task-created",
+        &TaskCreatedPayload {
+            task_id: TaskId::parse("task_mixed").unwrap(),
+            parent_task_id: None,
+            initial_state: TaskState::Created,
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn fold_identity() {
+    let fixture = Fixture::new("run_fold-identity");
+    let mut first = base_fold_events(&fixture).remove(0);
+    let mut variants = Vec::new();
+
+    let mut tenant = fixture.scope.clone();
+    tenant.tenant_id = TenantId::parse("tenant_mixed").unwrap();
+    variants.push(tenant);
+    let mut user_presence = fixture.scope.clone();
+    user_presence.user_id = None;
+    variants.push(user_presence);
+    let mut user_value = fixture.scope.clone();
+    user_value.user_id = Some(UserId::parse("user_mixed").unwrap());
+    variants.push(user_value);
+    let mut workspace = fixture.scope.clone();
+    workspace.workspace_id = WorkspaceId::parse("workspace_mixed").unwrap();
+    variants.push(workspace);
+    let mut run = fixture.scope.clone();
+    run.run_id = pareto_protocol::RunId::parse("run_mixed").unwrap();
+    variants.push(run);
+    let mut agent = fixture.scope.clone();
+    agent.agent_id = AgentId::parse("agent_mixed").unwrap();
+    variants.push(agent);
+
+    for (index, scope) in variants.into_iter().enumerate() {
+        let stream = lifecycle_stream_id(&scope).unwrap();
+        let second = fold_task_event(
+            &fixture,
+            &scope,
+            &scope.agent_id,
+            &stream,
+            &format!("event_fold-mixed-scope-{index}"),
+        );
+        assert_eq!(
+            fold_lifecycle(&[first, second]).unwrap_err().kind,
+            LifecycleErrorKind::AggregateCorrupt
+        );
+        first = base_fold_events(&fixture).remove(0);
+    }
+
+    let other_actor = AgentId::parse("agent_other-actor").unwrap();
+    let stream = lifecycle_stream_id(&fixture.scope).unwrap();
+    let actor_mixed = fold_task_event(
+        &fixture,
+        &fixture.scope,
+        &other_actor,
+        &stream,
+        "event_fold-mixed-actor",
+    );
+    assert_eq!(
+        fold_lifecycle(&[first, actor_mixed]).unwrap_err().kind,
+        LifecycleErrorKind::AggregateCorrupt
+    );
+
+    let first = base_fold_events(&fixture).remove(0);
+    let other_stream = StreamId::parse("stream_lifecycle-alternate").unwrap();
+    let stream_mixed = fold_task_event(
+        &fixture,
+        &fixture.scope,
+        &fixture.scope.agent_id,
+        &other_stream,
+        "event_fold-mixed-stream",
+    );
+    assert_eq!(
+        fold_lifecycle(&[first, stream_mixed]).unwrap_err().kind,
+        LifecycleErrorKind::AggregateCorrupt
+    );
+
+    let mut mismatched_manifest = fixture.manifest.clone();
+    mismatched_manifest.scope.workspace_id = WorkspaceId::parse("workspace_payload").unwrap();
+    let mismatched_first = lifecycle_event(
+        &fixture.set,
+        &fixture.limits,
+        &fixture.scope,
+        &fixture.scope.agent_id,
+        &stream,
+        &EventId::parse("event_fold-mismatched-manifest").unwrap(),
+        1,
+        "2026-08-24T01:01:00.000Z",
+        "corr-fold-mismatched-manifest",
+        "run-created",
+        &RunCreatedPayload {
+            manifest: mismatched_manifest,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        fold_lifecycle(&[mismatched_first]).unwrap_err().kind,
         LifecycleErrorKind::AggregateCorrupt
     );
 }

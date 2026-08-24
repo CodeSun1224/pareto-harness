@@ -146,13 +146,13 @@ enum LifecycleResult {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 struct TaskRecord {
     parent_task_id: Option<TaskId>,
     state: TaskState,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 struct LifecycleState {
     manifest: RunManifest,
     run_state: RunState,
@@ -222,6 +222,12 @@ impl EventStore {
     ) -> Result<LifecycleResult, LifecycleError> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let aggregate = load_established(&mut transaction, registry, target).await?;
+        let sequence = command_sequence(
+            &mut transaction,
+            &command.event_id,
+            command.expected_sequence,
+        )
+        .await?;
         let payload = TaskCreatedPayload {
             task_id: command.task_id.clone(),
             parent_task_id: command.parent_task_id.clone(),
@@ -234,7 +240,7 @@ impl EventStore {
             &target.actor,
             &aggregate.stream_id,
             &command.event_id,
-            command.expected_sequence + 1,
+            sequence,
             &command.occurred_at,
             &command.correlation_id,
             "task-created",
@@ -264,6 +270,12 @@ impl EventStore {
     ) -> Result<LifecycleResult, LifecycleError> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let aggregate = load_established(&mut transaction, registry, target).await?;
+        let sequence = command_sequence(
+            &mut transaction,
+            &command.event_id,
+            command.expected_sequence,
+        )
+        .await?;
         let payload = RunStateTransitionedPayload {
             from: command.expected_state,
             to: command.target_state,
@@ -276,7 +288,7 @@ impl EventStore {
             &target.actor,
             &aggregate.stream_id,
             &command.event_id,
-            command.expected_sequence + 1,
+            sequence,
             &command.occurred_at,
             &command.correlation_id,
             "run-state-transitioned",
@@ -310,6 +322,12 @@ impl EventStore {
     ) -> Result<LifecycleResult, LifecycleError> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let aggregate = load_established(&mut transaction, registry, target).await?;
+        let sequence = command_sequence(
+            &mut transaction,
+            &command.event_id,
+            command.expected_sequence,
+        )
+        .await?;
         let payload = TaskStateTransitionedPayload {
             task_id: command.task_id.clone(),
             from: command.expected_state,
@@ -323,7 +341,7 @@ impl EventStore {
             &target.actor,
             &aggregate.stream_id,
             &command.event_id,
-            command.expected_sequence + 1,
+            sequence,
             &command.occurred_at,
             &command.correlation_id,
             "task-state-transitioned",
@@ -334,16 +352,21 @@ impl EventStore {
             transaction.commit().await?;
             return Ok(result_for(result, AppliedState::Task(command.target_state)));
         }
+        if aggregate.state.sequence != command.expected_sequence {
+            return Err(LifecycleError::new(
+                LifecycleErrorKind::OptimisticConcurrencyConflict,
+            ));
+        }
         let current = aggregate
             .state
             .tasks
             .get(&command.task_id)
             .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::InvalidTransition))?;
-        validate_expected(
-            aggregate.state.sequence,
-            command.expected_sequence,
-            current.state == command.expected_state,
-        )?;
+        if current.state != command.expected_state {
+            return Err(LifecycleError::new(
+                LifecycleErrorKind::OptimisticConcurrencyConflict,
+            ));
+        }
         validate_task_transition(
             &aggregate.state,
             &command.task_id,
@@ -369,6 +392,29 @@ fn result_for(result: AppendResult, state: AppliedState) -> LifecycleResult {
             state,
         },
     }
+}
+
+async fn command_sequence(
+    connection: &mut SqliteConnection,
+    event_id: &EventId,
+    expected_sequence: i64,
+) -> Result<i64, LifecycleError> {
+    if let Some(sequence) = expected_sequence
+        .checked_add(1)
+        .filter(|sequence| *sequence >= 2)
+    {
+        return Ok(sequence);
+    }
+    let id_exists: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_id=?")
+        .bind(event_id.as_str())
+        .fetch_one(&mut *connection)
+        .await?;
+    let kind = if id_exists == 0 {
+        LifecycleErrorKind::OptimisticConcurrencyConflict
+    } else {
+        LifecycleErrorKind::IdempotencyConflict
+    };
+    Err(LifecycleError::new(kind))
 }
 
 fn validate_create_authority(
@@ -561,7 +607,21 @@ fn fold_lifecycle(events: &[ValidatedEvent]) -> Result<LifecycleState, Lifecycle
     let created = first
         .downcast_payload::<RunCreatedPayload>()
         .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-    if first.envelope().event_type != "run-created" || first.envelope().sequence != "1" {
+    let first_envelope = first.envelope();
+    let expected_stream = lifecycle_stream_id(&created.manifest.scope)
+        .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+    if first_envelope.event_type != "run-created"
+        || first_envelope.event_major != 1
+        || first_envelope.event_minor != 0
+        || first_envelope.sequence != "1"
+        || first.variant_id() != "run-created-v1"
+        || created.manifest.scope != first_envelope.scope
+        || created.manifest.schema_set_ref != *first.schema_set_ref()
+        || created.manifest.protocol_limits_ref != *first.protocol_limits_ref()
+        || first_envelope.run_id != created.manifest.scope.run_id
+        || first_envelope.actor != created.manifest.scope.agent_id
+        || first_envelope.stream_id != expected_stream
+    {
         return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt));
     }
     let mut state = LifecycleState {
@@ -573,7 +633,17 @@ fn fold_lifecycle(events: &[ValidatedEvent]) -> Result<LifecycleState, Lifecycle
     for (index, event) in events.iter().enumerate().skip(1) {
         let expected_sequence = i64::try_from(index + 1)
             .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-        if event.envelope().sequence.parse::<i64>().ok() != Some(expected_sequence) {
+        let envelope = event.envelope();
+        if envelope.sequence.parse::<i64>().ok() != Some(expected_sequence)
+            || envelope.event_major != 1
+            || envelope.event_minor != 0
+            || envelope.scope != first_envelope.scope
+            || envelope.run_id != first_envelope.run_id
+            || envelope.actor != first_envelope.actor
+            || envelope.stream_id != first_envelope.stream_id
+            || event.schema_set_ref() != first.schema_set_ref()
+            || event.protocol_limits_ref() != first.protocol_limits_ref()
+        {
             return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt));
         }
         match event.envelope().event_type.as_str() {

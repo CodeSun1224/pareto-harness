@@ -430,6 +430,119 @@ fn verify_retained_set(directory: &Path) {
     }
 }
 
+struct RetainedSetAdmission;
+impl SchemaAdmissionAuthorizer for RetainedSetAdmission {
+    fn authorize(&self, _: Option<&SchemaSetRef>, _: &SchemaSetRef) -> Result<(), ValidationError> {
+        Ok(())
+    }
+}
+
+fn load_retained_set(directory: &Path) -> SchemaSet {
+    let manifest: SchemaSetManifest = serde_json::from_slice(
+        &std::fs::read(directory.join("schema-set-v1.0.manifest.json")).unwrap(),
+    )
+    .unwrap();
+    let reference: SchemaSetRef =
+        serde_json::from_slice(&std::fs::read(directory.join("schema-set-v1.0.ref.json")).unwrap())
+            .unwrap();
+    let documents = manifest
+        .schemas
+        .iter()
+        .map(|schema| {
+            let filename = format!(
+                "{}-v{}.{}.schema.json",
+                schema.r#type, schema.major, schema.minor
+            );
+            SchemaDocument {
+                document: serde_json::from_slice(
+                    &std::fs::read(directory.join(&filename)).unwrap(),
+                )
+                .unwrap(),
+                filename,
+            }
+        })
+        .collect();
+    SchemaSet::admit_with(
+        &RetainedSetAdmission,
+        None,
+        manifest,
+        documents,
+        &reference,
+        Vec::new(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn checked_in_old_writer_manifests_use_their_exact_retained_reader() {
+    let sets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/sets");
+    let current_bundle = generate_schema_bundle().unwrap();
+    let current = SchemaSet::bootstrap_initial(
+        current_bundle.manifest,
+        current_bundle.schemas,
+        &current_bundle.reference,
+    )
+    .unwrap();
+    for set_directory in [
+        "sha256-68535bfc61b49a5bac4c8f9fd6c405bca32dc60b662196c6668a3de4c1badac3",
+        "sha256-7adfe3b790d85e4bfb3440e739528c4fd33a47f99dabf0403888e09cc279a2e4",
+    ] {
+        let retained = load_retained_set(&sets.join(set_directory));
+        assert_eq!(
+            retained
+                .reference()
+                .manifest_digest
+                .as_str()
+                .replace(':', "-"),
+            set_directory
+        );
+        let revisions = [
+            "task",
+            "behavior",
+            "workspace",
+            "environment",
+            "context_graph",
+            "model_snapshot",
+            "tool_set",
+            "kernel",
+        ]
+        .into_iter()
+        .map(|role| {
+            (
+                role.to_owned(),
+                RevisionId::parse(format!("rev_{}", role.replace('_', "-"))).unwrap(),
+            )
+        })
+        .collect();
+        let manifest = RunManifest {
+            schema_ref: retained.schema_ref("run-manifest").unwrap().clone(),
+            scope: scope(),
+            revisions,
+            plan_revision: None,
+            schema_set_ref: retained.reference().clone(),
+            budget_revision: RevisionId::parse("rev_budget").unwrap(),
+            protocol_limits_ref: ProtocolLimitsRef {
+                profile: "protocol-limits-v1".to_owned(),
+                digest: Digest::parse(ProtocolLimitsV1::DIGEST).unwrap(),
+            },
+            boundary_recording_policy_ref: BoundaryRecordingPolicyRef {
+                revision_id: RevisionId::parse("rev_policy").unwrap(),
+                digest: digest('f'),
+            },
+            execution_mode: ExecutionMode::Live {},
+        };
+        assert!(
+            retained
+                .validate_run_manifest(manifest.clone(), &scope())
+                .is_ok()
+        );
+        assert!(
+            current.validate_run_manifest(manifest, &scope()).is_err(),
+            "the current reader must not substitute for retained {set_directory}"
+        );
+    }
+}
+
 #[test]
 fn every_retained_schema_set_is_complete_and_content_addressed() {
     let sets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/sets");

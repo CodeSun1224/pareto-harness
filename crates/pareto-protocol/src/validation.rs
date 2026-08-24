@@ -109,6 +109,8 @@ impl<T> Validated<T> {
 /// Event admitted through one exact registry variant and its payload schema.
 pub struct ValidatedEvent {
     envelope: EventEnvelope,
+    schema_set_ref: SchemaSetRef,
+    protocol_limits_ref: ProtocolLimitsRef,
     variant_id: String,
     decoded: Box<dyn Any + Send + Sync>,
 }
@@ -118,6 +120,8 @@ impl fmt::Debug for ValidatedEvent {
         formatter
             .debug_struct("ValidatedEvent")
             .field("envelope", &self.envelope)
+            .field("schema_set_ref", &self.schema_set_ref)
+            .field("protocol_limits_ref", &self.protocol_limits_ref)
             .field("variant_id", &self.variant_id)
             .finish_non_exhaustive()
     }
@@ -127,6 +131,16 @@ impl ValidatedEvent {
     /// Returns the validated immutable envelope.
     pub fn envelope(&self) -> &EventEnvelope {
         &self.envelope
+    }
+
+    /// Returns the exact immutable SchemaSet used to admit this event.
+    pub fn schema_set_ref(&self) -> &SchemaSetRef {
+        &self.schema_set_ref
+    }
+
+    /// Returns the exact protocol-limits identity used to admit this event.
+    pub fn protocol_limits_ref(&self) -> &ProtocolLimitsRef {
+        &self.protocol_limits_ref
     }
 
     /// Returns the exact language-independent typed variant selected by the registry.
@@ -630,6 +644,8 @@ impl SchemaSet {
                 .map_err(|error| vec![error])?;
             Ok(ValidatedEvent {
                 envelope,
+                schema_set_ref: context.schema_set_ref.clone(),
+                protocol_limits_ref: context.protocol_limits_ref.clone(),
                 variant_id,
                 decoded,
             })
