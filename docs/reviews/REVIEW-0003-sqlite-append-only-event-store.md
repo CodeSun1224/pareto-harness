@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-24
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: 5ef949dd084b1e6ae82015f4c66adb8281aebf65
+reviewed_revision: b5850b76325bbc31825303215224d60c931e27c6
 open_blockers: 0
 open_majors: 0
 ---
@@ -71,3 +71,4 @@ open_majors: 0
 - 2026-08-23：focused independent re-review 精确提交 `a7c73b317c57813a2a1d29b35ef09a2773c6e17b` 及 `9aab861..a7c73b3` 修复 diff；独立复跑 14 kernel tests、1 compile-fail doctest、kernel clippy 与 diff-check。F-001/F-002/F-003/F-004 closed；F-005 保持 open。最终 0 Blocker、1 Major，仍 changes requested。
 - 2026-08-24：第二次 focused independent re-review 精确提交 `b7cf277f4232515bebbe15d6a237654336b95271` 及 `a7c73b3..b7cf277` 修复 diff；独立复跑 15 kernel tests、1 compile-fail doctest、kernel clippy、全 workspace tests 与 diff-check。F-005 closed；最终 0 Blocker、0 Major，批准。
 - 2026-08-24：final lifecycle/archive freshness re-review 精确提交 `5ef949dd084b1e6ae82015f4c66adb8281aebf65`。`b7cf277..5ef949d` 仅将 REQ-0004 标为 done、同步 README/index/ARCH/EPIC/Requirement 实现事实、补全 Validation/Handoff/Tasks，并将 work 从 active 归档；未修改 `crates/`、Cargo manifests/lock、tests、schemas、scripts、skills 或 governance behavior。正式 REVIEW-0003 disposition 只作路径/生命周期事实同步，finding 状态与 0 Blocker/0 Major 未被实现者改写。批准与零 open findings 保持，freshness 前移至 exact `5ef949d`。
+- 2026-08-24：final freshness-only re-review精确提交`b5850b76325bbc31825303215224d60c931e27c6`。自`5ef949d`起的REQ-0005 lifecycle消费者及Event Store helper变化已由独立REVIEW-0004审查，真实SQLite Event Store 33 tests通过，并证明v1 DDL/`user_version`、append-only authority、exact retained reader、事务边界及private raw-SQL surface不退化。exact closure diff `675e3f8..b5850b7`只同步durable docs/status并归档work，未修改`crates/`、Cargo manifests/lock、tests、schemas或依赖。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact `b5850b7`。

@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-24
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 5ef949dd084b1e6ae82015f4c66adb8281aebf65
+reviewed_revision: b5850b76325bbc31825303215224d60c931e27c6
 open_blockers: 0
 open_majors: 0
 ---
@@ -63,3 +63,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact commit `b00928d5af24da75334595bbdeb63b8e6411e6ff` final freshness-only re-review：`72914b7..b00928d` 只提交独立 Reviewer 已完成的 F-010 closure、Actions/local raw validation evidence 与 REVIEW-0001 freshness 记录；无产品、测试、CI、治理行为或 Requirement lifecycle 变化。REQ-0003 CODE-REVIEW 保持 0 open Blocker/Major，REVIEW-0001 reviewed revision 前移至 exact b00928d。
 - exact commit `e5d1b9b36de61a961b42b0c8148142cb98ae816f` lifecycle/archive freshness re-review：`b00928d..e5d1b9b` 未改变产品、Schema、测试、CI 或治理行为；增量创建 REVIEW-0002，将 REQ-0003 标为 done并链接正式 Review，将 work 从 active 移至 archived，并同步 README、Plan、Tasks、Handoff 与 Validation 最终事实。该 completion 由 REVIEW-0002 的 0 open findings 和 exact 三平台成功证据支持；REVIEW-0001 reviewed revision 前移至 exact e5d1b9b。
 - exact commit `5ef949dd084b1e6ae82015f4c66adb8281aebf65` lifecycle/archive freshness re-review：自 `e5d1b9b` 起仅新增经 REQ-0004 approved Spec、独立 REVIEW-0003 与分层验证约束的 `pareto-kernel` Event Store、锁定依赖及其 durable docs/work archive；`AGENTS.md`、`.agents/skills/`、`scripts/` 与 REQ-0002/SPEC-0001 治理规则 byte-diff 无变化，18 个治理测试在 REQ-0004 completion evidence 中通过。`b7cf277..5ef949d` 本身只同步 REQ-0004 status/docs 并归档 work，无产品、测试、Schema 或治理行为变化。REVIEW-0001 保持 approved、0 open Blocker/Major，freshness 前移至 exact `5ef949d`。
+- exact commit `b5850b76325bbc31825303215224d60c931e27c6` final freshness-only re-review：自 `5ef949d` 起的 REQ-0005 产品增量已由独立 REVIEW-0004 在 exact `675e3f8` 批准；closure diff `675e3f8..b5850b7` 只同步 README/index/EPIC/ARCH implemented facts、将 REQ-0005 标为 done并归档work、落盘 reviewer-owned approval。`AGENTS.md`、`.agents/skills/`、`scripts/`及REQ-0002/SPEC-0001治理行为未改变；18个治理测试与最终`check_docs.py`通过。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `b5850b7`。

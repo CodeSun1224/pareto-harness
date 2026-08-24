@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-24
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 5ef949dd084b1e6ae82015f4c66adb8281aebf65
+reviewed_revision: b5850b76325bbc31825303215224d60c931e27c6
 open_blockers: 0
 open_majors: 0
 ---
@@ -83,3 +83,4 @@ Remaining Notes/limitations:
 - Exact `b00928d` and `6447c37` contain only independent review/freshness records; no product or test behavior changed after the last product re-review.
 - Exact `e5d1b9b36de61a961b42b0c8148142cb98ae816f` is a lifecycle/archive-only closure: it records REQ-0003 as done, links this Review, archives the completed work directory, and synchronizes final delivery facts. No product, Schema, test, CI, permission, isolation, replay, or compatibility behavior changed; approval and zero open findings are retained at the newer exact revision.
 - Exact `5ef949dd084b1e6ae82015f4c66adb8281aebf65` freshness/lifecycle re-review: since `e5d1b9b`, `crates/pareto-protocol/` and `schemas/` are byte-diff unchanged. REQ-0004 adds a separate `pareto-kernel` consumer with SQLite/Tokio dependencies; dependency direction remains Kernel -> protocol and protocol gains no database, Runtime, network, Provider, filesystem-reader, or secret dependency. Its authority, retained SchemaSet reader, compatibility and isolation behavior received independent REVIEW-0003 approval and protocol 9 unit + 17 contract regressions passed. `b7cf277..5ef949d` itself is docs/status/work-archive only. REVIEW-0002 remains approved with 0 open Blocker/Major at the newer exact revision.
+- Exact `b5850b76325bbc31825303215224d60c931e27c6` final freshness re-review: REQ-0005's intervening protocol/Event additions were independently reviewed in REVIEW-0004, published a new immutable SchemaSet without changing retained sets, preserved Kernel -> protocol dependency direction, and passed protocol 9 unit + 19 contract tests including exact old-reader substitution negatives. The exact closure diff `675e3f8..b5850b7` changes no `crates/`, Schema bytes, Cargo manifests/lock, dependencies, public protocol API, reader identity, or replay semantics; it is docs/status/work-archive only. REVIEW-0002 remains approved with 0 open Blocker/Major and freshness advances to exact `b5850b7`.
