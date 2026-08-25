@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-25
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REVIEW-0002, REVIEW-0003, REVIEW-0004]
 independence: independent
-reviewed_revision: 907eee7295a7c3e7c2fa408a035c52d684f52fb4
+reviewed_revision: cfa7a06c3588a6ad975a9511140d0984f5eb1b8f
 open_blockers: 0
 open_majors: 0
 ---
@@ -81,3 +81,4 @@ remediation产品代码限于Event Store v2 migration、Projection/Snapshot/Repl
 - 2026-08-25：fresh independent review of exact `5c4f6e7f304c55fb61b6cc7e08d5bbe902b8d82c` against baseline `bb395ad78f762b53d5f486c742194dd8d551dc61`。结论0 Blocker、3 Major、1 accepted Minor，changes requested。
 - 2026-08-25：focused independent re-review of exact `1d271549c2607f9c00377bdaa0fa999a131dafe3`，review-record `a94d756`，author remediation diff `a94d756..1d27154`。独立逐项核对F-001/F-002/F-003 required proof，复查F-004分类，复跑focused、默认并行3×、workspace/Core/治理/Schema门禁；F-001/F-002/F-003 closed，F-004保持accepted Minor，最终approved、0 Blocker、0 Major。
 - 2026-08-25：final freshness-only independent confirmation of exact closure `907eee7295a7c3e7c2fa408a035c52d684f52fb4`，以approved remediation `1d271549c2607f9c00377bdaa0fa999a131dafe3`和review-record commit `14b5438`为基线。完整`14b5438..907eee7` diff只含REQ-0006 done/navigation/architecture implemented facts、validation/handoff/plan/tasks和active→archived move；`crates/`、Schema、Cargo、治理代码和既有Review finding bytes均无变化。实现事实与REVIEW-0005批准范围一致，REQ-0007/Effect/Provider/Memory/DAG仍明确未实现；F-001/F-002/F-003保持closed，F-004保持accepted Minor，归档Handoff的旧实施期句子记录为F-005 accepted Note；最终仍approved、0 Blocker、0 Major，freshness前移至exact `907eee7`。
+- 2026-08-25：substantive freshness confirmation of exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f`。完整`907eee7..cfa7a06`无Projection/Snapshot/Replay Runtime、Schema、DB、Cargo或API实现变化；REQ-0007设计使用独立control stream/reducer/Projection，明确RunTask reducer仍只消费四类lifecycle binding、既有Snapshot identity/digest不变、Recorded control replay无executor/append/recovery writer。新control-capable set和RuntimeControl Projection尚未生成/实现且受REVIEW-0006 open Major阻塞。REVIEW-0005既有F-001..F-003保持closed，F-004/F-005保持accepted，approved与0 open Blocker/Major不变，freshness前移至exact`cfa7a06`。

@@ -140,7 +140,11 @@ Kernel-private`Clock`返回`WallSample { canonical_utc, epoch_millis }`和只在
 
 reserve持久化absolute UTC deadline、requested timeout duration、clock contract revision和decision wall time；返回非持久`OperationLease { process_epoch, monotonic_deadline }`。活进程timeout判定只比较同epoch monotonic tick，同时要求当前wall不晚于absolute deadline。重启丢弃旧lease/tick；重新读取absolute deadline，若wall已到/超过则timeout，否则用剩余duration建立新lease。旧monotonic值不进Event/digest。
 
-若wall sample回退、process epoch不匹配或无法证明remaining duration，Kernel fail closed为`clock_invalid`，不延长deadline。首片无background scanner。显式`reconcile_operation_timeout_v1`只能由Kernel recovery authority构造，可从live poll、callback admission或数据库reopen recovery调用；它在`BEGIN IMMEDIATE`中exact refold并验证source contract、pending operation与trusted clock。deadline前返回`not_due`且不append；恰好/超过deadline则追加唯一`timed_out` settlement，有durable Kernel meter evidence时consume verified partial并release差额，否则unknown全额consume trusted reservation。无callback的hung/uninterruptible operation因此可在显式recovery时终结；reopen必须从Projection枚举pending逐个调用，不自动release/reexecute。相同recovery identity幂等，terminal后新命令返回既有winner。
+若wall sample回退、process epoch不匹配或无法证明remaining duration，Kernel fail closed为`clock_invalid`，不延长deadline。首片无background scanner。
+
+reserve event同时固定`TimeoutKeyV1`：schema/recovery contract revision、完整scope/control stream、operation/reservation、absolute deadline、timeout/clock policy、source SchemaSet/limits digest与trusted operation/meter contract ref。Kernel在每次recovery逐字段对照persisted state，外部不能选择或替换。`TimeoutRecoveryCommandV1`再固定该key、canonical decision Clock sample和构造时冻结的Kernel-meter verified snapshot或`unknown` evidence fingerprint；domain-separated canonical JSON preimage `pareto.runtime-timeout-recovery.command.v1`的SHA-256既是`command_fingerprint`，其lowercase hex加`event_`也是command/event ID。recovery authority是不可序列化constructor权限，不进入wire fingerprint。
+
+显式`reconcile_operation_timeout_v1`只能由Kernel recovery authority构造，可从live poll、callback admission或数据库reopen recovery调用；它在`BEGIN IMMEDIATE`中按以下优先级处理：integrity/isolation/source/expected key → existing same event ID exact fingerprint/bytes为`AlreadyApplied`、mutation为`idempotency_conflict` → different event ID但operation已terminal则返回既有winner no-op → pending时才判Clock。deadline前`not_due`不append也不消费ID；新sample可形成新ID。恰好/超过deadline则以该ID追加唯一`timed_out` settlement，有冻结的durable Kernel meter evidence时consume verified partial并release差额，否则unknown全额consume trusted reservation。提交响应丢失时调用方必须缓存并exact重试同command bytes；若进程丢失command，reopen以新sample/新ID命中terminal no-op。无callback的hung/uninterruptible operation因此可终结；reopen从Projection枚举pending逐个调用，不自动release/reexecute。
 
 ## 6. Completion, cancellation, and timeout race
 
@@ -185,7 +189,7 @@ request_cancellation(target, proposal) -> requested | denied | terminal
 cancellation_probe(operation) -> active | requested | terminal
 acknowledge_cancellation(operation_lease, cancellation) -> acknowledged | denied
 settle(operation_lease, callback, usage_observation) -> terminal accounting result
-reconcile_operation_timeout(recovery_authority, operation, clock_sample) -> not_due | terminal
+reconcile_operation_timeout(recovery_authority, operation, clock_sample, frozen_meter_snapshot) -> not_due | terminal
 refund(settlement, correction) -> budget correction
 project_control(target) / recorded_control_replay(target)
 ```
@@ -227,6 +231,7 @@ untrusted policy/plugin/provider/tool request
 | callback/ack producer伪造或错误binding | 同scope身份/业务ID不足以授权；producer、operation、reservation、lease、epoch、namespace任一不匹配均无settlement/目标audit |
 | crash after reserve | pending保持；reopen Projection显示；显式Kernel recovery逐项处理已到deadline，禁止自动release/reexecute |
 | 无callback operation到期 | timeout recovery锁内追加唯一timed-out settlement；无verified meter时unknown全额consume；late callback不能翻转 |
+| timeout recovery响应丢失/identity重用 | TimeoutKey+Clock sample+冻结evidence确定性派生event ID/fingerprint；exact bytes重试AlreadyApplied；same-ID mutation冲突；not_due不消费；different-ID terminal no-op |
 | cancel/complete/timeout race | 锁内重fold，按deadline与commit-order规则唯一terminal；loser变terminal conflict/late audit |
 | 未授权cancel request/ack | Run/Task仅owner、operation仅owner/subject、ack仅approved lease/recovery；跨域和未授权不写目标 |
 | wall/monotonic mismatch | fail closed，不沿用旧process tick或延长deadline；运维修复clock后显式重试 |
@@ -261,7 +266,7 @@ SQLite保持v2，不增加table/column/index/trigger，不更改v2 ledger checks
 
 # Evaluation and acceptance
 
-- 质量：Capability table/default deny/delegation widening/revocation/expiry、lifecycle全状态准入及transition/reserve竞争、全scope isolation、多维budget equations、trusted envelope低报/漏维度、two-writer no-oversell、callback/cancel authority、无callback timeout recovery、FakeClock deadline、terminal race model、late/duplicate、Manifest/control set binding、crash/reopen、exact reader/reducer和replay zero-effect必须通过；每个test filter须先证明非零命中。
+- 质量：Capability table/default deny/delegation widening/revocation/expiry、lifecycle全状态准入及transition/reserve竞争、全scope isolation、多维budget equations、trusted envelope低报/漏维度、two-writer no-oversell、callback/cancel authority、无callback timeout recovery、TimeoutKey/ID/fingerprint golden、not_due/commit-loss/same-ID mutation/different-ID terminal优先级、FakeClock deadline、terminal race model、late/duplicate、Manifest/control set binding、crash/reopen、exact reader/reducer和replay zero-effect必须通过；每个test filter须先证明非零命中。
 - Token/费用：无模型/Provider/真实Tool；整数usage仅为测试事实。分别记录unknown conservative accounting和本地test cost，不声明成本优化。
 - 延迟：记录grant evaluation、reserve/settlement、contention、不同control event/account规模fold和Recorded replay；无baseline前不设收益阈值或新增Snapshot/background worker。
 - 设计批准：REVIEW-0006首轮fresh independent review对`05dd7ca`给出0 Blocker、6 Major和`changes-requested`，Runtime实施暂停。本修订逐项补齐F-001至F-006所需的durable contract；必须由同一independent reviewer对固定修订commit复审、重做AC trace并确认0 open Blocker/Major后才可实施。实施后的fresh independent code review使用新的Review ID，仍是另一道门禁。

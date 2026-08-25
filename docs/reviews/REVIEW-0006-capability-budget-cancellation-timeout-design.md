@@ -7,122 +7,127 @@ created: 2026-08-25
 updated: 2026-08-25
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REQ-0003, REQ-0004, REQ-0005, REQ-0006, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: 05dd7ca7ece0d362aa96a6bb99f6c92e5d8999b2
+reviewed_revision: cfa7a06c3588a6ad975a9511140d0984f5eb1b8f
 open_blockers: 0
-open_majors: 6
+open_majors: 1
 ---
 
 # Verdict
 
-要求修改，不批准进入实现。固定提交
-`05dd7ca7ece0d362aa96a6bb99f6c92e5d8999b2` 的设计已经正确选择单 Run
-control stream、默认拒绝、owner signer、Capability 收窄、同事务多作用域 reserve、事件派生余额、
-双时钟边界、终态不可逆、late-result 脱敏审计和 effect-free Recorded replay；但仍有 6 个
-open Major。它们都位于后续 Hook、Effect、Provider、Tool、Sandbox、Agent Loop、Task DAG 和
-WASM 会直接依赖的可信内核合同，不能由实现者在私有 helper 中自行补语义。
+仍要求修改，不批准进入实现。focused independent re-review 固定候选提交
+`cfa7a06c3588a6ad975a9511140d0984f5eb1b8f`，逐项审查设计差异
+`05dd7ca7ece0d362aa96a6bb99f6c92e5d8999b2..cfa7a06`。F-001、F-002、F-003、
+F-005、F-006 已由一致、durable、可测试的 Requirement/Spec/RFC/ADR 合同关闭；F-004 仍为
+open Major，因为显式 timeout recovery 虽已补齐 authority、无 callback settlement、clock/reopen/accounting
+和race，却没有冻结 required proof 要求的确定性 command/event identity。`TimeoutRecoveryCommandV1`
+只列 recovery authority、operation ID 和 Clock sample；“相同 recovery identity 幂等”没有定义该identity的
+字段、生成、持久化或commit-response-loss重试规则，不能留给实现推断。
 
-本评审为 fresh independent design review。Reviewer 未参与 REQ-0007 设计或实现，不采信
-`.agents/work/.../ARCHITECTURE-REVIEW.md` 的 self-review 结论，也没有检查或引用提交后的
-Runtime 实现声明。所有设计证据均来自 `git show 05dd7ca:<path>`；评审开始时工作树已有的
-`crates/pareto-protocol/src/schema.rs` 和 `crates/pareto-protocol/src/types.rs` 未提交修改被明确
-排除，未作为正面或负面证据。
+本评审及本轮复审均为 independent design review。Reviewer 未参与设计或实现，不采信历史self-review作为批准
+证据。候选worktree开始时clean，`05dd7ca..cfa7a06`只含REQ-0007设计、active work和本Review，
+没有Runtime、Schema、DB、Cargo、public API或依赖实现变更；本轮没有运行或评价不存在的Runtime实现。
 
 # Findings
 
 | ID | Severity | Location | Finding and impact | Required proof | Status |
 |---|---|---|---|---|---|
-| F-001 | Major | `docs/specs/SPEC-0006-capability-budget-cancellation-timeout.md:15,35,49,112-125`; `docs/rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md:94-107` | protected operation 的事务顺序会读取/fold lifecycle，却没有冻结 Run/Task 的状态准入矩阵。匹配 grant、未取消且有预算的请求因此在设计上仍可对 `created/paused/succeeded/failed/cancelled` Run 或 Task reserve 并 dispatch；control cancellation 与 lifecycle terminal 分离不能自动弥补这个绕过。该缺口违反可信内核的状态合法性和终态不可逆边界。 | 在 REQ/SPEC/RFC 中冻结 control 初始化、grant 管理、reserve/dispatch 分别允许的 Run/Task 状态；reserve 必须在同一 `BEGIN IMMEDIATE` 内对 exact lifecycle history 执行该 guard。增加所有 Run/Task 状态对负测，以及 lifecycle terminal/pause transition 与 reserve 的 two-writer 竞争，证明只有唯一合法提交顺序且 terminal 后无 dispatch。 | open |
-| F-002 | Major | `docs/specs/SPEC-0006-capability-budget-cancellation-timeout.md:22,26,61-71,129`; `docs/rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md:117-121,163-176` | cancellation request/ack 只要求记录 requester 并“对认证 principal exact 验证”，但没有定义谁可取消 Run、Task 或别人的 operation，也没有说明该权力来自 owner management authority、哪一种 Capability，还是 operation lease。`request_cancellation` 甚至未出现在冻结的 downstream private interface 中。exact scope/actor identity 不是取消 authority；同域低权限 actor 或 Gate 可造成拒绝服务或伪造 acknowledgement。 | 冻结 Run/Task/operation request 与 acknowledgement 的授权判定表、reason code 和 stable request API；若用 Capability，定义 exact resource/operation 与 delegation/revocation/expiry 交互；若 owner-only，明确 downstream Gate 只能 proposal。ack 必须绑定已批准 executor/lease 或 Kernel 事实。增加 owner/subject/issuer/无关同域 actor/跨域、ancestor propagation、撤销/到期及重复/乱序 ack 负测，未授权探测不得写目标 stream。 | open |
-| F-003 | Major | `docs/specs/SPEC-0006-capability-budget-cancellation-timeout.md:22,25-27,51-57,73-77`; `docs/rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md:111-113,142-151,165-176` | `SettlementCommand` 和 callback producer 被描述为 exact 验证，`ProtectedOperationRequest` 只说固定一个未定义的 callback contract；设计没有冻结 producer/evidence authority 如何从已批准 operation、lease 或受信 adapter 派生。知道同 aggregate 的 operation/callback ID 的主体可能提交 `unknown` usage，使 operation 终态并全额消费 reserve，或提交 late/rejected audit 污染历史。payload closure、ID 幂等和 scope exact 都不能替代 settlement authority。 | 定义版本化 callback contract：允许 producer/adapter identity、operation/reservation/lease binding、usage-evidence class、callback ID namespace、认证与失效规则；只有 Kernel deterministic meter 或显式受信 adapter 能构造 authoritative settlement admission。覆盖同域错误 actor、正确 actor 错 operation/reservation、stale/revoked lease、伪造 verified evidence、unknown callback、late callback、same-ID mutation和跨域无写入矩阵。 | open |
-| F-004 | Major | `docs/specs/SPEC-0006-capability-budget-cancellation-timeout.md:61-71,85-87`; `docs/rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md:123-140,163-176,198-212` | 设计声明没有 background scanner，timeout 只在下一次 poll/callback/recovery command 权威化；但事件/命令合同和 stable interface 都没有 timeout/recovery command，`cancellation_probe` 也未定义为可追加 timed-out settlement 的权威 writer。无 callback 的 hung/uninterruptible operation 或重启后的过期 pending reservation因此可永久保持 reserved，无法确定性形成 `timed_out`、unknown 保守核算和 late-result winner。 | 冻结显式 Kernel timeout/recovery admission：调用主体、确定性 command/event/callback identity、trusted wall/monotonic sample、锁内 refold、timed-out settlement 的 unknown/verified usage规则及无 callback 情形；或者收窄 AC-10/11/12，不再宣称 deadline 会在无重入时终结。测试 FakeClock deadline 前/相等/之后、进程 epoch 更换、wall regression、无 callback uninterruptible、reopen recovery，以及 timeout/cancel/completion 两连接竞态。 | open |
-| F-005 | Major | `docs/specs/SPEC-0006-capability-budget-cancellation-timeout.md:13,21-27,137-141`; `docs/rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md:25-40,153-161,230-236`; `docs/architecture/version-and-event-model.md` | 新 control SchemaSet 与 immutable `RunManifest.schema_set_ref` 的 exact 关系没有冻结。初始化 payload未显式固定 control source SchemaSet/limits，而兼容章节一方面发布新增 control bindings 的新 set，另一方面允许既有 Run 没有 control sequence-1。若旧 Manifest 可用新 set 初始化，Run 获得未在 Manifest 固定的行为版本；若必须 exact 等于 Manifest set，则哪些旧/新 Run 可初始化及其错误语义、rollback/retention规则未定义。`RuntimeControlProjectionV1` 的单一 source identity也依赖这个选择。 | 明确并测试唯一规则：首片可选择“仅 Manifest 已固定 control-capable set 的 Run 可初始化，control 每行 set/limits 必须 exact 等于 Manifest”，或通过新的受审 Manifest/aggregate-extension版本合同显式固定独立 control set；不得从 current/compatible set选择。覆盖四个 retained old set、新 set、known alternate/current substitution、row/Manifest mismatch、control stream内 set漂移、unknown major、reader/reducer retention与rollback。 | open |
-| F-006 | Major | `docs/specs/SPEC-0006-capability-budget-cancellation-timeout.md:25,43-57,112-125,129-135`; `docs/rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md:76-113,163-176,178-194` | reserve 依据请求中的 resource vector；请求路径又允许 untrusted policy/plugin proposal。设计只在 effect 返回后要求 verified actual `<= reserved`，却没有在 dispatch 前证明 reservation 是 Kernel/adapter 认可的最大用量。低报 request 可先通过 hard limit并执行，随后才得到 `invalid_usage`；此时真实资源已超预算，unknown 只消费低报的 reservation。该接口被声明为 REQ-0009/10/11/13/14/33 的稳定边界，因而不是单纯 Provider 后续细节。 | 为每个可 dispatch operation 固定受信、版本化的 resource envelope/meter contract；Kernel 在 reserve 前把 proposal 规范化为可证明覆盖该执行的上界，或在无法证明时拒绝 dispatch。Capability max、operation limit和全部 Run/Task/Actor accounts必须覆盖该 trusted vector。增加 proposal 低报/漏维度、meter 大于 reserve、unknown observation、partial/cancel/timeout和 malicious adapter 负测，证明 hard limit 在 effect 前而非 settlement 后执行。 | open |
-| F-007 | Minor | `docs/specs/SPEC-0006-capability-budget-cancellation-timeout.md:143-166`; `.agents/work/active/REQ-0007-capability-budget-cancellation-timeout/PLAN.md:29-42` | AC 表形式上覆盖 AC-01..20，但 `cargo test <filter>` 即使命中 0 tests 也可成功，`source inspection rejects sleep` 与 DB/clock/scope inspection 没有可复现命令；F-001..F-006 对应的授权、生命周期、timeout和预算上界场景也不存在于现有命名矩阵。当前计划不能单独证明 AC 追踪非零且完整。 | 设计修订后更新 AC→test matrix，给每个新增规则具体测试名和层级；Validation记录每个 filter 的非零 test count，静态检查使用可复现命令，two-pool/model/reopen测试明确接受集合与禁止结果。 | accepted |
+| F-001 | Major | `SPEC-0006:39-52,188,192,198`; `RFC-0006:76-80,102-119,221,264`; REQ-0007 AC-02/06/12 | 首轮缺少Run/Task lifecycle状态准入，可能在paused/terminal后reserve/dispatch。候选冻结init/manage/reserve/settle矩阵；reserve与control-capable lifecycle pause/terminal transition均在同一writer transaction fold两条stream，pending operation阻止transition，旧set/no-control Run保持REQ-0005语义。 | 全状态表与two-pool `lifecycle_reserve_race`计划证明任一提交顺序只有一个合法结果，terminal/pause后无新dispatch。 | closed |
+| F-002 | Major | `SPEC-0006:86-96,125,169`; `RFC-0006:127-135,177-193,227,231`; REQ-0007 AC-09/10/18 | 首轮没有cancel request/ack authority。候选冻结Run/Task owner-only、operation owner或persisted subject、probe只读、ack仅approved producer+opaque lease或Kernel recovery authority；Gate/Hook/plugin只能proposal，未授权/跨域不写目标，并新增稳定request/ack接口。 | `cancellation_authority`和propagation矩阵覆盖owner/subject/issuer/同域无关actor/跨域、ancestor、重复/乱序ack；未来Capability management须新RFC/Schema。 | closed |
+| F-003 | Major | `SPEC-0006:24-26,62,76-82,113-125`; `RFC-0006:36,88,121-123,156-165,226-227`; REQ-0007 AC-08/13/16 | 首轮callback/settlement producer与evidence authority未定义。候选以retained `TrustedOperationContractV1`、不可序列化opaque lease、producer/operation/reservation/namespace/epoch绑定和首片唯一`kernel_meter_v1`闭合；同scope ID holder不能settle、触发unknown或污染late audit。 | `callback_authority`/usage/idempotency/late矩阵覆盖错误binding、stale/revoked producer、伪造verified evidence、unknown触发权、late与跨域无写入。 | closed |
+| F-004 | Major | `SPEC-0006:26,100-108,197-198`; `RFC-0006:36,137-154,177-193,228-232`; REQ-0007 AC-11/12/18 | 候选已新增Kernel-private timeout/recovery authority、锁内refold、无callback timed-out settlement、verified/unknown核算、reopen枚举和race语义；但required proof中的确定性command/event identity仍未冻结。`TimeoutRecoveryCommandV1`只列authority、operation ID、Clock sample，RFC仅说settlement含“recovery identity”且相同identity幂等，没有定义identity字段、生成/持久化规则或commit-response-loss exact retry。实现无法从durable contract判断event ID是否随clock sample变化、怎样重试或怎样与新晚到recovery区分。 | 在REQ/SPEC/RFC/ADR明确timeout recovery command/event identity：字段与Schema、Kernel确定性派生或首次固定规则、canonical fingerprint、`not_due`是否消费identity、commit response lost的exact retry、same-ID mutation和不同ID terminal-no-op优先级；把这些场景加入`timeout_recovery`/idempotency/model测试。其余Clock、无callback、reopen、accounting和race required proof保持。 | open |
+| F-005 | Major | `SPEC-0006:24,119,125,179-181,203`; `RFC-0006:27,169-175,219,234,254-260`; REQ-0007 AC-17 | 首轮Manifest与control source SchemaSet/limits关系不明确。候选唯一选择Manifest-pinned规则：只有新control-capable set Run可在created初始化，sequence-1、每个row、limits与reducer source均exact；四个完整hash旧set Run拒绝后加control但保留既有lifecycle/Projection/Snapshot；current/alternate/漂移/unknown均fail closed并保留reader/reducer。 | `schema_manifest_binding`、protocol retained-set与Event Store回归覆盖新/四旧set、mismatch/current/alternate、row/limits drift、unknown major、DB v2和rollback。 | closed |
+| F-006 | Major | `SPEC-0006:25,62-66,123,156-165,191-192`; `RFC-0006:88,100-123,203-213,223-226`; REQ-0007 AC-05/06/08 | 首轮不可信requested vector可低报，hard limit可能effect后才发现。候选将其降为observation，retained operation contract确定性产生完整finite trusted envelope；全部Fake资源由Kernel meter在下一单位越界前中止，无法证明/enforce上界则effect前拒绝，reserve/Capability/accounts均按trusted vector。真实Provider/Tool注册明确延期。 | `resource_envelope`/budget/producer测试覆盖低报、零/漏维度、无retained contract、meter violation、unknown、partial/cancel/timeout，并证明no real Provider/Tool scope。 | closed |
+| F-007 | Minor | `SPEC-0006:183-206`; active `PLAN.md` Validation | 首轮过滤命令可0命中且static inspection不可复算。候选现计划新增`assert_cargo_test_filter.py`先list并拒绝0命中，为每个Major场景给出稳定filter，并用`check_req0007_scope.py`检查DB/clock/scope/replay依赖；设计层可复算性已改善。脚本和测试尚属实现任务，本设计复审不宣称已运行。 | 实施时提交helper/static脚本，Validation逐filter记录非零count/result；独立代码评审验证脚本本身不漏检且所有命令可复跑。 | accepted |
 | F-008 | Note | `.agents/work/active/REQ-0007-capability-budget-cancellation-timeout/TASKS.md:12` | 固定提交把后续独立代码评审编号预写为 `REVIEW-0006`；本正式独立设计评审按当时 next available ID 已占用该编号。编号不影响产品合同，但后续不得覆盖本记录。 | 实施后的 fresh independent code review 使用下一个可用 ID（预期 `REVIEW-0007`），并在 Plan/Tasks 正常修订阶段更新引用；保留本评审历史。 | accepted |
 
 # Constitutional effect trace
 
-| Effect path | Design evidence at `05dd7ca` | Independent result |
+| Effect path | Candidate design evidence | Independent result |
 |---|---|---|
-| Capability issue/delegate/revoke | authenticated principal → persisted owner signer → parent-chain/subset check → `capability-issued/revoked` → pure fold → Projection/reopen | root/default-deny、child收窄、撤销/到期主链成立；cancellation/settlement等管理权未被这条链完整覆盖，见 F-002/F-003。 |
-| Protected operation allow | request → persisted lifecycle/control → Capability → cancellation/deadline → atomic reserve Event → Fake boundary → settlement Event → Projection/recovery | 事件与预算事务边界合理；缺 lifecycle state guard和可信resource upper bound，故 operation boundary可在非法状态或低报预算后到达，见 F-001/F-006。 |
-| Protected operation deny | integrity/isolation → decision → same-aggregate safe denial Event，cross-scope no append → audit counters → replay | 默认拒绝和跨域不写目标原则明确；management/callback主体的业务授权类别未闭合，见 F-002/F-003。 |
-| Cancellation | requester → `cancellation-requested` → ancestor predicate → probe/ack/cancelled settlement → Projection/reopen | request/ack/settlement与lifecycle state分离是正确选择；requester和ack authority未定义，见 F-002。 |
-| Deadline/timeout | injected Clock → absolute UTC + live monotonic lease → timed-out settlement → late audit → restart fold | 双时钟持久化边界正确；无权威 timeout/recovery writer路径，trace在 timed-out Event 前中断，见 F-004。 |
-| Budget settlement/refund | callback/evidence → checked consume/release或unknown全额 → settlement Event；owner refund → correction Event → fold/projection | gross/refund/net equations和owner refund边界合理；callback admission及执行前用量上界未闭合，见 F-003/F-006。 |
-| Late/duplicate/out-of-order | callback identity → AlreadyApplied/conflict或safe digest audit → counters only → replay | terminal后no-mutation原则明确；producer admission仍依赖未定义callback contract，见 F-003。 |
+| Capability issue/delegate/revoke | principal → persisted owner/parent authority → lifecycle guard → subset/revocation/expiry → control Event → pure fold → Projection/reopen | 默认拒绝、owner无operation bypass、delegate收窄与management lifecycle矩阵闭合。 |
+| Protected operation allow | proposal → Manifest-pinned readers → lifecycle guard → Capability → trusted operation contract/envelope → cancel/deadline → atomic reserve Event → opaque lease/Fake meter → authorized settlement Event → Projection/recovery | state、authority、pre-effect hard budget与atomic reserve链闭合，F-001/F-006 closed。 |
+| Protected operation deny | integrity/isolation → lifecycle/capability/envelope/budget decision → same-aggregate safe denial Event；unauthorized/cross-scope no append | stable errors和安全audit边界可测试；cancel/callback的同域低权限主体也被独立authority table拒绝。 |
+| Cancellation | owner或persisted operation subject → request authority → cancellation Event → ancestor predicate → lease probe → producer/recovery ack + settlement → Projection/reopen | request/probe/ack/settlement authority与no-write负例闭合，F-002 closed。 |
+| Deadline/timeout | trusted Clock → persisted absolute UTC/live monotonic → Kernel recovery authority → lock-time refold → timed-out settlement → late audit/reopen | 无callback、unknown核算和winner路径已闭合；recovery command/event identity仍未定义，trace的幂等/evidence identity不完整，F-004 open。 |
+| Budget settlement/refund | trusted envelope/meter + producer/lease → checked consume/release或authorized unknown → settlement Event；owner refund → correction Event → fold | producer authority、hard limit、gross/refund/net和terminal no-reopen闭合，F-003/F-006 closed。 |
+| Late/duplicate/out-of-order | producer+lease → AlreadyApplied/conflict或safe digest audit；unauthorized producer no append → counters/replay | terminal no-mutation、redaction与audit admission闭合。 |
 | Recorded replay | exact source control history → retained reader/reducer → Projection/digest；无executor/append authority | read/fold-only类型隔离满足replay零执行/零重复核算的设计要求；仍需实现证据证明counter/event/budget不变。 |
 
 # Acceptance trace
 
 | Acceptance | Review result | Evidence and gap |
 |---|---|---|
-| AC-01 | 设计满足 | Capability闭合字段、subject/scope/resource/operation/time/delegation/parent及“payload不等于authority”已冻结。 |
-| AC-02 | 部分满足 | 默认拒绝、persisted admission和private authority成立；非法lifecycle state仍可进入operation path，见F-001。 |
-| AC-03 | 设计满足 | root owner、delegate subset、full-chain revalidation、revocation/expiry及FakeClock目标均明确。 |
-| AC-04 | 部分满足 | same-aggregate safe denial与cross-scope no-write明确；取消和callback authority缺口使“已认证业务拒绝”边界不完整，见F-002/F-003。 |
-| AC-05 | 部分满足 | dimension、canonical unsigned、Run/Task/Actor/operation账本和hard/soft equations明确；requested vector不是可信上界，见F-006。 |
-| AC-06 | 部分满足 | 单 `BEGIN IMMEDIATE` 多账户全有或全无与防超卖成立；缺lifecycle state guard和pre-dispatch trusted resource bound，见F-001/F-006。 |
-| AC-07 | 部分满足 | consume/release/refund、gross/net及unknown保守规则明确；timeout无callback的settlement路径和actual超reserve前置防护未定义，见F-004/F-006。 |
-| AC-08 | 部分满足 | observation非权威和ID冲突语义明确；谁能形成callback/evidence admission、如何阻止低报后执行未定义，见F-003/F-006。 |
-| AC-09 | 未满足 | request/ack/settlement事实已分离，但三级取消的授权主体与稳定request API未冻结，见F-002。 |
-| AC-10 | 部分满足 | cooperative/uninterruptible语义和互斥终态目标明确；无回调/无重入时timeout无法权威化，见F-004。 |
-| AC-11 | 部分满足 | absolute UTC、process-local monotonic和restart新lease正确；缺失timeout/recovery command及其authority/event/accounting，见F-004。 |
-| AC-12 | 部分满足 | deadline equality和SQLite commit-order规则明确；lifecycle terminal与reserve竞态、无callback timeout竞态未进入模型，见F-001/F-004。 |
-| AC-13 | 部分满足 | exact duplicate/mutation/late digest no-mutation明确；callback producer authority未定义，见F-003。 |
-| AC-14 | 设计满足 | 单control stream、sequence-1、exact validated full fold、无第二权威表及corruption fail-closed已冻结。 |
-| AC-15 | 设计满足 | full-provenance Projection、完整历史Recorded replay与no executor/append/account mutation边界明确。 |
-| AC-16 | 部分满足 | scope和业务ID exact isolation矩阵完整；同域低权限cancel/callback混用仍无授权判定，见F-002/F-003。 |
-| AC-17 | 未满足 | retained sets、DB v2不变和unknown major fail-closed方向正确；Manifest与control source SchemaSet的exact关系未冻结，见F-005。 |
-| AC-18 | 未满足 | downstream模块不得取得authority/raw transaction的原则正确；cancel、callback、timeout和trusted resource envelope接口尚不足以成为稳定消费边界，见F-002/F-003/F-004/F-006。 |
-| AC-19 | 未满足 | 场景列表广，但缺口语义没有对应测试且非零命中/静态检查不可复算，见F-001..F-007。 |
-| AC-20 | 仅为计划 | 设计声明保持protocol依赖方向、DB v2、REQ-0003..0006回归和无真实Provider/Tool；提交尚无实现，本评审不把计划命令当通过证据。 |
+| AC-01 | 设计满足 | Capability闭合字段、subject/scope/resource/operation/time/delegation/parent及“payload不等于authority”保持冻结。 |
+| AC-02 | 设计满足 | exact lifecycle history进入private admission；init/manage/reserve/settle矩阵和transition/reserve serialization关闭F-001。 |
+| AC-03 | 设计满足 | root owner、delegate subset、full-chain revalidation、revocation/expiry保持明确。 |
+| AC-04 | 设计满足 | same-aggregate safe denial、跨域/未授权no-write及新增management/producer authority reason均闭合。 |
+| AC-05 | 设计满足 | canonical dimensions与账本之外，retained trusted envelope/meter在effect前覆盖全部required dimensions，关闭F-006。 |
+| AC-06 | 设计满足 | lifecycle、Capability、envelope和多scope account在单writer transaction全有或全无；余额与transition竞争均有模型计划。 |
+| AC-07 | 部分满足 | consume/release/refund、partial、unknown和无callback timeout核算已定义；timeout recovery exact retry仍缺确定性identity，见F-004。 |
+| AC-08 | 设计满足 | 首片仅Kernel meter authoritative；producer/lease/evidence/namespace/epoch绑定和unknown触发权关闭F-003。 |
+| AC-09 | 设计满足 | Run/Task owner-only、operation owner/subject、probe/ack authority及稳定API/no-write语义冻结。 |
+| AC-10 | 设计满足 | cooperative probe/ack、uninterruptible callback或Kernel recovery及四终态互斥闭合。 |
+| AC-11 | 部分满足 | 双时钟、无callback/reopen recovery、unknown结算均已定义；recovery command/event identity与commit-loss重试仍缺，见F-004。 |
+| AC-12 | 部分满足 | deadline equality、cancel/callback/timeout和lifecycle/reserve commit-order winner已冻结；timeout recovery幂等identity仍影响完整模型，见F-004。 |
+| AC-13 | 设计满足 | 只有原producer/lease可duplicate/late；mutation conflict、unauthorized no-write和audit no-mutation明确。 |
+| AC-14 | 设计满足 | 单control stream、exact validated fold、无第二权威表及corruption fail-closed保持。 |
+| AC-15 | 设计满足 | full-provenance Projection、完整历史Recorded replay和无executor/writer/account mutation保持。 |
+| AC-16 | 设计满足 | 全scope/ID exact之外，同域低权限cancel/callback、错误lease/account/set均有负测计划。 |
+| AC-17 | 设计满足 | Manifest-pinned新set唯一规则、四旧set拒绝升级、row/limits/reducer exact、DB v2与retention关闭F-005。 |
+| AC-18 | 部分满足 | stable private interfaces现含cancel/probe/ack/callback/envelope/recovery且不实现下游框架；recovery identity仍不是完整版本化命令合同，见F-004。 |
+| AC-19 | 部分满足 | 新矩阵覆盖F-001..F-006场景并计划非零filter/static helper；F-004 identity场景仍缺，helper与测试尚待实现证据。 |
+| AC-20 | 仅为计划 | `907eee7..cfa7a06`无Runtime/Schema/DB/API/依赖变化；完整REQ-0003..0006回归仍属于实施后验证，不能由设计复审宣称通过。 |
 
 # Compatibility, permission, and isolation review
 
-- 可信内核不可绕过的总体方向成立：control Event envelope恒为persisted Manifest owner，delegate/requester只在闭合payload中表达；公开Schema值、Projection和Replay均不取得append或dispatch authority。
-- tenant、user presence/value、workspace、run、owner、subject、Task、stream和强类型业务ID的exact隔离设计充分；但“同一隔离域”只解决身份，不决定cancel、ack或settlement权限，F-002/F-003必须单独闭合。
-- 单Run control stream与SQLite单writer适合首片原子reserve和terminal winner；lifecycle stream与control stream虽在同库，但必须明确在一个writer transaction内执行lifecycle状态guard，不能只读取Manifest/Task存在性。
-- Control Projection/Snapshot/Replay没有第二权威表，Recorded replay也没有Operation/Effect executor，满足ARCH-0002的事件完整性与重放诚实方向。
-- SQLite `user_version=2`、现有Snapshot DDL/trigger和四个retained SchemaSet不应改变；F-005要求先决定control source set怎样由immutable Manifest固定，否则兼容与rollback无法验证。
-- quality、cost、latency仍被分开描述，且没有优化声明；但 hard budget质量门禁必须在dispatch前成立，不能用settlement后的`invalid_usage`代替，见F-006。
+- control Event envelope恒为Manifest owner；requester、subject、producer与cancellation requester是闭合payload事实，只有owner/parent、opaque lease+registered producer或Kernel recovery authority能形成对应admission。公开Schema值、ID、Projection、Replay和同scope身份都不取得authority。
+- tenant、user presence/value、workspace、run、owner、subject、Task、stream和全部业务ID仍exact隔离；取消和callback另有同域权限矩阵，未授权及跨域都不写目标。
+- lifecycle/control两stream共享SQLite writer：reserve与pause/terminal transition锁内fold两条history，既避免terminal后dispatch，也保持旧set/no-control Run的REQ-0005状态合同。该additive guard不重释lifecycle `cancelled`或既有Event。
+- 新control source只能来自immutable Manifest固定的新control-capable set/limits；四个retained旧set完整hash已列出且不升级。RunTask reducer仍只抽取四个lifecycle binding；SQLite v2、Snapshot DDL/trigger/checksum和已有reader identity不变。
+- retained trusted operation contract与Kernel meter把hard budget enforcement前移至dispatch前；真实Provider/Tool/Effect/Receipt authority明确延期，不在候选中实现。
+- Projection仍是Event派生，Recorded replay没有executor、append、timeout/recovery writer或mutable budget authority；quality、cost、latency继续分开且没有优化声明。
 
 # Regression and test review
 
-本轮是固定提交上的设计评审，不是实现或代码评审。未运行Runtime、Cargo、Schema生成或性能测试，也不接受
-`.agents/work/.../VALIDATION.md` 的已有baseline作为REQ-0007行为证据。设计修订与后续实现至少需要：
+本轮是固定提交上的设计复审，不是实现或代码评审。候选没有Runtime、Schema或DB实现，因此未把Cargo、Schema
+生成、性能或active VALIDATION baseline当成REQ-0007行为证据。后续实现至少需要：
 
-- Focused：新增F-001..F-006所列状态、authority、callback、timeout、SchemaSet和resource-envelope表/模型测试；每个filter记录非零命中。
+- Focused：落实F-001..F-006所列状态、authority、callback、timeout identity、SchemaSet和resource-envelope表/模型测试；每个filter记录非零命中。
 - Impacted：REQ-0005 lifecycle terminal/concurrency、REQ-0006 reducer/source identity/Recorded replay、Event Store transaction/idempotency/isolation与所有retained SchemaSet回归。
 - Core：跨tenant/user presence-value/workspace/run/actor/Task全矩阵、同域低权限主体、two-pool race、real SQLite close/reopen、unknown/current substitution、replay零dispatch/append/accounting。
 - Compatibility：明确Manifest/control source set规则后，证明四个旧set byte-identical、旧Run的受支持/拒绝行为、新set重复生成、DB v2 actual DDL/trigger bytes和RunTask reducer identity不变。
 - 静态与治理：`python scripts/check_docs.py`、completion gates、可复现no-real-sleep/no-Provider/Tool/Effect/API/dependency检查及`git diff --check`。
 
-本Review记录创建后独立执行的文档校验：
+本轮Review与REVIEW-0001..0005 substantive freshness记录落盘后独立执行的文档校验见下方
+Re-review history；F-004未关闭，因此即使治理门禁通过也不构成设计批准。
 
-- `python scripts/check_docs.py`：failed。checker 报告 `REVIEW-0001` 至 `REVIEW-0005` 的
-  reviewed revision stale；报告的 substantive paths 同时包含固定提交新增的REQ-0007
-  Requirement/Spec/RFC/ADR和active work文件，以及评审开始前已有的两处未提交protocol代码。
-  本Reviewer未修改旧Review、checker或被评审设计来掩盖该失败；复审批准前必须按项目规则恢复门禁，
-  且不得把本次失败描述为通过。
-- `git diff --check`：passed；该命令覆盖整个工作树，因此结果包含但不采信评审开始前两处用户Runtime改动的语义。
+- `python scripts/check_docs.py`：passed，170 Markdown files、49 formal IDs；REVIEW-0001..0005
+  的freshness只在逐项确认`907eee7..cfa7a06`未改变各自已批准Runtime/Schema/DB/API事实后前移。
+- `git diff --check`：passed。
+- `git status --short`：仅`docs/reviews/REVIEW-0001..0006`为Reviewer-owned修改；无被评审设计或Runtime改动。
 
 # Scope and unrelated changes
 
-评审对象只包括固定提交中的REQ-0007 Requirement/Spec/RFC/ADR、指定active work记录、ARCH-0002/0003、
-REQ/SPEC/RFC/ADR-0005/0006及其Event Store/协议accepted boundary。没有修改任何被评审设计文件、
-Runtime代码、Schema、Cargo文件或用户已有改动。本轮唯一新增文件是本Review记录。
+focused对象为`05dd7ca..cfa7a06`的REQ-0007 Requirement/Spec/RFC/ADR、active work和本Review，
+并回看ARCH-0002/0003、REQ/SPEC/RFC/ADR-0005/0006。完整`907eee7..cfa7a06`进一步证明只新增/修订
+REQ-0007设计与Review记录；`crates/`、`schemas/`、Cargo、AGENTS、scripts、skills、DB/API实现和REQ-0001..0006
+durable合同零差异。本Reviewer只修改`docs/reviews/REVIEW-0001..0006`，没有修改任何被评审设计或Runtime。
 
 # Re-review conditions
 
-同一 independent reviewer 可对仅含设计修订的精确commit做focused re-review，但F-001..F-006只能在
-REQ/SPEC/RFC/ADR形成一致、可测试的durable contract后关闭；仅修改Plan、Tasks、self-review或实现代码不足以关闭。
-复审必须固定revision、逐项核对required proof、重做AC-01..20 trace、恢复`check_docs.py`并确认0 open Blocker/Major后才可把本记录改为
-`approved`。设计获批后，实施仍需由fresh independent reviewer以新的Review ID执行exact implementation code review，
-本设计评审不能替代该门禁。
+下一轮只需对修复F-004的exact设计commit做focused re-review，但必须在REQ/SPEC/RFC/ADR冻结timeout recovery
+command/event identity与重试冲突规则，并把场景映射到非零filter后才能关闭；只改Plan、self-review或实现代码不足以关闭。
+复审仍须固定revision、重做受影响AC trace、通过`check_docs.py`/`git diff --check`并确认0 open Blocker/Major后才可
+`approved`。实施仍需fresh independent code review和新的Review ID；本设计评审不能替代。
 
 # Re-review history
 
 - 2026-08-25：fresh independent design review of exact
   `05dd7ca7ece0d362aa96a6bb99f6c92e5d8999b2`；排除提交后的未提交Runtime改动。结论0 Blocker、
   6 Major、1 accepted Minor、1 accepted Note，changes requested。
+- 2026-08-25：focused independent re-review of exact
+  `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f` against `05dd7ca`。逐项关闭F-001 lifecycle
+  admission/two-stream guard、F-002 cancellation authority、F-003 callback/evidence producer、F-005
+  Manifest/control SchemaSet binding和F-006 trusted resource envelope；F-007的非零filter/static命令已成为可复算
+  实施计划，保持accepted Minor。F-004因timeout recovery command/event identity仍未定义而保持open。
+  结论0 Blocker、1 Major、1 accepted Minor、1 accepted Note，仍为changes requested；Runtime继续阻塞。
