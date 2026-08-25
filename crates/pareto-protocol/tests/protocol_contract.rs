@@ -173,7 +173,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 16);
+    assert_eq!(first.len(), 26);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -187,6 +187,81 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
         );
         assert_eq!(schema.document["unevaluatedProperties"], false);
     }
+}
+
+#[test]
+fn projection_snapshot_contract() {
+    let bundle = generate_schema_bundle().unwrap();
+    for required in [
+        "event-cursor",
+        "projection-history-seed",
+        "projection-history-step",
+        "projection-reducer-descriptor",
+        "projection-reducer-ref",
+        "run-task-projection-hash-view",
+        "run-task-projection",
+        "run-task-projection-snapshot-hash-view",
+        "run-task-projection-snapshot",
+        "source-reducer-key",
+    ] {
+        assert!(
+            bundle
+                .manifest
+                .schemas
+                .iter()
+                .any(|schema| schema.r#type == required),
+            "missing {required}"
+        );
+    }
+    let snapshot = bundle
+        .schemas
+        .iter()
+        .find(|schema| schema.filename == "run-task-projection-snapshot-v1.0.schema.json")
+        .unwrap();
+    assert_eq!(snapshot.document["unevaluatedProperties"], false);
+    assert_eq!(bundle.manifest.event_bindings.len(), 4);
+}
+
+#[test]
+fn projection_digest_golden() {
+    let seed_schema = schema("projection-history-seed", '1');
+    let step_schema = schema("projection-history-step", '2');
+    let seed_value = json!({"algorithm":"run-task-history-chain-v1"});
+    let seed = digest_json("projection-history-chain-seed", &seed_schema, &seed_value).unwrap();
+    let one_value = json!({
+        "algorithm":"run-task-history-chain-v1",
+        "previous_digest":seed,
+        "sequence":"1",
+        "envelope":{"event_id":"event_one","sequence":"1"},
+        "source_schema_set_ref":{"manifest_schema_ref":schema("schema-set-manifest", '3'),"manifest_digest":digest('4')},
+        "source_protocol_limits_ref":{"profile":"protocol-limits-v1","digest":digest('5')}
+    });
+    let one = digest_json("projection-history-chain-step", &step_schema, &one_value).unwrap();
+    let two_value = json!({
+        "algorithm":"run-task-history-chain-v1",
+        "previous_digest":one,
+        "sequence":"2",
+        "envelope":{"event_id":"event_two","sequence":"2"},
+        "source_schema_set_ref":{"manifest_schema_ref":schema("schema-set-manifest", '3'),"manifest_digest":digest('4')},
+        "source_protocol_limits_ref":{"profile":"protocol-limits-v1","digest":digest('5')}
+    });
+    let two_from_prefix =
+        digest_json("projection-history-chain-step", &step_schema, &two_value).unwrap();
+    let two_from_full =
+        digest_json("projection-history-chain-step", &step_schema, &two_value).unwrap();
+    assert_eq!(two_from_prefix, two_from_full);
+    assert_eq!(
+        seed.as_str(),
+        "sha256:6aec642c6ef3ff04139f58e33029f332c26d41bf190cde93c3a2f24e28025366"
+    );
+    assert_eq!(
+        one.as_str(),
+        "sha256:c0191409887d68f019f8b7d9945c7fd6a11ac3365d0278046106ed648cf72672"
+    );
+    assert_eq!(
+        two_from_full.as_str(),
+        "sha256:fdea26aac4058215776669944abf577138b2c88255b21aa4c361fc31ed50d783"
+    );
 }
 
 #[test]

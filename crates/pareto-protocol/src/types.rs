@@ -813,6 +813,237 @@ pub struct TaskStateTransitionedPayload {
     pub reason_code: String,
 }
 
+/// Inclusive position of one authoritative event in a lifecycle stream.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventCursor {
+    /// Positive canonical decimal stream sequence.
+    pub sequence: String,
+    /// Exact event at the inclusive sequence.
+    pub event_id: EventId,
+}
+
+/// Exact identity of one immutable projection reducer contract.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionReducerRef {
+    /// Schema of the immutable reducer descriptor.
+    pub descriptor_schema_ref: SchemaRef,
+    /// Digest of the complete descriptor in the reducer-contract domain.
+    pub contract_digest: Digest,
+}
+
+/// Persisted source contract fields used to resolve an exact reducer.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceReducerKeyV1 {
+    /// Exact Run Manifest schema admitted by the source set.
+    pub run_manifest_schema_ref: SchemaRef,
+    /// Exact accepted lifecycle bindings in deterministic order.
+    pub event_bindings: Vec<EventTypeBinding>,
+}
+
+/// Closed immutable description of the Run/Task reducer behavior contract.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionReducerDescriptorV1 {
+    /// Descriptor schema.
+    pub schema_ref: SchemaRef,
+    /// Stable reducer family.
+    pub reducer_kind: String,
+    /// Breaking reducer contract version.
+    pub major: u32,
+    /// Compatible reducer contract version.
+    pub minor: u32,
+    /// Exact lifecycle bindings accepted by this reducer.
+    pub accepted_event_bindings: Vec<EventTypeBinding>,
+    /// Exact Run Manifest schema validated before state construction.
+    pub run_manifest_schema_ref: SchemaRef,
+    /// Stable name of the complete Manifest admission contract.
+    pub manifest_admission_contract: String,
+    /// Complete deterministic Run transition table entries.
+    pub run_transition_contract: Vec<String>,
+    /// Complete deterministic Task transition table entries.
+    pub task_transition_contract: Vec<String>,
+    /// Complete parent and child guard contract entries.
+    pub parent_guard_contract: Vec<String>,
+    /// Stable Task ordering contract.
+    pub task_ordering: String,
+    /// Versioned rolling history algorithm.
+    pub history_algorithm: String,
+    /// Exact history seed hash-view schema.
+    pub history_seed_schema_ref: SchemaRef,
+    /// Exact history step hash-view schema.
+    pub history_step_schema_ref: SchemaRef,
+    /// Exact Projection hash-view schema.
+    pub projection_hash_schema_ref: SchemaRef,
+    /// Exact Snapshot hash-view schema.
+    pub snapshot_hash_schema_ref: SchemaRef,
+    /// Exact output SchemaSet retained with the reducer.
+    pub output_schema_set_ref: SchemaSetRef,
+    /// Exact output limits retained with the reducer.
+    pub output_protocol_limits_ref: ProtocolLimitsRef,
+    /// Exact Projection output schema.
+    pub projection_schema_ref: SchemaRef,
+    /// Exact Snapshot output schema.
+    pub snapshot_schema_ref: SchemaRef,
+}
+
+/// Frozen seed preimage for the versioned rolling lifecycle history chain.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionHistorySeedV1 {
+    /// Exact rolling algorithm identifier.
+    pub algorithm: String,
+}
+
+/// Frozen incremental preimage for one validated lifecycle event.
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionHistoryStepV1 {
+    /// Exact rolling algorithm identifier.
+    pub algorithm: String,
+    /// Digest of the preceding prefix.
+    pub previous_digest: Digest,
+    /// Positive canonical decimal sequence matching the envelope.
+    pub sequence: String,
+    /// Complete canonical authoritative event envelope.
+    pub envelope: EventEnvelope,
+    /// Exact SchemaSet used to admit the event.
+    pub source_schema_set_ref: SchemaSetRef,
+    /// Exact limits used to admit the event.
+    pub source_protocol_limits_ref: ProtocolLimitsRef,
+}
+
+/// Deterministically ordered Task entry in a Run/Task Projection.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunTaskProjectionTask {
+    /// Task identifier.
+    pub task_id: TaskId,
+    /// Immutable optional parent Task.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub parent_task_id: Option<TaskId>,
+    /// Folded Task state.
+    pub state: TaskState,
+}
+
+/// Frozen Projection digest preimage excluding the digest field itself.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunTaskProjectionHashViewV1 {
+    /// Exact Projection output schema.
+    pub projection_schema_ref: SchemaRef,
+    /// Kernel-read immutable Event Store identity.
+    pub source_store_id: String,
+    /// Complete source isolation scope.
+    pub scope: IsolationScope,
+    /// Persisted owner actor.
+    pub owner_actor: AgentId,
+    /// Derived lifecycle stream.
+    pub stream_id: StreamId,
+    /// Inclusive event horizon.
+    pub cursor: EventCursor,
+    /// Exact source Event SchemaSet.
+    pub source_schema_set_ref: SchemaSetRef,
+    /// Exact source Event limits.
+    pub source_protocol_limits_ref: ProtocolLimitsRef,
+    /// Exact reducer contract.
+    pub reducer_ref: ProjectionReducerRef,
+    /// Exact output SchemaSet.
+    pub output_schema_set_ref: SchemaSetRef,
+    /// Exact output limits.
+    pub output_protocol_limits_ref: ProtocolLimitsRef,
+    /// Rolling digest of every validated event through the cursor.
+    pub history_chain_state: Digest,
+    /// Complete persisted Run Manifest.
+    pub manifest: RunManifest,
+    /// Folded Run state.
+    pub run_state: RunState,
+    /// Task entries sorted by Task ID.
+    pub tasks: Vec<RunTaskProjectionTask>,
+}
+
+/// Versioned deterministic projection of one authoritative Run lifecycle.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunTaskProjection {
+    /// Exact Projection output schema.
+    pub schema_ref: SchemaRef,
+    /// Kernel-read immutable Event Store identity.
+    pub source_store_id: String,
+    /// Complete source isolation scope.
+    pub scope: IsolationScope,
+    /// Persisted owner actor.
+    pub owner_actor: AgentId,
+    /// Derived lifecycle stream.
+    pub stream_id: StreamId,
+    /// Inclusive event horizon.
+    pub cursor: EventCursor,
+    /// Exact source Event SchemaSet.
+    pub source_schema_set_ref: SchemaSetRef,
+    /// Exact source Event limits.
+    pub source_protocol_limits_ref: ProtocolLimitsRef,
+    /// Exact reducer contract.
+    pub reducer_ref: ProjectionReducerRef,
+    /// Exact output SchemaSet.
+    pub output_schema_set_ref: SchemaSetRef,
+    /// Exact output limits.
+    pub output_protocol_limits_ref: ProtocolLimitsRef,
+    /// Rolling digest of every validated event through the cursor.
+    pub history_chain_state: Digest,
+    /// Complete persisted Run Manifest.
+    pub manifest: RunManifest,
+    /// Folded Run state.
+    pub run_state: RunState,
+    /// Task entries sorted by Task ID.
+    pub tasks: Vec<RunTaskProjectionTask>,
+    /// Digest of the closed Projection hash view.
+    pub projection_digest: Digest,
+}
+
+/// Frozen Snapshot digest preimage excluding the digest field itself.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunTaskProjectionSnapshotHashViewV1 {
+    /// Exact Snapshot schema.
+    pub snapshot_schema_ref: SchemaRef,
+    /// Exact Projection schema stored in the Snapshot.
+    pub projection_schema_ref: SchemaRef,
+    /// Exact output/snapshot SchemaSet.
+    pub output_schema_set_ref: SchemaSetRef,
+    /// Exact output/snapshot limits.
+    pub output_protocol_limits_ref: ProtocolLimitsRef,
+    /// Complete cached Projection.
+    pub projection: RunTaskProjection,
+    /// Redundant exact Projection digest bound by the Snapshot.
+    pub projection_digest: Digest,
+}
+
+/// Immutable, same-database cache of one verified Run/Task Projection.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunTaskProjectionSnapshot {
+    /// Exact Snapshot schema.
+    pub schema_ref: SchemaRef,
+    /// Exact Projection schema stored in the Snapshot.
+    pub projection_schema_ref: SchemaRef,
+    /// Exact output/snapshot SchemaSet.
+    pub output_schema_set_ref: SchemaSetRef,
+    /// Exact output/snapshot limits.
+    pub output_protocol_limits_ref: ProtocolLimitsRef,
+    /// Complete cached Projection and provenance.
+    pub projection: RunTaskProjection,
+    /// Redundant exact Projection digest bound by the Snapshot.
+    pub projection_digest: Digest,
+    /// Digest of the complete closed Snapshot hash view.
+    pub snapshot_digest: Digest,
+}
+
 /// Structured evidence verdict; natural language cannot introduce a passing state.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -245,7 +245,7 @@ async fn migration_is_atomic_versioned_and_detects_trigger_drift() {
     let options =
         SqliteConnectOptions::from_str(&format!("sqlite://{}", fixture.path.display())).unwrap();
     let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
-    connection.execute("PRAGMA user_version=2").await.unwrap();
+    connection.execute("PRAGMA user_version=3").await.unwrap();
     assert_eq!(
         EventStore::open_pinned(&fixture.path, &store_id)
             .await
@@ -253,7 +253,7 @@ async fn migration_is_atomic_versioned_and_detects_trigger_drift() {
             .kind,
         ErrorKind::Migration
     );
-    connection.execute("PRAGMA user_version=1").await.unwrap();
+    connection.execute("PRAGMA user_version=2").await.unwrap();
     connection
         .execute("DROP TRIGGER events_no_delete")
         .await
@@ -919,7 +919,7 @@ async fn retained_schema_registry_drives_exact_reader_and_rejects_substitution()
             .fetch_one(&store.pool)
             .await
             .unwrap(),
-        1
+        2
     );
     assert_eq!(
         store

@@ -1348,6 +1348,27 @@ protocol_record!(
     "boundary-reconciliation-hash-view"
 );
 protocol_record!(crate::RevisionHashView, "revision-hash-view");
+protocol_record!(crate::ProjectionHistorySeedV1, "projection-history-seed");
+protocol_record!(crate::ProjectionHistoryStepV1, "projection-history-step");
+protocol_record!(
+    crate::ProjectionReducerDescriptorV1,
+    "projection-reducer-descriptor"
+);
+protocol_record!(crate::ProjectionReducerRef, "projection-reducer-ref");
+protocol_record!(crate::RunTaskProjection, "run-task-projection");
+protocol_record!(
+    crate::RunTaskProjectionHashViewV1,
+    "run-task-projection-hash-view"
+);
+protocol_record!(
+    crate::RunTaskProjectionSnapshot,
+    "run-task-projection-snapshot"
+);
+protocol_record!(
+    crate::RunTaskProjectionSnapshotHashViewV1,
+    "run-task-projection-snapshot-hash-view"
+);
+protocol_record!(crate::SourceReducerKeyV1, "source-reducer-key");
 protocol_record!(crate::SchemaSetManifest, "schema-set-manifest");
 
 impl sealed::ProtocolRecord for ProtocolLimitsProfileV1 {}

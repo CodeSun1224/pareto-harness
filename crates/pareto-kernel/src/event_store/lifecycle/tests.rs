@@ -282,7 +282,7 @@ async fn manifest() {
     .fetch_one(&store.pool)
     .await
     .unwrap();
-    assert_eq!(user_version, 1);
+    assert_eq!(user_version, 2);
     assert_eq!(extra_authority_tables, 0);
 }
 

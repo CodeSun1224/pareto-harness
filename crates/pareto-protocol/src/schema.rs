@@ -4,11 +4,14 @@ use serde_json::Value;
 
 use crate::{
     ArtifactManifest, BoundaryInventoryHashView, BoundaryInventoryRevision,
-    BoundaryReconciliationHashView, BoundaryReconciliationRevision, EventEnvelope,
-    EventTypeBinding, EvidenceRecord, ProtocolLimitsProfileV1, RevisionHashView, RevisionMetadata,
-    RunCreatedPayload, RunManifest, RunStateTransitionedPayload, SchemaRef, SchemaSetManifest,
-    SchemaSetRef, TaskCreatedPayload, TaskStateTransitionedPayload, ValidationError, digest_json,
-    digest_schema,
+    BoundaryReconciliationHashView, BoundaryReconciliationRevision, EventCursor, EventEnvelope,
+    EventTypeBinding, EvidenceRecord, ProjectionHistorySeedV1, ProjectionHistoryStepV1,
+    ProjectionReducerDescriptorV1, ProjectionReducerRef, ProtocolLimitsProfileV1, RevisionHashView,
+    RevisionMetadata, RunCreatedPayload, RunManifest, RunStateTransitionedPayload,
+    RunTaskProjection, RunTaskProjectionHashViewV1, RunTaskProjectionSnapshot,
+    RunTaskProjectionSnapshotHashViewV1, SchemaRef, SchemaSetManifest, SchemaSetRef,
+    SourceReducerKeyV1, TaskCreatedPayload, TaskStateTransitionedPayload, ValidationError,
+    digest_json, digest_schema,
 };
 
 /// A generated public JSON Schema and its stable filename.
@@ -40,14 +43,28 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<BoundaryReconciliationHashView>("boundary-reconciliation-hash-view", 1, 0)?,
         generate::<BoundaryReconciliationRevision>("boundary-reconciliation-revision", 1, 0)?,
         generate::<EventEnvelope>("event-envelope", 1, 0)?,
+        generate::<EventCursor>("event-cursor", 1, 0)?,
         generate::<EvidenceRecord>("evidence-record", 1, 0)?,
+        generate::<ProjectionHistorySeedV1>("projection-history-seed", 1, 0)?,
+        generate::<ProjectionHistoryStepV1>("projection-history-step", 1, 0)?,
+        generate::<ProjectionReducerDescriptorV1>("projection-reducer-descriptor", 1, 0)?,
+        generate::<ProjectionReducerRef>("projection-reducer-ref", 1, 0)?,
         generate::<ProtocolLimitsProfileV1>("protocol-limits-profile", 1, 0)?,
         generate::<RevisionHashView>("revision-hash-view", 1, 0)?,
         generate::<RevisionMetadata>("revision-metadata", 1, 0)?,
         generate::<RunCreatedPayload>("run-created-payload", 1, 0)?,
         generate::<RunManifest>("run-manifest", 1, 0)?,
         generate::<RunStateTransitionedPayload>("run-state-transitioned-payload", 1, 0)?,
+        generate::<RunTaskProjection>("run-task-projection", 1, 0)?,
+        generate::<RunTaskProjectionHashViewV1>("run-task-projection-hash-view", 1, 0)?,
+        generate::<RunTaskProjectionSnapshot>("run-task-projection-snapshot", 1, 0)?,
+        generate::<RunTaskProjectionSnapshotHashViewV1>(
+            "run-task-projection-snapshot-hash-view",
+            1,
+            0,
+        )?,
         generate::<SchemaSetManifest>("schema-set-manifest", 1, 0)?,
+        generate::<SourceReducerKeyV1>("source-reducer-key", 1, 0)?,
         generate::<TaskCreatedPayload>("task-created-payload", 1, 0)?,
         generate::<TaskStateTransitionedPayload>("task-state-transitioned-payload", 1, 0)?,
     ];
@@ -290,14 +307,29 @@ fn harden_named_properties(value: &mut Value) {
                         "type" => {
                             set_string_contract(schema, r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", 1, 128)
                         }
-                        "logical_id" | "revision_kind" | "artifact_kind" | "media_type"
-                        | "event_type" | "variant_id" | "correlation_id" | "claim"
-                        | "evidence_type" | "evidence_scope" | "freshness" | "source"
-                        | "boundary_kind" | "reason_code" => {
+                        "logical_id"
+                        | "revision_kind"
+                        | "artifact_kind"
+                        | "media_type"
+                        | "event_type"
+                        | "variant_id"
+                        | "correlation_id"
+                        | "claim"
+                        | "evidence_type"
+                        | "evidence_scope"
+                        | "freshness"
+                        | "source"
+                        | "boundary_kind"
+                        | "reason_code"
+                        | "reducer_kind"
+                        | "manifest_admission_contract"
+                        | "task_ordering"
+                        | "algorithm" => {
                             if let Some(object) = schema.as_object_mut() {
                                 object.insert("minLength".to_owned(), Value::Number(1_u64.into()));
                             }
                         }
+                        "source_store_id" => set_string_contract(schema, r"^[0-9a-f]{32}$", 32, 32),
                         _ => {}
                     }
                 }

@@ -17,7 +17,7 @@ use super::{
 const ROW_COLUMNS: &str = "envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,event_id,causation_id,correlation_id";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum LifecycleErrorKind {
+pub(super) enum LifecycleErrorKind {
     ManifestInvalid,
     Unauthorized,
     AggregateNotFound,
@@ -33,8 +33,8 @@ enum LifecycleErrorKind {
 }
 
 #[derive(Debug)]
-struct LifecycleError {
-    kind: LifecycleErrorKind,
+pub(super) struct LifecycleError {
+    pub(super) kind: LifecycleErrorKind,
 }
 
 impl LifecycleError {
@@ -53,6 +53,7 @@ impl From<EventStoreError> for LifecycleError {
             ErrorKind::ProtocolInvalid
             | ErrorKind::IsolationConflict
             | ErrorKind::CausationConflict
+            | ErrorKind::WriterEpochConflict
             | ErrorKind::DatabaseCorrupt
             | ErrorKind::Migration => LifecycleErrorKind::AggregateCorrupt,
         };
@@ -67,73 +68,73 @@ impl From<sqlx::Error> for LifecycleError {
 }
 
 #[derive(Clone)]
-struct TrustedRunInputs {
-    scope: IsolationScope,
-    actor: AgentId,
-    schema_set: Arc<SchemaSet>,
-    protocol_limits_ref: ProtocolLimitsRef,
-    revisions: BTreeMap<String, RevisionId>,
-    plan_revision: Option<RevisionId>,
-    budget_revision: RevisionId,
-    boundary_recording_policy_ref: BoundaryRecordingPolicyRef,
-    execution_mode: ExecutionMode,
+pub(super) struct TrustedRunInputs {
+    pub(super) scope: IsolationScope,
+    pub(super) actor: AgentId,
+    pub(super) schema_set: Arc<SchemaSet>,
+    pub(super) protocol_limits_ref: ProtocolLimitsRef,
+    pub(super) revisions: BTreeMap<String, RevisionId>,
+    pub(super) plan_revision: Option<RevisionId>,
+    pub(super) budget_revision: RevisionId,
+    pub(super) boundary_recording_policy_ref: BoundaryRecordingPolicyRef,
+    pub(super) execution_mode: ExecutionMode,
 }
 
 #[derive(Clone)]
-struct LifecycleTarget {
-    scope: IsolationScope,
-    actor: AgentId,
+pub(super) struct LifecycleTarget {
+    pub(super) scope: IsolationScope,
+    pub(super) actor: AgentId,
 }
 
 #[derive(Clone)]
-struct CreateRunCommand {
-    event_id: EventId,
-    occurred_at: String,
-    correlation_id: String,
-    manifest: RunManifest,
+pub(super) struct CreateRunCommand {
+    pub(super) event_id: EventId,
+    pub(super) occurred_at: String,
+    pub(super) correlation_id: String,
+    pub(super) manifest: RunManifest,
 }
 
 #[derive(Clone)]
-struct CreateTaskCommand {
-    event_id: EventId,
-    occurred_at: String,
-    correlation_id: String,
-    expected_sequence: i64,
-    task_id: TaskId,
-    parent_task_id: Option<TaskId>,
+pub(super) struct CreateTaskCommand {
+    pub(super) event_id: EventId,
+    pub(super) occurred_at: String,
+    pub(super) correlation_id: String,
+    pub(super) expected_sequence: i64,
+    pub(super) task_id: TaskId,
+    pub(super) parent_task_id: Option<TaskId>,
 }
 
 #[derive(Clone)]
-struct TransitionRunCommand {
-    event_id: EventId,
-    occurred_at: String,
-    correlation_id: String,
-    expected_sequence: i64,
-    expected_state: RunState,
-    target_state: RunState,
-    reason_code: String,
+pub(super) struct TransitionRunCommand {
+    pub(super) event_id: EventId,
+    pub(super) occurred_at: String,
+    pub(super) correlation_id: String,
+    pub(super) expected_sequence: i64,
+    pub(super) expected_state: RunState,
+    pub(super) target_state: RunState,
+    pub(super) reason_code: String,
 }
 
 #[derive(Clone)]
-struct TransitionTaskCommand {
-    event_id: EventId,
-    occurred_at: String,
-    correlation_id: String,
-    expected_sequence: i64,
-    task_id: TaskId,
-    expected_state: TaskState,
-    target_state: TaskState,
-    reason_code: String,
+pub(super) struct TransitionTaskCommand {
+    pub(super) event_id: EventId,
+    pub(super) occurred_at: String,
+    pub(super) correlation_id: String,
+    pub(super) expected_sequence: i64,
+    pub(super) task_id: TaskId,
+    pub(super) expected_state: TaskState,
+    pub(super) target_state: TaskState,
+    pub(super) reason_code: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AppliedState {
+pub(super) enum AppliedState {
     Run(RunState),
     Task(TaskState),
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum LifecycleResult {
+pub(super) enum LifecycleResult {
     Applied {
         event_id: EventId,
         sequence: i64,
@@ -147,17 +148,17 @@ enum LifecycleResult {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
-struct TaskRecord {
-    parent_task_id: Option<TaskId>,
-    state: TaskState,
+pub(super) struct TaskRecord {
+    pub(super) parent_task_id: Option<TaskId>,
+    pub(super) state: TaskState,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
-struct LifecycleState {
-    manifest: RunManifest,
-    run_state: RunState,
-    tasks: BTreeMap<TaskId, TaskRecord>,
-    sequence: i64,
+pub(super) struct LifecycleState {
+    pub(super) manifest: RunManifest,
+    pub(super) run_state: RunState,
+    pub(super) tasks: BTreeMap<TaskId, TaskRecord>,
+    pub(super) sequence: i64,
 }
 
 #[derive(Debug)]
@@ -169,7 +170,7 @@ struct EstablishedAggregate {
 }
 
 impl EventStore {
-    async fn create_run(
+    pub(super) async fn create_run(
         &self,
         trusted: &TrustedRunInputs,
         command: &CreateRunCommand,
@@ -214,7 +215,7 @@ impl EventStore {
         Ok(result_for(result, AppliedState::Run(RunState::Created)))
     }
 
-    async fn create_task(
+    pub(super) async fn create_task(
         &self,
         registry: &SchemaRegistry,
         target: &LifecycleTarget,
@@ -262,7 +263,7 @@ impl EventStore {
         Ok(result_for(result, AppliedState::Task(TaskState::Created)))
     }
 
-    async fn transition_run(
+    pub(super) async fn transition_run(
         &self,
         registry: &SchemaRegistry,
         target: &LifecycleTarget,
@@ -314,7 +315,7 @@ impl EventStore {
         Ok(result_for(result, AppliedState::Run(command.target_state)))
     }
 
-    async fn transition_task(
+    pub(super) async fn transition_task(
         &self,
         registry: &SchemaRegistry,
         target: &LifecycleTarget,
@@ -438,7 +439,7 @@ fn validate_create_authority(
     }
 }
 
-fn lifecycle_stream_id(scope: &IsolationScope) -> Result<StreamId, LifecycleError> {
+pub(super) fn lifecycle_stream_id(scope: &IsolationScope) -> Result<StreamId, LifecycleError> {
     let suffix = scope
         .run_id
         .as_str()
@@ -449,7 +450,7 @@ fn lifecycle_stream_id(scope: &IsolationScope) -> Result<StreamId, LifecycleErro
 }
 
 #[allow(clippy::too_many_arguments)]
-fn lifecycle_event<T: serde::Serialize>(
+pub(super) fn lifecycle_event<T: serde::Serialize>(
     schema_set: &SchemaSet,
     limits: &ProtocolLimitsRef,
     scope: &IsolationScope,
@@ -600,7 +601,7 @@ async fn aggregate_event_count(
         .fetch_one(&mut *connection).await?)
 }
 
-fn fold_lifecycle(
+pub(super) fn fold_lifecycle(
     schema_set: &SchemaSet,
     events: &[ValidatedEvent],
 ) -> Result<LifecycleState, LifecycleError> {
@@ -640,69 +641,83 @@ fn fold_lifecycle(
     for (index, event) in events.iter().enumerate().skip(1) {
         let expected_sequence = i64::try_from(index + 1)
             .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-        let envelope = event.envelope();
-        if envelope.sequence.parse::<i64>().ok() != Some(expected_sequence)
-            || envelope.event_major != 1
-            || envelope.event_minor != 0
-            || envelope.scope != first_envelope.scope
-            || envelope.run_id != first_envelope.run_id
-            || envelope.actor != first_envelope.actor
-            || envelope.stream_id != first_envelope.stream_id
-            || event.schema_set_ref() != first.schema_set_ref()
-            || event.protocol_limits_ref() != first.protocol_limits_ref()
-        {
-            return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt));
-        }
-        match event.envelope().event_type.as_str() {
-            "task-created" => {
-                let payload = event
-                    .downcast_payload::<TaskCreatedPayload>()
-                    .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-                validate_task_creation(&state, payload)
-                    .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-                state.tasks.insert(
-                    payload.task_id.clone(),
-                    TaskRecord {
-                        parent_task_id: payload.parent_task_id.clone(),
-                        state: TaskState::Created,
-                    },
-                );
-            }
-            "run-state-transitioned" => {
-                let payload = event
-                    .downcast_payload::<RunStateTransitionedPayload>()
-                    .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-                if state.run_state != payload.from {
-                    return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt));
-                }
-                validate_run_transition(&state, payload.from, payload.to)
-                    .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-                state.run_state = payload.to;
-            }
-            "task-state-transitioned" => {
-                let payload = event
-                    .downcast_payload::<TaskStateTransitionedPayload>()
-                    .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-                let current = state
-                    .tasks
-                    .get(&payload.task_id)
-                    .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-                if current.state != payload.from {
-                    return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt));
-                }
-                validate_task_transition(&state, &payload.task_id, payload.from, payload.to)
-                    .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
-                state
-                    .tasks
-                    .get_mut(&payload.task_id)
-                    .expect("task checked")
-                    .state = payload.to;
-            }
-            _ => return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt)),
-        }
-        state.sequence = expected_sequence;
+        apply_lifecycle_event(schema_set, &mut state, event, expected_sequence)?;
     }
     Ok(state)
+}
+
+pub(super) fn apply_lifecycle_event(
+    schema_set: &SchemaSet,
+    state: &mut LifecycleState,
+    event: &ValidatedEvent,
+    expected_sequence: i64,
+) -> Result<(), LifecycleError> {
+    let envelope = event.envelope();
+    let expected_stream = lifecycle_stream_id(&state.manifest.scope)
+        .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+    if envelope.sequence.parse::<i64>().ok() != Some(expected_sequence)
+        || expected_sequence != state.sequence + 1
+        || envelope.event_major != 1
+        || envelope.event_minor != 0
+        || envelope.scope != state.manifest.scope
+        || envelope.run_id != state.manifest.scope.run_id
+        || envelope.actor != state.manifest.scope.agent_id
+        || envelope.stream_id != expected_stream
+        || event.schema_set_ref() != schema_set.reference()
+        || event.schema_set_ref() != &state.manifest.schema_set_ref
+        || event.protocol_limits_ref() != &state.manifest.protocol_limits_ref
+    {
+        return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt));
+    }
+    match envelope.event_type.as_str() {
+        "task-created" => {
+            let payload = event
+                .downcast_payload::<TaskCreatedPayload>()
+                .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+            validate_task_creation(state, payload)
+                .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+            state.tasks.insert(
+                payload.task_id.clone(),
+                TaskRecord {
+                    parent_task_id: payload.parent_task_id.clone(),
+                    state: TaskState::Created,
+                },
+            );
+        }
+        "run-state-transitioned" => {
+            let payload = event
+                .downcast_payload::<RunStateTransitionedPayload>()
+                .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+            if state.run_state != payload.from {
+                return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt));
+            }
+            validate_run_transition(state, payload.from, payload.to)
+                .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+            state.run_state = payload.to;
+        }
+        "task-state-transitioned" => {
+            let payload = event
+                .downcast_payload::<TaskStateTransitionedPayload>()
+                .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+            let current = state
+                .tasks
+                .get(&payload.task_id)
+                .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+            if current.state != payload.from {
+                return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt));
+            }
+            validate_task_transition(state, &payload.task_id, payload.from, payload.to)
+                .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+            state
+                .tasks
+                .get_mut(&payload.task_id)
+                .expect("task checked")
+                .state = payload.to;
+        }
+        _ => return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt)),
+    }
+    state.sequence = expected_sequence;
+    Ok(())
 }
 
 fn validate_expected(

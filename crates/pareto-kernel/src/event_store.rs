@@ -11,10 +11,13 @@ use sqlx::{Connection, Executor, Row, SqliteConnection, SqlitePool, sqlite::Sqli
 use std::{path::Path, str::FromStr, sync::Arc, time::Duration};
 
 const APPLICATION_ID: i32 = 0x5041_5245;
-const DB_VERSION: i64 = 1;
+const DB_VERSION: i64 = 2;
 const BUSY_MILLIS: u64 = 750;
 const UPDATE_TRIGGER: &str = "CREATE TRIGGER events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'append_only'); END";
 const DELETE_TRIGGER: &str = "CREATE TRIGGER events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'append_only'); END";
+const WRITER_EPOCH_TRIGGER: &str = "CREATE TRIGGER events_writer_epoch_v2 BEFORE INSERT ON events WHEN NEW.writer_epoch != 2 BEGIN SELECT RAISE(ABORT, 'writer_epoch_conflict'); END";
+const SNAPSHOT_UPDATE_TRIGGER: &str = "CREATE TRIGGER projection_snapshots_no_update BEFORE UPDATE ON projection_snapshots BEGIN SELECT RAISE(ABORT, 'snapshot_immutable'); END";
+const SNAPSHOT_DELETE_TRIGGER: &str = "CREATE TRIGGER projection_snapshots_no_delete BEFORE DELETE ON projection_snapshots BEGIN SELECT RAISE(ABORT, 'snapshot_immutable'); END";
 
 const EVENTS_DDL: &str = r#"
 CREATE TABLE events (
@@ -44,6 +47,40 @@ CREATE TABLE store_metadata(singleton INTEGER PRIMARY KEY CHECK(singleton=1), st
 INSERT INTO store_metadata(singleton,store_id) VALUES(1,lower(hex(randomblob(16))));
 "#;
 
+const V2_MIGRATION_DDL: &str = r#"
+ALTER TABLE events ADD COLUMN writer_epoch INTEGER NOT NULL DEFAULT 1 CHECK(writer_epoch IN (1,2));
+CREATE TABLE projection_snapshots (
+ snapshot_ordinal INTEGER PRIMARY KEY AUTOINCREMENT,
+ snapshot_json TEXT NOT NULL,
+ snapshot_fingerprint TEXT NOT NULL,
+ output_schema_set_json TEXT NOT NULL,
+ output_schema_set_fingerprint TEXT NOT NULL,
+ output_limits_json TEXT NOT NULL,
+ output_limits_fingerprint TEXT NOT NULL,
+ source_schema_set_json TEXT NOT NULL,
+ source_schema_set_fingerprint TEXT NOT NULL,
+ source_limits_json TEXT NOT NULL,
+ source_limits_fingerprint TEXT NOT NULL,
+ reducer_ref_json TEXT NOT NULL,
+ reducer_ref_fingerprint TEXT NOT NULL,
+ source_store_id TEXT NOT NULL,
+ tenant_id TEXT NOT NULL,
+ user_present INTEGER NOT NULL CHECK(user_present IN (0,1)),
+ user_id TEXT NOT NULL CHECK((user_present=0 AND user_id='') OR (user_present=1 AND user_id LIKE 'user_%')),
+ workspace_id TEXT NOT NULL,
+ run_id TEXT NOT NULL,
+ agent_id TEXT NOT NULL,
+ owner_actor TEXT NOT NULL,
+ stream_id TEXT NOT NULL,
+ cursor_sequence INTEGER NOT NULL CHECK(cursor_sequence > 0),
+ cursor_event_id TEXT NOT NULL,
+ projection_digest TEXT NOT NULL,
+ snapshot_digest TEXT NOT NULL,
+ UNIQUE(source_store_id,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,owner_actor,stream_id,cursor_sequence,reducer_ref_fingerprint)
+);
+CREATE INDEX projection_snapshots_lookup ON projection_snapshots(source_store_id,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,owner_actor,stream_id,cursor_sequence DESC,snapshot_ordinal DESC);
+"#;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ErrorKind {
     Migration,
@@ -53,6 +90,7 @@ enum ErrorKind {
     IdempotencyConflict,
     SequenceConflict,
     CausationConflict,
+    WriterEpochConflict,
     Busy,
     Io,
 }
@@ -71,6 +109,11 @@ impl EventStoreError {
 impl From<sqlx::Error> for EventStoreError {
     fn from(error: sqlx::Error) -> Self {
         let kind = match &error {
+            sqlx::Error::Database(database)
+                if database.message().contains("writer_epoch_conflict") =>
+            {
+                ErrorKind::WriterEpochConflict
+            }
             sqlx::Error::Database(database)
                 if matches!(database.code().as_deref(), Some("5" | "6")) =>
             {
@@ -336,18 +379,49 @@ impl EventStore {
                 .bind(checksum).execute(&mut *connection).await?;
             connection.execute("PRAGMA user_version=1").await?;
         }
+        validate_v1_contract(connection).await?;
+        if version <= 1 {
+            sqlx::raw_sql(V2_MIGRATION_DDL)
+                .execute(&mut *connection)
+                .await?;
+            connection.execute(WRITER_EPOCH_TRIGGER).await?;
+            connection.execute(SNAPSHOT_UPDATE_TRIGGER).await?;
+            connection.execute(SNAPSHOT_DELETE_TRIGGER).await?;
+            sqlx::query("INSERT INTO schema_migrations(version,checksum,applied_at_explicit) VALUES(2,?,'2026-08-25T00:00:00.000Z')")
+                .bind(fingerprint(V2_MIGRATION_DDL.as_bytes()))
+                .execute(&mut *connection)
+                .await?;
+            connection.execute("PRAGMA user_version=2").await?;
+        }
         let integrity: String = sqlx::query_scalar("PRAGMA quick_check")
             .fetch_one(&mut *connection)
             .await?;
         if integrity != "ok" {
             return Err(EventStoreError::new(ErrorKind::DatabaseCorrupt));
         }
-        let checksum: String =
-            sqlx::query_scalar("SELECT checksum FROM schema_migrations WHERE version=1")
+        let v2_checksum: String =
+            sqlx::query_scalar("SELECT checksum FROM schema_migrations WHERE version=2")
                 .fetch_optional(&mut *connection)
                 .await?
                 .ok_or_else(|| EventStoreError::new(ErrorKind::Migration))?;
-        if checksum != fingerprint(EVENTS_DDL.as_bytes()) {
+        if v2_checksum != fingerprint(V2_MIGRATION_DDL.as_bytes()) {
+            return Err(EventStoreError::new(ErrorKind::Migration));
+        }
+        let writer_epoch_contract: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM pragma_table_info('events') WHERE name='writer_epoch' AND type='INTEGER' AND \"notnull\"=1 AND dflt_value='1'",
+        )
+        .fetch_one(&mut *connection)
+        .await?;
+        let snapshot_column_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info('projection_snapshots')")
+                .fetch_one(&mut *connection)
+                .await?;
+        let snapshot_index_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='projection_snapshots_lookup' AND tbl_name='projection_snapshots'",
+        )
+        .fetch_one(&mut *connection)
+        .await?;
+        if writer_epoch_contract != 1 || snapshot_column_count != 26 || snapshot_index_count != 1 {
             return Err(EventStoreError::new(ErrorKind::Migration));
         }
         let store_id: String = sqlx::query_scalar(
@@ -365,6 +439,9 @@ impl EventStore {
         for (name, expected) in [
             ("events_no_update", UPDATE_TRIGGER),
             ("events_no_delete", DELETE_TRIGGER),
+            ("events_writer_epoch_v2", WRITER_EPOCH_TRIGGER),
+            ("projection_snapshots_no_update", SNAPSHOT_UPDATE_TRIGGER),
+            ("projection_snapshots_no_delete", SNAPSHOT_DELETE_TRIGGER),
         ] {
             let actual: String =
                 sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?")
@@ -394,6 +471,13 @@ impl EventStore {
         .fetch_one(&mut *connection)
         .await?;
         if drift != 0 {
+            return Err(EventStoreError::new(ErrorKind::DatabaseCorrupt));
+        }
+        let invalid_epoch: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE writer_epoch NOT IN (1,2)")
+                .fetch_one(&mut *connection)
+                .await?;
+        if invalid_epoch != 0 {
             return Err(EventStoreError::new(ErrorKind::DatabaseCorrupt));
         }
         validate_all_stored_bytes(connection).await?;
@@ -522,7 +606,7 @@ async fn insert_prepared(
             return Err(EventStoreError::new(ErrorKind::CausationConflict));
         }
     }
-    sqlx::query("INSERT INTO events(event_id,envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,causation_id,correlation_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    sqlx::query("INSERT INTO events(event_id,envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,causation_id,correlation_id,writer_epoch) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,2)")
         .bind(envelope.event_id.as_str()).bind(&prepared.envelope_json).bind(&prepared.envelope_fingerprint)
         .bind(&prepared.schema_set_json).bind(&prepared.schema_set_fingerprint)
         .bind(&prepared.limits_json).bind(&prepared.limits_fingerprint)
@@ -535,6 +619,32 @@ async fn insert_prepared(
         event_id: envelope.event_id.clone(),
         sequence: prepared.sequence,
     })
+}
+
+async fn validate_v1_contract(connection: &mut SqliteConnection) -> Result<(), EventStoreError> {
+    let checksum: String =
+        sqlx::query_scalar("SELECT checksum FROM schema_migrations WHERE version=1")
+            .fetch_optional(&mut *connection)
+            .await?
+            .ok_or_else(|| EventStoreError::new(ErrorKind::Migration))?;
+    if checksum != fingerprint(EVENTS_DDL.as_bytes()) {
+        return Err(EventStoreError::new(ErrorKind::Migration));
+    }
+    for (name, expected) in [
+        ("events_no_update", UPDATE_TRIGGER),
+        ("events_no_delete", DELETE_TRIGGER),
+    ] {
+        let actual: String =
+            sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?")
+                .bind(name)
+                .fetch_optional(&mut *connection)
+                .await?
+                .ok_or_else(|| EventStoreError::new(ErrorKind::Migration))?;
+        if actual != expected {
+            return Err(EventStoreError::new(ErrorKind::Migration));
+        }
+    }
+    validate_all_stored_bytes(connection).await
 }
 
 fn validate_row(
@@ -657,3 +767,5 @@ fn user_key(scope: &IsolationScope) -> (i64, &str) {
 mod tests;
 
 mod lifecycle;
+
+mod projection;
