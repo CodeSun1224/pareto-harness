@@ -1,11 +1,12 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use pareto_protocol::{
-    AgentId, Digest, EventCursor, IsolationScope, ProjectionHistorySeedV1, ProjectionHistoryStepV1,
-    ProjectionReducerDescriptorV1, ProjectionReducerRef, ProtocolLimitsRef, RevisionId,
-    RunCreatedPayload, RunTaskProjection, RunTaskProjectionHashViewV1, RunTaskProjectionSnapshot,
-    RunTaskProjectionSnapshotHashViewV1, RunTaskProjectionTask, SchemaRef, SchemaSet, SchemaSetRef,
-    SourceReducerKeyV1, StreamId, ValidatedEvent, digest_json,
+    AgentId, Digest, EventCursor, EventTypeBinding, IsolationScope, ProjectionHistorySeedV1,
+    ProjectionHistoryStepV1, ProjectionReducerDescriptorV1, ProjectionReducerRef,
+    ProtocolLimitsRef, ProtocolLimitsV1, RevisionId, RunCreatedPayload, RunTaskProjection,
+    RunTaskProjectionHashViewV1, RunTaskProjectionSnapshot, RunTaskProjectionSnapshotHashViewV1,
+    RunTaskProjectionTask, SchemaRef, SchemaSet, SchemaSetRef, SourceReducerKeyV1, StreamId,
+    ValidatedEvent, digest_json,
 };
 use sqlx::{Row, SqliteConnection};
 
@@ -20,6 +21,20 @@ use super::{
 
 const ROW_COLUMNS: &str = "envelope_json,envelope_fingerprint,schema_set_json,schema_set_fingerprint,limits_json,limits_fingerprint,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,stream_id,sequence_i64,event_id,causation_id,correlation_id";
 const HISTORY_ALGORITHM: &str = "run-task-history-chain-v1";
+const RETAINED_OUTPUT_MANIFEST_DIGEST: &str =
+    "sha256:4ce3872926ce61209fdc5ed48deceeec9703ccfe94ea83be485eb8ef7512ff97";
+const SCHEMA_SET_MANIFEST_DIGEST: &str =
+    "sha256:e534c2d587c2813a97f0bb1abf992d29585c3b1ddd04d9c73ee0eda5d83b0f4b";
+const RUN_MANIFEST_DIGEST: &str =
+    "sha256:449f419966fdcc1b85470c4fbfa1b84c228abcf3ad7df28e1698a27a044a1a87";
+const RUN_CREATED_PAYLOAD_DIGEST: &str =
+    "sha256:e727b2af9f96cd826d901656e9161bee2032ad61ca8af67fcdc3c3c3e4b748c1";
+const RUN_TRANSITION_PAYLOAD_DIGEST: &str =
+    "sha256:bd5af4a5494e71b94df741d91a5286274a494ea0dd8785d1dc7c927ed33937e2";
+const TASK_CREATED_PAYLOAD_DIGEST: &str =
+    "sha256:c9e79a05e94a5703f2c6bf7d6a43fb2eb51d7cb24332d9c5c52dd67cfc59bfdb";
+const TASK_TRANSITION_PAYLOAD_DIGEST: &str =
+    "sha256:58b4ecea03b0c91fcae745d0c5ea272adfba0837486f4bbc5844b6bb0a087a73";
 const LIFECYCLE_EVENTS: [&str; 4] = [
     "run-created",
     "run-state-transitioned",
@@ -112,6 +127,49 @@ struct ReducerRegistration {
     source_key: SourceReducerKeyV1,
     descriptor: ProjectionReducerDescriptorV1,
     reducer_ref: ProjectionReducerRef,
+    implementation: ReducerImplementation,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReducerImplementation {
+    RunTaskLifecycleV1,
+    #[cfg(test)]
+    RejectAllFixture,
+}
+
+impl ReducerImplementation {
+    fn fold(
+        self,
+        source: &SchemaSet,
+        events: &[ValidatedEvent],
+    ) -> Result<LifecycleState, ProjectionError> {
+        match self {
+            Self::RunTaskLifecycleV1 => Ok(fold_lifecycle(source, events)?),
+            #[cfg(test)]
+            Self::RejectAllFixture => Err(ProjectionError::new(
+                ProjectionErrorKind::ReducerUnavailable,
+            )),
+        }
+    }
+
+    fn apply(
+        self,
+        source: &SchemaSet,
+        state: &mut LifecycleState,
+        event: &ValidatedEvent,
+        sequence: i64,
+    ) -> Result<(), ProjectionError> {
+        match self {
+            Self::RunTaskLifecycleV1 => {
+                apply_lifecycle_event(source, state, event, sequence)?;
+                Ok(())
+            }
+            #[cfg(test)]
+            Self::RejectAllFixture => Err(ProjectionError::new(
+                ProjectionErrorKind::ReducerUnavailable,
+            )),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -128,63 +186,72 @@ impl ProjectionRegistry {
         outputs: SchemaRegistry,
         output_limits: ProtocolLimitsRef,
     ) -> Result<Self, ProjectionError> {
-        let output = outputs
-            .0
-            .iter()
-            .find(|set| set.schema_ref("run-task-projection").is_some())
-            .cloned()
-            .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::SchemaUnavailable))?;
-        let mut reducers = Vec::new();
-        for source in &sources.0 {
-            let Ok(source_key) = source_reducer_key(source) else {
-                continue;
-            };
-            if reducers
-                .iter()
-                .any(|item: &ReducerRegistration| item.source_key == source_key)
-            {
-                continue;
-            }
-            let descriptor = reducer_descriptor(&source_key, &output, &output_limits)?;
-            let descriptor_bytes = canonical(&descriptor)?.into_bytes();
-            output
-                .parse_record::<ProjectionReducerDescriptorV1>(&descriptor_bytes)
-                .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
-            let contract_digest = digest_json(
-                "projection-reducer-contract",
-                &descriptor.schema_ref,
-                &serde_json::to_value(&descriptor)
-                    .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
-            )
-            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
-            let reducer_ref = ProjectionReducerRef {
-                descriptor_schema_ref: descriptor.schema_ref.clone(),
-                contract_digest,
-            };
-            reducers.push(ReducerRegistration {
-                source_key,
-                descriptor,
-                reducer_ref,
-            });
-        }
-        if reducers.is_empty() {
+        let retained_limits = retained_output_limits()?;
+        if output_limits != retained_limits {
             return Err(ProjectionError::new(
                 ProjectionErrorKind::ReducerUnavailable,
             ));
         }
+        let output_reference = retained_output_reference()?;
+        let output = outputs
+            .0
+            .iter()
+            .find(|set| set.reference() == &output_reference)
+            .cloned()
+            .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::SchemaUnavailable))?;
+        let source_key = retained_lifecycle_source_key()?;
+        if !sources
+            .0
+            .iter()
+            .filter_map(|source| source_reducer_key(source).ok())
+            .any(|key| key == source_key)
+        {
+            return Err(ProjectionError::new(
+                ProjectionErrorKind::ReducerUnavailable,
+            ));
+        }
+        let descriptor = reducer_descriptor(&source_key, &output, &retained_limits)?;
+        let descriptor_bytes = canonical(&descriptor)?.into_bytes();
+        output
+            .parse_record::<ProjectionReducerDescriptorV1>(&descriptor_bytes)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
+        let contract_digest = digest_json(
+            "projection-reducer-contract",
+            &descriptor.schema_ref,
+            &serde_json::to_value(&descriptor)
+                .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+        )
+        .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
+        let reducer_ref = ProjectionReducerRef {
+            descriptor_schema_ref: descriptor.schema_ref.clone(),
+            contract_digest,
+        };
+        let reducers = vec![ReducerRegistration {
+            source_key,
+            descriptor,
+            reducer_ref,
+            implementation: ReducerImplementation::RunTaskLifecycleV1,
+        }];
         Ok(Self {
             sources,
             outputs,
-            output_limits,
+            output_limits: retained_limits,
             reducers,
         })
     }
 
     fn resolve_reducer(&self, source: &SchemaSet) -> Result<&ReducerRegistration, ProjectionError> {
         let key = source_reducer_key(source)?;
+        self.resolve_key(&key)
+    }
+
+    fn resolve_key(
+        &self,
+        key: &SourceReducerKeyV1,
+    ) -> Result<&ReducerRegistration, ProjectionError> {
         self.reducers
             .iter()
-            .find(|registration| registration.source_key == key)
+            .find(|registration| &registration.source_key == key)
             .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))
     }
 
@@ -205,6 +272,85 @@ impl ProjectionRegistry {
             .cloned()
             .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::SchemaUnavailable))
     }
+}
+
+fn retained_schema_ref(schema_type: &str, digest: &str) -> Result<SchemaRef, ProjectionError> {
+    Ok(SchemaRef {
+        r#type: schema_type.to_owned(),
+        major: 1,
+        minor: 0,
+        schema_digest: Digest::parse(digest)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    })
+}
+
+fn retained_output_reference() -> Result<SchemaSetRef, ProjectionError> {
+    Ok(SchemaSetRef {
+        manifest_schema_ref: retained_schema_ref(
+            "schema-set-manifest",
+            SCHEMA_SET_MANIFEST_DIGEST,
+        )?,
+        manifest_digest: Digest::parse(RETAINED_OUTPUT_MANIFEST_DIGEST)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    })
+}
+
+fn retained_output_limits() -> Result<ProtocolLimitsRef, ProjectionError> {
+    Ok(ProtocolLimitsRef {
+        profile: "protocol-limits-v1".to_owned(),
+        digest: Digest::parse(ProtocolLimitsV1::DIGEST)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    })
+}
+
+/// Explicit source-contract allowlist entry for the retained lifecycle-v1 implementation.
+/// SchemaSets may add unrelated members and keep this key; changing Manifest or any lifecycle
+/// binding creates a different key and therefore fails closed until a new entry is shipped.
+fn retained_lifecycle_source_key() -> Result<SourceReducerKeyV1, ProjectionError> {
+    let binding = |event_type: &str,
+                   variant_id: &str,
+                   payload_type: &str,
+                   digest: &str|
+     -> Result<EventTypeBinding, ProjectionError> {
+        Ok(EventTypeBinding {
+            event_type: event_type.to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: retained_schema_ref(payload_type, digest)?,
+            variant_id: variant_id.to_owned(),
+        })
+    };
+    let mut event_bindings = vec![
+        binding(
+            "run-created",
+            "run-created-v1",
+            "run-created-payload",
+            RUN_CREATED_PAYLOAD_DIGEST,
+        )?,
+        binding(
+            "run-state-transitioned",
+            "run-state-transitioned-v1",
+            "run-state-transitioned-payload",
+            RUN_TRANSITION_PAYLOAD_DIGEST,
+        )?,
+        binding(
+            "task-created",
+            "task-created-v1",
+            "task-created-payload",
+            TASK_CREATED_PAYLOAD_DIGEST,
+        )?,
+        binding(
+            "task-state-transitioned",
+            "task-state-transitioned-v1",
+            "task-state-transitioned-payload",
+            TASK_TRANSITION_PAYLOAD_DIGEST,
+        )?,
+    ];
+    event_bindings.sort();
+    Ok(SourceReducerKeyV1 {
+        run_manifest_schema_ref: retained_schema_ref("run-manifest", RUN_MANIFEST_DIGEST)?,
+        event_bindings,
+    })
 }
 
 fn exact_schema(set: &SchemaSet, name: &str) -> Result<SchemaRef, ProjectionError> {
@@ -552,7 +698,9 @@ fn full_projection(
     source: &ProjectionSource,
 ) -> Result<RunTaskProjection, ProjectionError> {
     let reducer = registry.resolve_reducer(&source.schema_set)?;
-    let state = fold_lifecycle(&source.schema_set, &source.events)?;
+    let state = reducer
+        .implementation
+        .fold(&source.schema_set, &source.events)?;
     let history = history_chain(reducer, &source.events)?;
     build_projection(store_id, registry, source, reducer, state, history)
 }
@@ -944,9 +1092,7 @@ fn validate_snapshot_candidate(
         .parse_record::<RunTaskProjectionSnapshot>(snapshot_json.as_bytes())
         .map_err(|_| CandidateFailure::Integrity)?
         .into_inner();
-    if canonical(&snapshot).map_err(|_| CandidateFailure::Integrity)? != snapshot_json
-        || validate_snapshot_record(&snapshot, reducer, &output).is_err()
-    {
+    if canonical(&snapshot).map_err(|_| CandidateFailure::Integrity)? != snapshot_json {
         return Err(CandidateFailure::Integrity);
     }
     let source_ref_json: String = row.get(6);
@@ -977,6 +1123,8 @@ fn validate_snapshot_candidate(
         || snapshot.projection.reducer_ref != reducer.reducer_ref
         || snapshot.output_schema_set_ref != output_ref
         || snapshot.output_protocol_limits_ref != output_limits
+        || snapshot.projection.output_schema_set_ref != output_ref
+        || snapshot.projection.output_protocol_limits_ref != output_limits
         || canonical(&snapshot.projection.source_schema_set_ref)
             .map_err(|_| CandidateFailure::Integrity)?
             != source_ref_json
@@ -987,6 +1135,9 @@ fn validate_snapshot_candidate(
             != reducer_json
     {
         return Err(CandidateFailure::Incompatible);
+    }
+    if validate_snapshot_record(&snapshot, reducer, &output).is_err() {
+        return Err(CandidateFailure::Integrity);
     }
     if row.get::<String, _>(23) != snapshot.projection_digest.as_str()
         || row.get::<String, _>(24) != snapshot.snapshot_digest.as_str()
@@ -1062,7 +1213,9 @@ fn apply_snapshot_suffix(
         let sequence = i64::try_from(index + 1)
             .map_err(|_| ProjectionError::new(ProjectionErrorKind::InvalidSequence))?;
         history = history_step(reducer, history, event)?;
-        apply_lifecycle_event(&source.schema_set, &mut state, event, sequence)?;
+        reducer
+            .implementation
+            .apply(&source.schema_set, &mut state, event, sequence)?;
     }
     build_projection(store_id, registry, source, reducer, state, history)
 }
@@ -1075,6 +1228,50 @@ mod snapshot;
 
 #[cfg(test)]
 mod replay;
+
+#[cfg(test)]
+async fn assert_history_mutation_rejected<F>(case: &str, row_sequence: Option<i64>, mutate: F)
+where
+    F: FnOnce(&mut serde_json::Value),
+{
+    let fixture = test_support::Fixture::new(&format!("run_history-{case}"));
+    let store = fixture.open_created().await;
+    store
+        .create_task(
+            &fixture.source_registry(),
+            &fixture.lifecycle_target(),
+            &fixture.create_task(&format!("event_history-{case}"), 1, &format!("task_{case}")),
+        )
+        .await
+        .unwrap();
+    let envelope_json: String =
+        sqlx::query_scalar("SELECT envelope_json FROM events WHERE sequence_i64=2")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
+    let mut envelope: serde_json::Value = serde_json::from_str(&envelope_json).unwrap();
+    mutate(&mut envelope);
+    let envelope_json = pareto_protocol::canonical_json(&envelope).unwrap();
+    let sequence_update = row_sequence
+        .map(|sequence| format!(",sequence_i64={sequence}"))
+        .unwrap_or_default();
+    let mutation = format!(
+        "UPDATE events SET envelope_json='{}',envelope_fingerprint='{}'{} WHERE sequence_i64=2",
+        envelope_json.replace('\'', "''"),
+        fingerprint(envelope_json.as_bytes()),
+        sequence_update
+    );
+    test_support::mutate_event_rows(&store, &mutation).await;
+    assert_eq!(
+        store
+            .project_full(&fixture.projection_registry(), &fixture.projection_target())
+            .await
+            .unwrap_err()
+            .kind,
+        ProjectionErrorKind::AggregateCorrupt,
+        "case {case}"
+    );
+}
 
 #[cfg(test)]
 #[tokio::test]
@@ -1110,11 +1307,104 @@ async fn reducer() {
 async fn reducer_resolution() {
     let fixture = test_support::Fixture::new("run_reducer-resolution");
     let store = fixture.open_created().await;
-    let mut registry = fixture.projection_registry();
-    registry.reducers.clear();
+    let evolved = fixture.evolved_set_with_unrelated_member();
+    let registry = ProjectionRegistry::retained(
+        SchemaRegistry(vec![evolved.clone(), fixture.set.clone()]),
+        SchemaRegistry(vec![evolved.clone(), fixture.set.clone()]),
+        fixture.limits.clone(),
+    )
+    .unwrap();
+    let reversed = ProjectionRegistry::retained(
+        SchemaRegistry(vec![fixture.set.clone(), evolved.clone()]),
+        SchemaRegistry(vec![fixture.set.clone(), evolved.clone()]),
+        fixture.limits.clone(),
+    )
+    .unwrap();
+    let current = registry.resolve_reducer(&fixture.set).unwrap();
+    let retained_for_evolved = registry.resolve_reducer(&evolved).unwrap();
+    assert_eq!(
+        current.implementation,
+        ReducerImplementation::RunTaskLifecycleV1
+    );
+    assert_eq!(current.reducer_ref, retained_for_evolved.reducer_ref);
+    assert_eq!(
+        current.reducer_ref,
+        reversed.resolve_reducer(&fixture.set).unwrap().reducer_ref
+    );
+    assert_eq!(
+        current.descriptor.output_schema_set_ref,
+        *fixture.set.reference()
+    );
+
+    let mut unmapped_key = source_reducer_key(&evolved).unwrap();
+    unmapped_key.event_bindings[0].variant_id = "unmapped-lifecycle-v2".to_owned();
+    assert_eq!(
+        registry.resolve_key(&unmapped_key).err().unwrap().kind,
+        ProjectionErrorKind::ReducerUnavailable
+    );
+
+    let mut with_second_implementation = registry.clone();
+    let mut second_descriptor = current.descriptor.clone();
+    second_descriptor.minor = 1;
+    with_second_implementation
+        .reducers
+        .push(ReducerRegistration {
+            source_key: unmapped_key.clone(),
+            descriptor: second_descriptor.clone(),
+            reducer_ref: ProjectionReducerRef {
+                descriptor_schema_ref: second_descriptor.schema_ref,
+                contract_digest: Digest::parse(format!("sha256:{}", "f".repeat(64))).unwrap(),
+            },
+            implementation: ReducerImplementation::RejectAllFixture,
+        });
+    let second = with_second_implementation
+        .resolve_key(&unmapped_key)
+        .unwrap();
+    assert_eq!(
+        second.implementation,
+        ReducerImplementation::RejectAllFixture
+    );
+    assert_eq!(
+        second
+            .implementation
+            .fold(&fixture.set, &[])
+            .unwrap_err()
+            .kind,
+        ProjectionErrorKind::ReducerUnavailable
+    );
+
+    assert_eq!(
+        ProjectionRegistry::retained(
+            fixture.source_registry(),
+            SchemaRegistry(vec![evolved]),
+            fixture.limits.clone(),
+        )
+        .err()
+        .unwrap()
+        .kind,
+        ProjectionErrorKind::SchemaUnavailable
+    );
+    let wrong_limits = ProtocolLimitsRef {
+        profile: fixture.limits.profile.clone(),
+        digest: Digest::parse(format!("sha256:{}", "0".repeat(64))).unwrap(),
+    };
+    assert_eq!(
+        ProjectionRegistry::retained(
+            fixture.source_registry(),
+            SchemaRegistry(vec![fixture.set.clone()]),
+            wrong_limits,
+        )
+        .err()
+        .unwrap()
+        .kind,
+        ProjectionErrorKind::ReducerUnavailable
+    );
+
+    let mut missing_registry = fixture.projection_registry();
+    missing_registry.reducers.clear();
     assert_eq!(
         store
-            .project_full(&registry, &fixture.projection_target())
+            .project_full(&missing_registry, &fixture.projection_target())
             .await
             .unwrap_err()
             .kind,
@@ -1163,6 +1453,66 @@ async fn digest_golden() {
         snapshot.snapshot_digest.as_str(),
         "sha256:64207266735307494818b57da04d9c215a4bae025815a62789cc6d04e60f693a"
     );
+    transaction.rollback().await.unwrap();
+
+    store
+        .create_task(
+            &fixture.source_registry(),
+            &fixture.lifecycle_target(),
+            &fixture.create_task("event_projection-golden-task", 1, "task_golden"),
+        )
+        .await
+        .unwrap();
+    let mut transaction = store.pool.begin().await.unwrap();
+    let source = load_source(
+        &mut transaction,
+        &registry.sources,
+        &fixture.projection_target(),
+    )
+    .await
+    .unwrap();
+    let reducer = registry.resolve_reducer(&source.schema_set).unwrap();
+    let one = history_chain(reducer, &source.events[..1]).unwrap();
+    let two = history_chain(reducer, &source.events).unwrap();
+    assert_eq!(
+        history_step(reducer, one.clone(), &source.events[1]).unwrap(),
+        two
+    );
+    let projection_n =
+        full_projection("00000000000000000000000000000000", &registry, &source).unwrap();
+    let snapshot_n = build_snapshot(&projection_n, reducer, &output).unwrap();
+    let mut scope_mutation = projection_n.clone();
+    scope_mutation.scope.tenant_id = pareto_protocol::TenantId::parse("tenant_other").unwrap();
+    scope_mutation.projection_digest = compute_projection_digest(&scope_mutation, reducer).unwrap();
+    assert_ne!(
+        scope_mutation.projection_digest,
+        projection_n.projection_digest
+    );
+    let mut source_mutation = projection_n.clone();
+    source_mutation.source_schema_set_ref.manifest_digest =
+        Digest::parse(format!("sha256:{}", "f".repeat(64))).unwrap();
+    source_mutation.projection_digest =
+        compute_projection_digest(&source_mutation, reducer).unwrap();
+    assert_ne!(
+        source_mutation.projection_digest,
+        projection_n.projection_digest
+    );
+    assert_eq!(
+        one.as_str(),
+        "sha256:23387a3dc09102d1ec539c7d5ce48497abf0ba2610830cac3c52baa6ed6b7222"
+    );
+    assert_eq!(
+        two.as_str(),
+        "sha256:0066e76f4a5913eeb6acf6efc02a4d9beb1a7931b46e851534b5dad19163dc3c"
+    );
+    assert_eq!(
+        projection_n.projection_digest.as_str(),
+        "sha256:dcffc9bdd4d28f7bb53f1741eb6e78fe2cd8d7055f1a7e9f14031cdce32bfb42"
+    );
+    assert_eq!(
+        snapshot_n.snapshot_digest.as_str(),
+        "sha256:5ec28c38e6158572f680413177d81d8c3710eac340fb39677296ff35c32355f8"
+    );
 }
 
 #[cfg(test)]
@@ -1201,18 +1551,11 @@ async fn invalid_history() {
         )
         .await
         .unwrap();
-    sqlx::query("DROP TRIGGER events_no_update")
-        .execute(&store.pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE events SET sequence_i64=3 WHERE sequence_i64=2")
-        .execute(&store.pool)
-        .await
-        .unwrap();
-    sqlx::query(super::UPDATE_TRIGGER)
-        .execute(&store.pool)
-        .await
-        .unwrap();
+    test_support::mutate_event_rows(
+        &store,
+        "UPDATE events SET sequence_i64=3 WHERE sequence_i64=2",
+    )
+    .await;
     assert_eq!(
         store
             .project_full(&fixture.projection_registry(), &fixture.projection_target())
@@ -1240,20 +1583,12 @@ async fn invalid_history() {
     let mut envelope: serde_json::Value = serde_json::from_str(&envelope_json).unwrap();
     envelope["event_type"] = serde_json::Value::String("unknown-lifecycle".to_owned());
     let envelope_json = pareto_protocol::canonical_json(&envelope).unwrap();
-    sqlx::query("DROP TRIGGER events_no_update")
-        .execute(&unknown_store.pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE events SET envelope_json=?,envelope_fingerprint=? WHERE sequence_i64=2")
-        .bind(&envelope_json)
-        .bind(fingerprint(envelope_json.as_bytes()))
-        .execute(&unknown_store.pool)
-        .await
-        .unwrap();
-    sqlx::query(super::UPDATE_TRIGGER)
-        .execute(&unknown_store.pool)
-        .await
-        .unwrap();
+    let mutation = format!(
+        "UPDATE events SET envelope_json='{}',envelope_fingerprint='{}' WHERE sequence_i64=2",
+        envelope_json.replace('\'', "''"),
+        fingerprint(envelope_json.as_bytes())
+    );
+    test_support::mutate_event_rows(&unknown_store, &mutation).await;
     assert_eq!(
         unknown_store
             .project_full(
@@ -1265,6 +1600,45 @@ async fn invalid_history() {
             .kind,
         ProjectionErrorKind::AggregateCorrupt
     );
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn invalid_sequence_schema_and_lifecycle_matrix() {
+    assert_history_mutation_rejected("event-major", None, |event| {
+        event["event_major"] = serde_json::json!(2);
+    })
+    .await;
+    assert_history_mutation_rejected("envelope-schema", None, |event| {
+        event["schema_ref"]["major"] = serde_json::json!(2);
+    })
+    .await;
+    assert_history_mutation_rejected("payload-schema", None, |event| {
+        event["payload_schema_ref"]["schema_digest"] =
+            serde_json::json!(format!("sha256:{}", "f".repeat(64)));
+    })
+    .await;
+    assert_history_mutation_rejected("zero", None, |event| {
+        event["sequence"] = serde_json::json!("0");
+    })
+    .await;
+    assert_history_mutation_rejected("reuse", None, |event| {
+        event["sequence"] = serde_json::json!("1");
+    })
+    .await;
+    assert_history_mutation_rejected("max", Some(i64::MAX), |event| {
+        event["sequence"] = serde_json::json!(i64::MAX.to_string());
+    })
+    .await;
+    assert_history_mutation_rejected("illegal-lifecycle", None, |event| {
+        event["payload"]["initial_state"] = serde_json::json!("running");
+        let payload_schema: SchemaRef =
+            serde_json::from_value(event["payload_schema_ref"].clone()).unwrap();
+        let payload_digest =
+            digest_json("event-payload", &payload_schema, &event["payload"]).unwrap();
+        event["payload_digest"] = serde_json::to_value(payload_digest).unwrap();
+    })
+    .await;
 }
 
 #[cfg(test)]
@@ -1322,6 +1696,41 @@ async fn isolation() {
 
 #[cfg(test)]
 #[tokio::test]
+async fn authority() {
+    let fixture = test_support::Fixture::new("run_projection-authority");
+    let store = fixture.open_created().await;
+    let evolved = fixture.evolved_set_with_unrelated_member();
+    let registry = ProjectionRegistry::retained(
+        SchemaRegistry(vec![evolved.clone(), fixture.set.clone()]),
+        SchemaRegistry(vec![evolved, fixture.set.clone()]),
+        fixture.limits.clone(),
+    )
+    .unwrap();
+    let projection = store
+        .project_full(&registry, &fixture.projection_target())
+        .await
+        .unwrap()
+        .projection;
+    assert_eq!(projection.source_schema_set_ref, *fixture.set.reference());
+
+    let missing_exact_source = ProjectionRegistry::retained(
+        SchemaRegistry(vec![fixture.evolved_set_with_unrelated_member()]),
+        SchemaRegistry(vec![fixture.set.clone()]),
+        fixture.limits.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        store
+            .project_full(&missing_exact_source, &fixture.projection_target())
+            .await
+            .unwrap_err()
+            .kind,
+        ProjectionErrorKind::SchemaUnavailable
+    );
+}
+
+#[cfg(test)]
+#[tokio::test]
 async fn compatibility() {
     let fixture = test_support::Fixture::new("run_projection-compatibility");
     let store = fixture.open_created().await;
@@ -1339,23 +1748,97 @@ async fn compatibility() {
 
 #[cfg(test)]
 #[tokio::test]
-async fn concurrency() {
-    let fixture = test_support::Fixture::new("run_projection-concurrency");
+async fn retained_source_compatibility() {
+    let mut fixture = test_support::Fixture::new("run_retained-source");
+    let current_output = fixture.set.clone();
+    let retained_source = fixture.retained_lifecycle_set();
+    fixture.set = retained_source.clone();
+    fixture.manifest.schema_ref = retained_source.schema_ref("run-manifest").unwrap().clone();
+    fixture.manifest.schema_set_ref = retained_source.reference().clone();
     let store = fixture.open_created().await;
-    let registry = fixture.projection_registry();
+    let registry = ProjectionRegistry::retained(
+        SchemaRegistry(vec![retained_source.clone()]),
+        SchemaRegistry(vec![current_output.clone()]),
+        fixture.limits.clone(),
+    )
+    .unwrap();
     let projection = store
         .project_full(&registry, &fixture.projection_target())
         .await
-        .unwrap();
+        .unwrap()
+        .projection;
+    assert_eq!(
+        projection.source_schema_set_ref,
+        *retained_source.reference()
+    );
+    assert_eq!(
+        projection.output_schema_set_ref,
+        *current_output.reference()
+    );
+    assert_eq!(
+        registry
+            .resolve_reducer(&retained_source)
+            .unwrap()
+            .implementation,
+        ReducerImplementation::RunTaskLifecycleV1
+    );
     store
-        .create_task(
-            &fixture.source_registry(),
-            &fixture.lifecycle_target(),
-            &fixture.create_task("event_concurrent-after", 1, "task_after"),
-        )
+        .create_projection_snapshot(&registry, &fixture.projection_target())
         .await
         .unwrap();
-    assert_eq!(projection.projection.cursor.sequence, "1");
+    let assisted = store
+        .project_snapshot_assisted(&registry, &fixture.projection_target())
+        .await
+        .unwrap();
+    assert_eq!(assisted.snapshot_disposition, SnapshotDisposition::Used);
+    assert_eq!(assisted.projection, projection);
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn concurrency() {
+    let fixture = test_support::Fixture::new("run_projection-concurrency");
+    let store = fixture.open_created().await;
+    let second = EventStore::open_pinned(&fixture.path, &store.store_id)
+        .await
+        .unwrap();
+    let registry = fixture.projection_registry();
+    let start = Arc::new(tokio::sync::Barrier::new(2));
+    let appended = Arc::new(tokio::sync::Barrier::new(2));
+    let read_start = start.clone();
+    let read_appended = appended.clone();
+    let projection_target = fixture.projection_target();
+    let read_future = async {
+        let mut transaction = store.pool.begin().await.unwrap();
+        let fixed_horizon: i64 = sqlx::query_scalar("SELECT MAX(append_ordinal) FROM events")
+            .fetch_one(&mut *transaction)
+            .await
+            .unwrap();
+        assert_eq!(fixed_horizon, 1);
+        read_start.wait().await;
+        read_appended.wait().await;
+        let source = load_source(&mut transaction, &registry.sources, &projection_target)
+            .await
+            .unwrap();
+        let projection = full_projection(&store.store_id, &registry, &source).unwrap();
+        transaction.rollback().await.unwrap();
+        projection
+    };
+    let append_start = start;
+    let append_done = appended;
+    let source_registry = fixture.source_registry();
+    let lifecycle_target = fixture.lifecycle_target();
+    let command = fixture.create_task("event_concurrent-after", 1, "task_after");
+    let append_future = async {
+        append_start.wait().await;
+        second
+            .create_task(&source_registry, &lifecycle_target, &command)
+            .await
+            .unwrap();
+        append_done.wait().await;
+    };
+    let (projection, ()) = tokio::join!(read_future, append_future);
+    assert_eq!(projection.cursor.sequence, "1");
     let later = store
         .project_full(&registry, &fixture.projection_target())
         .await

@@ -114,3 +114,91 @@ async fn cross_store_not_comparable() {
         ProjectionComparison::NotComparable
     );
 }
+
+#[tokio::test]
+async fn comparison_matrix() {
+    let fixture = Fixture::new("run_replay-comparison-matrix");
+    let store = fixture.open_created().await;
+    let projection = store
+        .recorded_replay(&fixture.projection_registry(), &fixture.projection_target())
+        .await
+        .unwrap();
+    let changed_digest = || Digest::parse(format!("sha256:{}", "f".repeat(64))).unwrap();
+    let mut provenance_mutations = Vec::new();
+
+    let mut changed = projection.clone();
+    changed.source_store_id = "ffffffffffffffffffffffffffffffff".to_owned();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.stream_id = StreamId::parse("stream_other").unwrap();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.cursor.sequence = "2".to_owned();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.cursor.event_id = pareto_protocol::EventId::parse("event_other").unwrap();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.source_schema_set_ref.manifest_digest = changed_digest();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.source_protocol_limits_ref.digest = changed_digest();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.reducer_ref.contract_digest = changed_digest();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.output_schema_set_ref.manifest_digest = changed_digest();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.output_protocol_limits_ref.digest = changed_digest();
+    provenance_mutations.push(changed);
+    let mut changed = projection.clone();
+    changed.history_chain_state = changed_digest();
+    provenance_mutations.push(changed);
+
+    for changed in provenance_mutations {
+        assert_eq!(
+            compare_projections(&fixture.projection_target(), &projection, &changed).unwrap(),
+            ProjectionComparison::NotComparable
+        );
+    }
+
+    let mut scopes = Vec::new();
+    let mut changed = projection.clone();
+    changed.owner_actor = AgentId::parse("agent_other").unwrap();
+    scopes.push(changed);
+    let mut changed = projection.clone();
+    changed.scope.tenant_id = pareto_protocol::TenantId::parse("tenant_other").unwrap();
+    scopes.push(changed);
+    let mut changed = projection.clone();
+    changed.scope.user_id = None;
+    scopes.push(changed);
+    let mut changed = projection.clone();
+    changed.scope.user_id = Some(pareto_protocol::UserId::parse("user_other").unwrap());
+    scopes.push(changed);
+    let mut changed = projection.clone();
+    changed.scope.workspace_id = pareto_protocol::WorkspaceId::parse("workspace_other").unwrap();
+    scopes.push(changed);
+    let mut changed = projection.clone();
+    changed.scope.run_id = pareto_protocol::RunId::parse("run_other").unwrap();
+    scopes.push(changed);
+    let mut changed = projection.clone();
+    changed.scope.agent_id = AgentId::parse("agent_other").unwrap();
+    scopes.push(changed);
+    for changed in scopes {
+        assert_eq!(
+            compare_projections(&fixture.projection_target(), &projection, &changed)
+                .unwrap_err()
+                .kind,
+            ProjectionErrorKind::Unauthorized
+        );
+    }
+
+    let mut divergent = projection.clone();
+    divergent.projection_digest = changed_digest();
+    assert_eq!(
+        compare_projections(&fixture.projection_target(), &projection, &divergent).unwrap(),
+        ProjectionComparison::Divergent
+    );
+}

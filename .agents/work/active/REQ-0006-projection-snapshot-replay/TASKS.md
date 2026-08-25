@@ -1,6 +1,6 @@
 # Requirement Tasks
 
-Current execution: reviewing. SDD, Runtime vertical slice, Schema publication, SQLite v2 migration and all non-review completion gates are complete. Fresh independent code review, any remediation, final document gate and closure remain.
+Current execution: reviewing. Fresh independent code review of exact `5c4f6e7` returned 0 Blocker / 3 Major；author remediation for exact reducer retention、SQLite actual-DDL/migration proof and AC/default-parallel test stability is implemented and locally validated。Focused independent re-review、final document gate and closure remain；implementer has not self-closed any finding。
 
 - [x] TASK-REQ-0006-01: 增加versioned reducer descriptor/key/ref、Cursor、RunTask Projection/Snapshot及history/hash-view类型，冻结rolling chain和全部digest golden，发布exact output SchemaSet并证明旧set不变。Validation: protocol contract/digest golden commands；schema generation diff。
 - [x] TASK-REQ-0006-02: 将lifecycle fold提取为exact versioned deterministic reducer，建立source→reducer/output registry与retention，生成store/full-provenance Projection，拒绝unknown/schema/sequence/illegal history和current substitution。Validation: reducer/resolution/full/invalid/compatibility named commands。

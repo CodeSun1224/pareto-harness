@@ -47,9 +47,8 @@ CREATE TABLE store_metadata(singleton INTEGER PRIMARY KEY CHECK(singleton=1), st
 INSERT INTO store_metadata(singleton,store_id) VALUES(1,lower(hex(randomblob(16))));
 "#;
 
-const V2_MIGRATION_DDL: &str = r#"
-ALTER TABLE events ADD COLUMN writer_epoch INTEGER NOT NULL DEFAULT 1 CHECK(writer_epoch IN (1,2));
-CREATE TABLE projection_snapshots (
+const WRITER_EPOCH_COLUMN_DDL: &str = "ALTER TABLE events ADD COLUMN writer_epoch INTEGER NOT NULL DEFAULT 1 CHECK(writer_epoch IN (1,2))";
+const SNAPSHOT_TABLE_DDL: &str = r#"CREATE TABLE projection_snapshots (
  snapshot_ordinal INTEGER PRIMARY KEY AUTOINCREMENT,
  snapshot_json TEXT NOT NULL,
  snapshot_fingerprint TEXT NOT NULL,
@@ -77,9 +76,13 @@ CREATE TABLE projection_snapshots (
  projection_digest TEXT NOT NULL,
  snapshot_digest TEXT NOT NULL,
  UNIQUE(source_store_id,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,owner_actor,stream_id,cursor_sequence,reducer_ref_fingerprint)
-);
-CREATE INDEX projection_snapshots_lookup ON projection_snapshots(source_store_id,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,owner_actor,stream_id,cursor_sequence DESC,snapshot_ordinal DESC);
-"#;
+)"#;
+const SNAPSHOT_INDEX_DDL: &str = "CREATE INDEX projection_snapshots_lookup ON projection_snapshots(source_store_id,tenant_id,user_present,user_id,workspace_id,run_id,agent_id,owner_actor,stream_id,cursor_sequence DESC,snapshot_ordinal DESC)";
+// Frozen checksum of the originally published v2 table/index migration bundle. Actual table,
+// index, column and trigger SQL is independently checked below; retaining this value keeps
+// databases created by the initial v2 writer openable after validator hardening.
+const V2_MIGRATION_CHECKSUM: &str =
+    "sha256:fe118a4cd78deb4abe730e545d3eb565a52673a3c9e5ad41c1d9adbcc14f600e";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ErrorKind {
@@ -337,12 +340,19 @@ impl EventStore {
     }
 
     async fn migrate(connection: &mut SqliteConnection) -> Result<String, EventStoreError> {
+        Self::migrate_with_v2_failure(connection, None).await
+    }
+
+    async fn migrate_with_v2_failure(
+        connection: &mut SqliteConnection,
+        fail_after_v2_step: Option<usize>,
+    ) -> Result<String, EventStoreError> {
         connection.execute("PRAGMA journal_mode=WAL").await?;
         connection.execute("PRAGMA synchronous=FULL").await?;
         connection.execute("PRAGMA foreign_keys=ON").await?;
         connection.execute("PRAGMA trusted_schema=OFF").await?;
         connection.execute("BEGIN EXCLUSIVE").await?;
-        let result = Self::migrate_locked(connection).await;
+        let result = Self::migrate_locked(connection, fail_after_v2_step).await;
         match result {
             Ok(store_id) => connection
                 .execute("COMMIT")
@@ -356,7 +366,10 @@ impl EventStore {
         }
     }
 
-    async fn migrate_locked(connection: &mut SqliteConnection) -> Result<String, EventStoreError> {
+    async fn migrate_locked(
+        connection: &mut SqliteConnection,
+        fail_after_v2_step: Option<usize>,
+    ) -> Result<String, EventStoreError> {
         let application_id: i64 = sqlx::query_scalar("PRAGMA application_id")
             .fetch_one(&mut *connection)
             .await?;
@@ -381,14 +394,20 @@ impl EventStore {
         }
         validate_v1_contract(connection).await?;
         if version <= 1 {
-            sqlx::raw_sql(V2_MIGRATION_DDL)
-                .execute(&mut *connection)
-                .await?;
+            connection.execute(WRITER_EPOCH_COLUMN_DDL).await?;
+            fail_v2_migration_after(fail_after_v2_step, 1)?;
+            connection.execute(SNAPSHOT_TABLE_DDL).await?;
+            fail_v2_migration_after(fail_after_v2_step, 2)?;
+            connection.execute(SNAPSHOT_INDEX_DDL).await?;
+            fail_v2_migration_after(fail_after_v2_step, 3)?;
             connection.execute(WRITER_EPOCH_TRIGGER).await?;
+            fail_v2_migration_after(fail_after_v2_step, 4)?;
             connection.execute(SNAPSHOT_UPDATE_TRIGGER).await?;
+            fail_v2_migration_after(fail_after_v2_step, 5)?;
             connection.execute(SNAPSHOT_DELETE_TRIGGER).await?;
+            fail_v2_migration_after(fail_after_v2_step, 6)?;
             sqlx::query("INSERT INTO schema_migrations(version,checksum,applied_at_explicit) VALUES(2,?,'2026-08-25T00:00:00.000Z')")
-                .bind(fingerprint(V2_MIGRATION_DDL.as_bytes()))
+                .bind(v2_migration_checksum())
                 .execute(&mut *connection)
                 .await?;
             connection.execute("PRAGMA user_version=2").await?;
@@ -404,7 +423,7 @@ impl EventStore {
                 .fetch_optional(&mut *connection)
                 .await?
                 .ok_or_else(|| EventStoreError::new(ErrorKind::Migration))?;
-        if v2_checksum != fingerprint(V2_MIGRATION_DDL.as_bytes()) {
+        if v2_checksum != v2_migration_checksum() {
             return Err(EventStoreError::new(ErrorKind::Migration));
         }
         let writer_epoch_contract: i64 = sqlx::query_scalar(
@@ -412,17 +431,33 @@ impl EventStore {
         )
         .fetch_one(&mut *connection)
         .await?;
-        let snapshot_column_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info('projection_snapshots')")
-                .fetch_one(&mut *connection)
-                .await?;
-        let snapshot_index_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='projection_snapshots_lookup' AND tbl_name='projection_snapshots'",
+        let events_table_sql: String = sqlx::query_scalar(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='events'",
         )
-        .fetch_one(&mut *connection)
-        .await?;
-        if writer_epoch_contract != 1 || snapshot_column_count != 26 || snapshot_index_count != 1 {
+        .fetch_optional(&mut *connection)
+        .await?
+        .ok_or_else(|| EventStoreError::new(ErrorKind::Migration))?;
+        if writer_epoch_contract != 1
+            || !events_table_sql
+                .contains("writer_epoch INTEGER NOT NULL DEFAULT 1 CHECK(writer_epoch IN (1,2))")
+        {
             return Err(EventStoreError::new(ErrorKind::Migration));
+        }
+        for (object_type, name, expected) in [
+            ("table", "projection_snapshots", SNAPSHOT_TABLE_DDL),
+            ("index", "projection_snapshots_lookup", SNAPSHOT_INDEX_DDL),
+        ] {
+            let actual: String = sqlx::query_scalar(
+                "SELECT sql FROM sqlite_master WHERE type=? AND name=? AND tbl_name='projection_snapshots'",
+            )
+            .bind(object_type)
+            .bind(name)
+            .fetch_optional(&mut *connection)
+            .await?
+            .ok_or_else(|| EventStoreError::new(ErrorKind::Migration))?;
+            if actual != expected {
+                return Err(EventStoreError::new(ErrorKind::Migration));
+            }
         }
         let store_id: String = sqlx::query_scalar(
             "SELECT store_id FROM store_metadata WHERE singleton=1 AND length(store_id)=32",
@@ -645,6 +680,21 @@ async fn validate_v1_contract(connection: &mut SqliteConnection) -> Result<(), E
         }
     }
     validate_all_stored_bytes(connection).await
+}
+
+fn fail_v2_migration_after(
+    configured_step: Option<usize>,
+    completed_step: usize,
+) -> Result<(), EventStoreError> {
+    if configured_step == Some(completed_step) {
+        Err(EventStoreError::new(ErrorKind::Migration))
+    } else {
+        Ok(())
+    }
+}
+
+fn v2_migration_checksum() -> String {
+    V2_MIGRATION_CHECKSUM.to_owned()
 }
 
 fn validate_row(
