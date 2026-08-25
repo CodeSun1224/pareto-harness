@@ -4,8 +4,8 @@ title: 版本、事件与证据模型
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-24
-links: [RFC-0001, RFC-0002, RFC-0003, RFC-0004, ADR-0001, ADR-0003, ADR-0004, ADR-0005, REQ-0003, REQ-0004, REQ-0005, SPEC-0002, SPEC-0003, SPEC-0004, REVIEW-0004]
+updated: 2026-08-25
+links: [RFC-0001, RFC-0002, RFC-0003, RFC-0004, RFC-0005, ADR-0001, ADR-0003, ADR-0004, ADR-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REQ-0006, SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0005, REVIEW-0004, REVIEW-0005]
 ---
 
 # 版本、事件与证据模型
@@ -58,7 +58,7 @@ ModelSnapshot          ToolSetRevision
 - `hypothesis`, `target_metrics`, `quality_floor`
 - `evaluation_suite_revision`, `budget`, `risk`, `rollback_condition`
 
-字段名是设计契约；序列化、SchemaSet、规范化/digest、可信验证上下文、兼容与 Replay lineage 已由 RFC-0002/ADR-0003 冻结。公开数据携带完整 SchemaRef 和 IsolationScope，不直接暴露 Rust 内部布局。REQ-0004 已实现 Kernel 私有 SQLite append-only Event Store；REQ-0005 已实现 derived lifecycle stream 的 sequence-1 完整 Manifest、Run/Task 闭合状态机、owner-only authority、exact reader、pure fold 与同一 `BEGIN IMMEDIATE` 内的幂等/版本/guard/单事件追加。Projection、Snapshot 与 Replay executor 仍由 REQ-0006 交付，且只能复用相同 exact SchemaSet/Manifest admission 与 fold 合同。
+字段名是设计契约；序列化、SchemaSet、规范化/digest、可信验证上下文、兼容与 Replay lineage 已由 RFC-0002/ADR-0003 冻结。公开数据携带完整 SchemaRef 和 IsolationScope，不直接暴露 Rust 内部布局。REQ-0004 已实现 Kernel 私有 SQLite append-only Event Store；REQ-0005 已实现 derived lifecycle stream 的 sequence-1 完整 Manifest、Run/Task 闭合状态机、owner-only authority、exact reader、pure fold 与同一 `BEGIN IMMEDIATE` 内的幂等/版本/guard/单事件追加。REQ-0006 已实现由 persisted source contract 显式解析 retained reducer/output reader 的 `RunTaskProjection`，以及绑定 store/full scope/stream/cursor/source/output/reducer/history/digest 的 immutable Snapshot；assisted load 仍重读并验证完整 prefix，只跳过 prefix reducer fold。
 
 ## 事件族
 
@@ -79,3 +79,5 @@ ModelSnapshot          ToolSetRevision
 - `simulated`：固定非空 Fixture revisions，并显式区分 standalone/derived lineage。
 
 任何模式都不得覆盖原 Run；派生模式以 `source_run_id` 和 exact inventory revision 建立谱系。迟到结果写入独立 audit/reconciliation revision，不修改已终结 inventory。
+
+当前 Runtime 只交付 Run/Task `recorded_replay`：忽略 Snapshot、从完整已验证 Event 历史只读重建 Projection，不接受 Effect/Provider/Tool executor，也不追加 Event。`simulated` 在 fixture resolver 交付前稳定拒绝；`reexecute` 和外部边界执行仍属于后续 Requirement。

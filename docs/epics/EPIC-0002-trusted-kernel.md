@@ -4,8 +4,8 @@ title: 可信内核骨架
 status: active
 owners: [maintainers]
 created: 2026-08-22
-updated: 2026-08-24
-links: [PRD-0001, RFC-0001, RFC-0002, RFC-0003, RFC-0004, ADR-0001, ADR-0003, ADR-0004, ADR-0005, BACKLOG-0001, REQ-0003, REQ-0004, REQ-0005, SPEC-0002, SPEC-0003, SPEC-0004, REVIEW-0004]
+updated: 2026-08-25
+links: [PRD-0001, RFC-0001, RFC-0002, RFC-0003, RFC-0004, RFC-0005, ADR-0001, ADR-0003, ADR-0004, ADR-0005, ADR-0006, BACKLOG-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006, SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0005, REVIEW-0004, REVIEW-0005]
 ---
 
 # Outcome
@@ -16,7 +16,7 @@ links: [PRD-0001, RFC-0001, RFC-0002, RFC-0003, RFC-0004, ADR-0001, ADR-0003, AD
 
 REQ-0003 至 REQ-0009：协议与 Revision、Event Store、状态机与 Run Manifest、Snapshot/Replay、Capability/Budget、Hook 骨架、Effect Intent/Receipt。详细顺序见 Requirement Backlog。
 
-已交付 REQ-0003 协议基础、REQ-0004 SQLite append-only Event Store 与 REQ-0005 Run/Task 状态机及完整 Run Manifest。REQ-0006 Projection/Snapshot/Replay、REQ-0007 权限能力及后续切片仍未实现。
+已交付 REQ-0003 协议基础、REQ-0004 SQLite append-only Event Store、REQ-0005 Run/Task 状态机及完整 Run Manifest，以及 REQ-0006 版本化 Projection、同库 Snapshot、Recorded replay 与确定性摘要比较。REQ-0007 Capability、预算、取消与超时是下一纵向切片；Effect execution、Provider/Agent Loop、Memory 和 DAG 仍未实现。
 
 # Exit criteria
 

@@ -1,13 +1,13 @@
 ---
 id: REQ-0006
 title: Projection、Snapshot 与 Replay
-status: reviewing
+status: done
 owners: [maintainers]
 created: 2026-08-24
 updated: 2026-08-25
-links: [EPIC-0002, REQ-0003, REQ-0004, REQ-0005, SPEC-0005, RFC-0005, ADR-0003, ADR-0004, ADR-0005, ADR-0006]
+links: [EPIC-0002, REQ-0003, REQ-0004, REQ-0005, SPEC-0005, RFC-0005, ADR-0003, ADR-0004, ADR-0005, ADR-0006, REVIEW-0005]
 risk: high
-work: .agents/work/active/REQ-0006-projection-snapshot-replay
+work: .agents/work/archived/REQ-0006-projection-snapshot-replay
 ---
 
 # Context and user

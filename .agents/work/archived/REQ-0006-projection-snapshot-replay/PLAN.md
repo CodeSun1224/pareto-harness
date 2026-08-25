@@ -1,6 +1,6 @@
 ---
 title: REQ-0006 Projection、Snapshot 与 Replay 交付计划
-status: active
+status: completed
 owner: maintainers
 updated: 2026-08-25
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006]
@@ -12,7 +12,7 @@ links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006]
 
 # Current state
 
-REQ-0003、REQ-0004、REQ-0005均为done；REVIEW-0002/0003/0004均approved且0 open Blocker/Major。启动时Git工作区clean，`.agents/work/active`仅`.gitkeep`，无其他Runtime Requirement；REQ-0006 prerequisites满足。独立架构评审首轮0 Blocker/6 Major；author remediation经focused re-review全部关闭，最终status bytes也通过freshness-only确认，0 open Blocker/Major。RFC-0005/ADR-0006 accepted、SPEC-0005 approved、REQ-0006 implementing；协议/output SchemaSet、deterministic reducer、SQLite v2 Snapshot、assisted recovery、Recorded replay与比较的最小纵向切片已实现，正在运行全门禁，独立代码评审尚未开始。
+REQ-0003、REQ-0004、REQ-0005、REQ-0006均为done。独立架构评审0 open Blocker/Major；fresh independent code review初审3个Major，author remediation后由同一reviewer focused re-review全部关闭，最终REVIEW-0005 approved、0 open Blocker/Major。协议/output SchemaSet、显式retained reducer、SQLite v2 Snapshot、prefix-proved assisted recovery、Recorded replay与比较的最小纵向切片已实现；全部completion gates通过，工作证据归档。REQ-0007尚未开始实现。
 
 # Plan
 

@@ -1,6 +1,6 @@
 # 文档导航
 
-本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-24。
+本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-25。
 
 ## 产品
 
@@ -15,6 +15,8 @@
 - [SPEC-0003：SQLite append-only Event Store 规范](specs/SPEC-0003-sqlite-append-only-event-store.md)
 - [REQ-0005：Run/Task 状态机与 Run Manifest](requirements/REQ-0005-run-task-state-machine-run-manifest.md)
 - [SPEC-0004：Run/Task 状态机与 Run Manifest 规范](specs/SPEC-0004-run-task-state-machine-run-manifest.md)
+- [REQ-0006：Projection、Snapshot 与 Replay](requirements/REQ-0006-projection-snapshot-replay.md)
+- [SPEC-0005：Projection、Snapshot 与 Replay 规范](specs/SPEC-0005-projection-snapshot-replay.md)
 
 ## 研究
 
@@ -36,6 +38,8 @@
 - [ADR-0004：Kernel 私有 SQLite append-only Event Store 合同](adrs/ADR-0004-sqlite-event-store-transaction-contract.md)
 - [RFC-0004：事件溯源 Run/Task 生命周期](rfcs/RFC-0004-event-sourced-run-task-lifecycle.md)
 - [ADR-0005：采用事件溯源 Run/Task 生命周期](adrs/ADR-0005-event-sourced-run-task-lifecycle.md)
+- [RFC-0005：Projection、Snapshot 与本地确定性 Replay 合同](rfcs/RFC-0005-projection-snapshot-replay-contract.md)
+- [ADR-0006：采用版本化 Projection、同库 Snapshot 与只读 Recorded Replay](adrs/ADR-0006-versioned-projection-snapshot-recorded-replay.md)
 
 ## 交付
 
@@ -45,6 +49,7 @@
 - [工程基础 Epic](epics/EPIC-0001-engineering-foundation.md)
 - [可信内核 Epic](epics/EPIC-0002-trusted-kernel.md)
 - [REQ-0005 独立评审](reviews/REVIEW-0004-run-task-state-machine-run-manifest.md)
+- [REQ-0006 独立代码评审](reviews/REVIEW-0005-projection-snapshot-replay.md)
 
 ## 记录类型
 
