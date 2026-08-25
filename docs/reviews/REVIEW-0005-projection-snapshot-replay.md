@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-25
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REVIEW-0002, REVIEW-0003, REVIEW-0004]
 independence: independent
-reviewed_revision: 1d271549c2607f9c00377bdaa0fa999a131dafe3
+reviewed_revision: 907eee7295a7c3e7c2fa408a035c52d684f52fb4
 open_blockers: 0
 open_majors: 0
 ---
@@ -20,6 +20,7 @@ open_majors: 0
 | F-002 | Major | `crates/pareto-kernel/src/event_store.rs`; `projection/snapshot.rs` | 初审发现v2 ledger只自证声明DDL，实际 Snapshot table/index 的CHECK、UNIQUE、type和index column/order可漂移；真实历史v1迁移与v2中途rollback证据不足。修复冻结首发v2 ledger checksum，并在open读取 `sqlite_master.sql` 对table/index/trigger作exact identity校验；v2 migration分六个可注入失败的原子步骤。 | 证明含两个真实旧事件的v1→v2保持全部旧row bytes/store identity，旧row epoch=1、v2 writer epoch=2且Projection可读；六个DDL阶段逐一rollback至完整v1后可再次迁移；CHECK/UNIQUE/type/index-order漂移均拒绝；held-open v1 writer拒绝、v2 writer成功并可reopen。 | closed |
 | F-003 | Major | `docs/specs/SPEC-0005-projection-snapshot-replay.md`; `crates/pareto-kernel/src/event_store/projection{,/snapshot,/replay}.rs` | 初审的AC→test映射存在0-test authority命令、字段负例和真实并发/migration缺口，corruption helper还会在默认并行测试中跨连接DROP/CREATE trigger而间歇失败。修复新增非零authority、resolver/retention、invalid history、candidate、comparison、isolation、golden、migration和barrier并发矩阵；测试改为单一受控connection的exclusive transaction完成trigger改写/恢复。 | Focused测试逐项命中；Projection默认并行连续3次均35 passed/1 ignored，宽Event Store默认并行连续3次均68 passed/1 ignored；workspace 68 passed/1 ignored、Protocol 9 unit + 21 contract/1 ignored；全部核心、治理、Schema和diff门禁通过。 | closed |
 | F-004 | Minor | `crates/pareto-kernel/src/event_store/projection.rs`; `projection/snapshot.rs` | 初审发现稳定错误合同未完全落地。修复已把candidate source/reducer/output mismatch在自记录校验前分类为`Incompatible`，并以matrix固定主要fallback分类；但 `UnsupportedEvent` 和error-form `NotComparable` 仍无构造路径，unknown event仍由权威history validation归为aggregate corruption。所有路径均fail closed且不泄漏其他scope数据，因此保持诊断/演进层Minor，不升级。 | 后续演进时删除不可能类别或使实现按Spec产生它们，并保持unknown/schema与compare分类的稳定负测。 | accepted |
+| F-005 | Note | `.agents/work/archived/REQ-0006-projection-snapshot-replay/HANDOFF.md` | closure已把首段更新为done/archived，但后续实施进展段保留“`check_docs.py`等待reviewer关闭F-002/F-003”的旧实施期句子，与最终状态字面矛盾。该句在approved remediation/reviewer-record基线已存在；durable REQ-0006、REVIEW-0005和同文件首段均明确最终批准，且不影响Runtime或门禁结果，故不升级为Blocker/Major。 | 后续仅做文档清理时把该句显式标为历史状态或改为最终`check_docs.py`通过事实；不得改写原始review命令/结果。 | accepted |
 
 # Verdict
 
@@ -79,3 +80,4 @@ remediation产品代码限于Event Store v2 migration、Projection/Snapshot/Repl
 
 - 2026-08-25：fresh independent review of exact `5c4f6e7f304c55fb61b6cc7e08d5bbe902b8d82c` against baseline `bb395ad78f762b53d5f486c742194dd8d551dc61`。结论0 Blocker、3 Major、1 accepted Minor，changes requested。
 - 2026-08-25：focused independent re-review of exact `1d271549c2607f9c00377bdaa0fa999a131dafe3`，review-record `a94d756`，author remediation diff `a94d756..1d27154`。独立逐项核对F-001/F-002/F-003 required proof，复查F-004分类，复跑focused、默认并行3×、workspace/Core/治理/Schema门禁；F-001/F-002/F-003 closed，F-004保持accepted Minor，最终approved、0 Blocker、0 Major。
+- 2026-08-25：final freshness-only independent confirmation of exact closure `907eee7295a7c3e7c2fa408a035c52d684f52fb4`，以approved remediation `1d271549c2607f9c00377bdaa0fa999a131dafe3`和review-record commit `14b5438`为基线。完整`14b5438..907eee7` diff只含REQ-0006 done/navigation/architecture implemented facts、validation/handoff/plan/tasks和active→archived move；`crates/`、Schema、Cargo、治理代码和既有Review finding bytes均无变化。实现事实与REVIEW-0005批准范围一致，REQ-0007/Effect/Provider/Memory/DAG仍明确未实现；F-001/F-002/F-003保持closed，F-004保持accepted Minor，归档Handoff的旧实施期句子记录为F-005 accepted Note；最终仍approved、0 Blocker、0 Major，freshness前移至exact `907eee7`。
