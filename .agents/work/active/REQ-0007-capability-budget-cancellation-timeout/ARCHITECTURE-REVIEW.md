@@ -1,6 +1,6 @@
-# REQ-0007 Architecture and Security Self-review
+# REQ-0007 Historical Architecture and Security Self-review
 
-Independence: self-review. This record approves design entry only and is not an independent implementation review.
+Independence: self-review. This historical record never constituted independent approval and has been superseded as a gate by REVIEW-0006. REVIEW-0006 found six open Major in the `05dd7ca` design; Runtime implementation remains blocked until its focused re-review is approved.
 
 # Findings
 
@@ -27,4 +27,4 @@ Independence: self-review. This record approves design entry only and is not an 
 
 # Verdict
 
-Approved for implementation planning with 0 open Blocker and 0 open Major. A fresh independent Agent must review the exact implementation commit and raw validation evidence; this self-review cannot close implementation findings.
+Historical self-review only；not approved for implementation. Its local finding table records what the author checked but cannot close REVIEW-0006 F-001至F-006. The same independent reviewer must approve an exact design-remediation commit with 0 open Blocker/Major before Runtime work；a separate fresh independent Agent must later review the exact implementation and raw validation evidence under a new Review ID.
