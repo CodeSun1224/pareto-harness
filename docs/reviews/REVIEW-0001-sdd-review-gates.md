@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-25
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 5c4f6e7f304c55fb61b6cc7e08d5bbe902b8d82c
+reviewed_revision: 1d271549c2607f9c00377bdaa0fa999a131dafe3
 open_blockers: 0
 open_majors: 0
 ---
@@ -65,3 +65,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact commit `5ef949dd084b1e6ae82015f4c66adb8281aebf65` lifecycle/archive freshness re-review：自 `e5d1b9b` 起仅新增经 REQ-0004 approved Spec、独立 REVIEW-0003 与分层验证约束的 `pareto-kernel` Event Store、锁定依赖及其 durable docs/work archive；`AGENTS.md`、`.agents/skills/`、`scripts/` 与 REQ-0002/SPEC-0001 治理规则 byte-diff 无变化，18 个治理测试在 REQ-0004 completion evidence 中通过。`b7cf277..5ef949d` 本身只同步 REQ-0004 status/docs 并归档 work，无产品、测试、Schema 或治理行为变化。REVIEW-0001 保持 approved、0 open Blocker/Major，freshness 前移至 exact `5ef949d`。
 - exact commit `b5850b76325bbc31825303215224d60c931e27c6` final freshness-only re-review：自 `5ef949d` 起的 REQ-0005 产品增量已由独立 REVIEW-0004 在 exact `675e3f8` 批准；closure diff `675e3f8..b5850b7` 只同步 README/index/EPIC/ARCH implemented facts、将 REQ-0005 标为 done并归档work、落盘 reviewer-owned approval。`AGENTS.md`、`.agents/skills/`、`scripts/`及REQ-0002/SPEC-0001治理行为未改变；18个治理测试与最终`check_docs.py`通过。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `b5850b7`。
 - exact commit `5c4f6e7f304c55fb61b6cc7e08d5bbe902b8d82c` substantive freshness re-review：`b5850b7..5c4f6e7` 新增高风险 REQ-0006 SDD、Runtime、SchemaSet与工作证据，但未修改 `AGENTS.md`、`.agents/skills/`、`.agents/agents/`、`.agents/templates/`、`scripts/`、PR/CI治理规则或REQ-0002/SPEC-0001生命周期、独立性、finding/open-count、freshness和完成判定逻辑。独立复跑18个governance tests通过；新REVIEW-0005如实保持3个open Major和`changes-requested`，未把未批准产品伪装成verified/done。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `5c4f6e7`。
+- exact commit `1d271549c2607f9c00377bdaa0fa999a131dafe3` substantive freshness re-review：`5c4f6e7..1d27154`修复REQ-0006独立代码评审发现并补充test traceability/work evidence；未修改`AGENTS.md`、skills/agents/templates、`scripts/`、CI或REQ-0002/SPEC-0001治理规则。Reviewer独立复跑18个governance tests，并以REVIEW-0005逐项关闭3个Major后才批准；finding/open-count/freshness门禁未被绕过。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `1d27154`。
