@@ -4,10 +4,10 @@ title: REQ-0005 Run/Task 状态机与 Run Manifest 独立代码评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-25
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: b5850b76325bbc31825303215224d60c931e27c6
+reviewed_revision: 5c4f6e7f304c55fb61b6cc7e08d5bbe902b8d82c
 open_blockers: 0
 open_majors: 0
 ---
@@ -97,3 +97,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-24：focused independent re-review of exact `38f0beb710fdd05ffd7b7047db6e3cb7cb7a2f79` and diff `d0011d0..38f0beb`；F-001/F-002/F-004 closed，F-003 partial remediation后保持open，F-005 residual stale exact-revision wording保持accepted Minor。最终0 Blocker、1 Major，仍为changes requested。
 - 2026-08-24：second focused independent re-review of exact `675e3f8fe6888c1d01fec14dda8e0f9164bb8a1b` and diff `38f0beb..675e3f8`；F-003 required proof完整并closed，F-005保持accepted Minor。最终0 Blocker、0 Major，结论approved；REQ-0006可直接复用带exact SchemaSet完整Manifest admission的pure fold，无需重释历史准入合同。
 - 2026-08-24：final independent freshness-only re-review of exact `b5850b76325bbc31825303215224d60c931e27c6` and diff `675e3f8..b5850b7`；仅durable implemented facts、REQ-0005 done/archive、final validation/handoff formatting与reviewer-owned approval，无产品/Schema/依赖/事务变化，REQ-0006未开始。F-005 handoff wording满足；四份Review freshness更新后的docs/governance/schema/diff checks通过。最终approved、0 Blocker/0 Major。
+- 2026-08-25：substantive freshness re-review of exact `5c4f6e7f304c55fb61b6cc7e08d5bbe902b8d82c`。REQ-0006把既有`fold_lifecycle`循环重构为逐事件`apply_lifecycle_event`供Projection suffix复用，但未改变Manifest sequence-1 admission、状态/parent guard表、owner-only authority、同事务command路径或lifecycle wire Schema；独立逐行检查refactor并复跑`cargo test -p pareto-kernel lifecycle:: --offline`为18 passed。新SchemaSet保留四个lifecycle binding，三个旧set byte-identical，protocol与Kernel依赖方向不变。REVIEW-0005的open findings针对Projection reducer version dispatch、v2 migration和REQ-0006测试充分性，不推翻REQ-0005已批准状态机合同。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact `5c4f6e7`。

@@ -4,10 +4,10 @@ title: REQ-0003 版本化协议类型和 JSON Schema 独立代码评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-23
-updated: 2026-08-24
+updated: 2026-08-25
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: b5850b76325bbc31825303215224d60c931e27c6
+reviewed_revision: 5c4f6e7f304c55fb61b6cc7e08d5bbe902b8d82c
 open_blockers: 0
 open_majors: 0
 ---
@@ -84,3 +84,4 @@ Remaining Notes/limitations:
 - Exact `e5d1b9b36de61a961b42b0c8148142cb98ae816f` is a lifecycle/archive-only closure: it records REQ-0003 as done, links this Review, archives the completed work directory, and synchronizes final delivery facts. No product, Schema, test, CI, permission, isolation, replay, or compatibility behavior changed; approval and zero open findings are retained at the newer exact revision.
 - Exact `5ef949dd084b1e6ae82015f4c66adb8281aebf65` freshness/lifecycle re-review: since `e5d1b9b`, `crates/pareto-protocol/` and `schemas/` are byte-diff unchanged. REQ-0004 adds a separate `pareto-kernel` consumer with SQLite/Tokio dependencies; dependency direction remains Kernel -> protocol and protocol gains no database, Runtime, network, Provider, filesystem-reader, or secret dependency. Its authority, retained SchemaSet reader, compatibility and isolation behavior received independent REVIEW-0003 approval and protocol 9 unit + 17 contract regressions passed. `b7cf277..5ef949d` itself is docs/status/work-archive only. REVIEW-0002 remains approved with 0 open Blocker/Major at the newer exact revision.
 - Exact `b5850b76325bbc31825303215224d60c931e27c6` final freshness re-review: REQ-0005's intervening protocol/Event additions were independently reviewed in REVIEW-0004, published a new immutable SchemaSet without changing retained sets, preserved Kernel -> protocol dependency direction, and passed protocol 9 unit + 19 contract tests including exact old-reader substitution negatives. The exact closure diff `675e3f8..b5850b7` changes no `crates/`, Schema bytes, Cargo manifests/lock, dependencies, public protocol API, reader identity, or replay semantics; it is docs/status/work-archive only. REVIEW-0002 remains approved with 0 open Blocker/Major and freshness advances to exact `b5850b7`.
+- Exact `5c4f6e7f304c55fb61b6cc7e08d5bbe902b8d82c` substantive freshness re-review: REQ-0006 additively introduces closed Projection/Snapshot/reducer/history records, ten generated member Schemas and immutable content-addressed set `sha256-4ce3872926ce61209fdc5ed48deceeec9703ccfe94ea83be485eb8ef7512ff97`. Independent comparison confirms the three previously retained sets are byte-diff unchanged; protocol remains independent of Kernel/sqlx/Runtime/network/Provider/filesystem readers and Cargo dependencies are unchanged. Reviewer reran 9 protocol unit + 21 contract tests, including retained-set completeness, generation identity and old-writer exact readers; all passed (one observation ignored), and schema generation left the worktree unchanged. Open exact reducer/migration/test findings are owned by REVIEW-0005 and do not weaken REQ-0003's already approved canonicalization, SchemaSet admission, limits, isolation or retained-reader contract. REVIEW-0002 remains approved with 0 open Blocker/Major and freshness advances to exact `5c4f6e7`.
