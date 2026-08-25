@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-25
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: cfa7a06c3588a6ad975a9511140d0984f5eb1b8f
+reviewed_revision: a4e34785908207e622365250ae1466b85b4baecb
 open_blockers: 0
 open_majors: 0
 ---
@@ -68,3 +68,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact commit `1d271549c2607f9c00377bdaa0fa999a131dafe3` substantive freshness re-review：`5c4f6e7..1d27154`修复REQ-0006独立代码评审发现并补充test traceability/work evidence；未修改`AGENTS.md`、skills/agents/templates、`scripts/`、CI或REQ-0002/SPEC-0001治理规则。Reviewer独立复跑18个governance tests，并以REVIEW-0005逐项关闭3个Major后才批准；finding/open-count/freshness门禁未被绕过。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `1d27154`。
 - exact closure commit `907eee7295a7c3e7c2fa408a035c52d684f52fb4` freshness-only re-review：`14b5438..907eee7`仅同步REQ-0006 done/navigation/architecture implemented facts、final validation/handoff/tasks/plan并将active work归档；`crates/`、Schema、Cargo、scripts、skills/agents/templates和CI零差异。正式REVIEW-0005已在`14b5438`落盘0 open Blocker/Major；本轮预期freshness失败后只由独立reviewer前移Review records，治理生命周期和完成判定未被绕过。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `907eee7`。
 - exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f` substantive freshness re-review：独立检查完整`907eee7..cfa7a06`，只新增/修订planned高风险REQ-0007 Requirement/Spec/RFC/ADR、active work与REVIEW-0006；`AGENTS.md`、scripts、skills/agents/templates、CI和REQ-0002/SPEC-0001零差异。REVIEW-0006如实保持`changes-requested`和1 open Major，Runtime继续阻塞，没有绕过独立finding/open-count/freshness或完成判定。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `cfa7a06`。
+- exact candidate `a4e34785908207e622365250ae1466b85b4baecb` substantive freshness re-review：独立检查`cfa7a06..a4e3478`，只补齐REQ-0007 timeout recovery identity的Requirement/Spec/RFC/ADR、active work与Review记录；`AGENTS.md`、scripts、skills/agents/templates、CI和REQ-0002/SPEC-0001零差异。REVIEW-0006仅在independent focused re-review确认唯一Major required proof闭合后改为approved、0 open Blocker/Major，未绕过finding/open-count/freshness或完成判定。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `a4e3478`。

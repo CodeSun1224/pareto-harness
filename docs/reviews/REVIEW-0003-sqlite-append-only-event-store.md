@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: cfa7a06c3588a6ad975a9511140d0984f5eb1b8f
+reviewed_revision: a4e34785908207e622365250ae1466b85b4baecb
 open_blockers: 0
 open_majors: 0
 ---
@@ -75,3 +75,4 @@ open_majors: 0
 - 2026-08-25：substantive freshness re-review精确提交`1d271549c2607f9c00377bdaa0fa999a131dafe3`。REQ-0006把Event Store从v1原子迁移到v2 writer epoch和immutable Snapshot table；初审因actual DDL identity、真实历史迁移/rollback与并行稳定性证据不足而保持本Review stale。focused remediation现冻结首发v2 ledger checksum，对实际`sqlite_master` table/index/trigger SQL作exact验证，并以含两个事件的v1 fixture证明全部旧row bytes/store ID保留、六个DDL阶段失败完整rollback、held-open v1 writer拒绝、v2 writer成功及Projection/reopen恢复；CHECK/UNIQUE/type/index-order drift均fail closed。Reviewer将宽Event Store默认并行69-test selection连续运行3次（每次68 passed/1 ignored），另将15个store core tests连续运行3次，并运行workspace Core；全部通过。append-only authority、exact reader、cursor、隔离和事务合同未放宽；REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`1d27154`。
 - 2026-08-25：exact closure `907eee7295a7c3e7c2fa408a035c52d684f52fb4` freshness-only re-review。`14b5438..907eee7`无Event Store/SQLite/Runtime/Schema/Cargo变化，只把已独立批准的v2 Projection/Snapshot事实同步到README、architecture、Epic、Requirement和归档证据；没有修改v1/v2 DDL、migration ledger、writer epoch、authority、cursor、隔离、事务或rollback合同。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`907eee7`。
 - 2026-08-25：exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f` substantive freshness re-review。完整`907eee7..cfa7a06`无`crates/`、SQLite、Schema、Cargo或API实现变化；REQ-0007仅设计复用v2 `events`和同一`BEGIN IMMEDIATE` writer，明确`user_version=2`、ledger checksum、writer epoch及Snapshot DDL/trigger不变，未增加raw SQL/authority表或第二事实源。实际Event Store合同和已批准证据未被修改；新command实现仍未开始且受REVIEW-0006阻塞。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`cfa7a06`。
+- 2026-08-25：exact candidate `a4e34785908207e622365250ae1466b85b4baecb` substantive freshness re-review。`cfa7a06..a4e3478`无`crates/`、SQLite、Schema、Cargo或API实现变化，只细化未来timeout recovery command在既有`BEGIN IMMEDIATE` writer内的identity/idempotency/terminal/due优先级。未增加权威表、raw SQL、第二事实源或修改v2 DDL/ledger/writer epoch/Snapshot；Event Store已批准事实不变。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`a4e3478`。

@@ -7,7 +7,7 @@ created: 2026-08-24
 updated: 2026-08-25
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: cfa7a06c3588a6ad975a9511140d0984f5eb1b8f
+reviewed_revision: a4e34785908207e622365250ae1466b85b4baecb
 open_blockers: 0
 open_majors: 0
 ---
@@ -101,3 +101,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-25：focused substantive freshness re-review of exact `1d271549c2607f9c00377bdaa0fa999a131dafe3`。`5c4f6e7..1d27154`未修改lifecycle module或四个lifecycle wire Schema；Projection retained registration显式固定同一Manifest/四event bindings，并以真实`dae028...`旧Run、非法lifecycle history及suffix/full equivalence证明没有绕开`apply_lifecycle_event`状态机。含历史v1→v2迁移后v2 lifecycle writer成功，workspace Core中18个lifecycle tests全部通过。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`1d27154`。
 - 2026-08-25：exact closure `907eee7295a7c3e7c2fa408a035c52d684f52fb4` freshness-only re-review。`14b5438..907eee7`未修改lifecycle Runtime、Manifest/Event Schema、状态/parent guard、authority或事务command路径；文档只把REQ-0006已批准Projection consumer与Recorded replay事实标为delivered，并把work active→archived。REQ-0005既有批准合同不变，REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`907eee7`。
 - 2026-08-25：exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f` substantive freshness re-review。`907eee7..cfa7a06`未修改lifecycle Runtime、Manifest/Event Schema、既有状态/parent guard或旧Run command实现；REQ-0007仅为未来Manifest固定新control-capable set的Run增加同writer pending-operation admission，明确旧set/no-control Run保持REQ-0005合同、operation cancellation不重释lifecycle `cancelled`。该additive consumer设计尚未实现，two-stream race证据列入后续门禁。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`cfa7a06`。
+- 2026-08-25：exact candidate `a4e34785908207e622365250ae1466b85b4baecb` substantive freshness re-review。`cfa7a06..a4e3478`未修改lifecycle Runtime、Manifest/Event Schema、状态/parent guard、旧Run command或上一轮已关闭的transition/reserve guard，只为未来pending operation timeout recovery补充确定性identity与terminal优先级；不重释REQ-0005 lifecycle或operation cancellation。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`a4e3478`。

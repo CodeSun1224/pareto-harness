@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: cfa7a06c3588a6ad975a9511140d0984f5eb1b8f
+reviewed_revision: a4e34785908207e622365250ae1466b85b4baecb
 open_blockers: 0
 open_majors: 0
 ---
@@ -88,3 +88,4 @@ Remaining Notes/limitations:
 - Exact `1d271549c2607f9c00377bdaa0fa999a131dafe3` substantive freshness re-review: remediation changes Kernel reducer registration/migration tests and REQ-0006 traceability only；`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock及public protocol API相对`5c4f6e7` byte-diff unchanged。Reviewer独立复跑protocol 9 unit + 21 contract、retained `dae028...` old Run/Snapshot exact reader及Schema generation byte identity；显式source-contract registration仍使用已批准SchemaSet admission和exact digest，不放宽REQ-0003 canonicalization/limits/isolation。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `1d27154`。
 - Exact closure `907eee7295a7c3e7c2fa408a035c52d684f52fb4` freshness-only re-review: `14b5438..907eee7`只更新REQ-0006 durable status/navigation/architecture facts和归档work；`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API、SchemaSet bytes与reader identity零差异。新增文案准确描述已批准current output set、retained source reader和Recorded replay边界，不扩大协议合同。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `907eee7`。
 - Exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f` substantive freshness re-review: `907eee7..cfa7a06`仅设计新的REQ-0007 closed protocol、control-capable SchemaSet和retained operation/source contracts；没有修改`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API、四个既有SchemaSet bytes、canonicalization、limits、isolation或reader实现。新合同仍要求Manifest exact pin、旧set不升级和protocol不依赖Kernel；实现及golden证据尚未发生且受REVIEW-0006阻塞。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `cfa7a06`。
+- Exact candidate `a4e34785908207e622365250ae1466b85b4baecb` substantive freshness re-review: `cfa7a06..a4e3478`只在REQ-0007设计层冻结`TimeoutKeyV1`与`TimeoutRecoveryCommandV1`的未来closed wire identity；没有修改`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API、四个既有SchemaSet bytes、canonicalization、limits、isolation或reader实现。新增类型、Schema与golden仍须在实施中生成并独立评审，既有协议批准事实未改变。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `a4e3478`。
