@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-25
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 1b40e92be11e73a497ec821118b7cb4e0c1af1ce
+reviewed_revision: ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684
 open_blockers: 0
 open_majors: 0
 ---
@@ -70,3 +70,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f` substantive freshness re-review：独立检查完整`907eee7..cfa7a06`，只新增/修订planned高风险REQ-0007 Requirement/Spec/RFC/ADR、active work与REVIEW-0006；`AGENTS.md`、scripts、skills/agents/templates、CI和REQ-0002/SPEC-0001零差异。REVIEW-0006如实保持`changes-requested`和1 open Major，Runtime继续阻塞，没有绕过独立finding/open-count/freshness或完成判定。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `cfa7a06`。
 - exact candidate `a4e34785908207e622365250ae1466b85b4baecb` substantive freshness re-review：独立检查`cfa7a06..a4e3478`，只补齐REQ-0007 timeout recovery identity的Requirement/Spec/RFC/ADR、active work与Review记录；`AGENTS.md`、scripts、skills/agents/templates、CI和REQ-0002/SPEC-0001零差异。REVIEW-0006仅在independent focused re-review确认唯一Major required proof闭合后改为approved、0 open Blocker/Major，未绕过finding/open-count/freshness或完成判定。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `a4e3478`。
 - exact implementation candidate `1b40e92be11e73a497ec821118b7cb4e0c1af1ce` substantive freshness re-review：独立检查`a4e3478..1b40e92`及20个governance tests。新增两个REQ-0007 helper和其tests，未修改`check_docs.py`、AGENTS/skills/agents/templates、CI或REQ-0002/SPEC-0001的lifecycle、independence、finding/open-count与freshness规则。正式REVIEW-0007如实记录9个open Major并给出`changes-requested`，REQ-0007保持reviewing，没有把未通过的产品伪装成verified/done。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `1b40e92`。
+- exact remediation candidate `ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684` substantive freshness re-review：独立检查完整`1b40e92..ab2fbc6`；变更只修复REQ-0007产品/Schema/测试、记录FIX-0001及交付证据，未修改`AGENTS.md`、skills/agents/templates、CI或`check_docs.py`的lifecycle、独立性、finding/open-count与freshness规则。21个治理/Python tests通过；REVIEW-0007仍如实保留5个open Major和`changes-requested`，没有绕过完成判定。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `ab2fbc6`。

@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: 1b40e92be11e73a497ec821118b7cb4e0c1af1ce
+reviewed_revision: ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684
 open_blockers: 0
 open_majors: 0
 ---
@@ -77,3 +77,4 @@ open_majors: 0
 - 2026-08-25：exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f` substantive freshness re-review。完整`907eee7..cfa7a06`无`crates/`、SQLite、Schema、Cargo或API实现变化；REQ-0007仅设计复用v2 `events`和同一`BEGIN IMMEDIATE` writer，明确`user_version=2`、ledger checksum、writer epoch及Snapshot DDL/trigger不变，未增加raw SQL/authority表或第二事实源。实际Event Store合同和已批准证据未被修改；新command实现仍未开始且受REVIEW-0006阻塞。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`cfa7a06`。
 - 2026-08-25：exact candidate `a4e34785908207e622365250ae1466b85b4baecb` substantive freshness re-review。`cfa7a06..a4e3478`无`crates/`、SQLite、Schema、Cargo或API实现变化，只细化未来timeout recovery command在既有`BEGIN IMMEDIATE` writer内的identity/idempotency/terminal/due优先级。未增加权威表、raw SQL、第二事实源或修改v2 DDL/ledger/writer epoch/Snapshot；Event Store已批准事实不变。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`a4e3478`。
 - 2026-08-26：exact implementation candidate `1b40e92be11e73a497ec821118b7cb4e0c1af1ce` substantive freshness re-review。`event_store.rs`仅新增private runtime-control module；DB v2、DDL/index/trigger、migration ledger、writer epoch、Event Store authority/reader/cursor实现对比`6de3598`未改。Runtime复用events表和transaction-local private helpers，没有raw-SQL/public transaction escape hatch或第二权威表。Reviewer独立复跑全workspace，含Event Store migration/append/authority/isolation/concurrency/recovery回归全部通过。REQ-0007新语义由REVIEW-0007保持changes-requested，不改变REQ-0004已批准存储事实。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`1b40e92`。
+- 2026-08-26：exact remediation candidate `ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684` substantive freshness re-review。独立逐项检查`1b40e92..ab2fbc6`：仍只复用v2 `events`与同一`BEGIN IMMEDIATE` writer；`user_version`、ledger checksum、writer epoch、table/index/trigger、Snapshot DDL和raw SQL可见性没有变化，也未增加第二权威状态表。workspace 118 passed/1 ignored，Event Store authority/isolation/migration/reopen回归全部通过。REQ-0007 pure-fold残留由REVIEW-0007 F-007阻塞，但不放宽REQ-0004既有row validation、append-only、transaction与DB兼容合同。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`ab2fbc6`。
