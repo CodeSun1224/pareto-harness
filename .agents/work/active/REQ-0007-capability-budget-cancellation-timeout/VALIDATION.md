@@ -2,10 +2,10 @@
 
 ## Subject
 
-- Requirement: REQ-0007 (`implementing`)
+- Requirement: REQ-0007 (`reviewing`)
 - Spec: SPEC-0006 (`approved`)
 - RFC/ADR: RFC-0006 / ADR-0007 (`accepted`)
-- Git revision or diff: uncommitted implementation candidate against `6de3598`；exact review revision pending
+- Git revision or diff: exact implementation candidate `9f979f0ccaa6be0431ca794f584fd0c6df83af9c`
 - Environment: Windows PowerShell, 2026-08-26, Asia/Shanghai
 
 ## Results

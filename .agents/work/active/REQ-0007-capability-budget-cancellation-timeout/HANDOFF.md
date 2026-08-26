@@ -1,6 +1,6 @@
 # REQ-0007 Handoff
 
-当前阶段：implementing。REQ-0005/0006均done；REVIEW-0006已独立批准设计提交`a4e3478`，0 open Blocker/Major；TASK-REQ-0007-00至06完成。协议、Kernel私有Runtime Control纵切、FakeClock测试和最终SchemaSet `sha256-a1f960076698e948a0c7a307250138834bedd3b034fdce5d87fd231eb42887ac`已落盘；当前执行TASK-REQ-0007-07全门禁和证据固化，之后提交exact implementation revision交fresh independent code reviewer。
+当前阶段：reviewing。Exact implementation candidate `9f979f0ccaa6be0431ca794f584fd0c6df83af9c`已通过实现前完整门禁；下一步由fresh independent Agent执行implementation code review。Blocker/Major只能由reviewer在focused re-review中关闭，未关闭前不得verified/done。
 
 候选修订边界：单Run derived control stream；Manifest必须先exact固定control-capable SchemaSet，first event固定initial grants/budget/clock/source contract且所有row不漂移；control Event envelope signer恒为Manifest owner；Capability默认拒绝且child逐项收窄；lifecycle全状态准入及pending-operation transition guard；trusted operation contract产生并由Kernel meter强制resource envelope；Run/Task/Actor/operation预算同事务reserve；opaque lease绑定callback/ack producer，provider report非权威，unknown仅由authorized producer触发；Run/Task owner-only与operation owner/subject cancellation authority；TimeoutKey+Clock sample+冻结evidence确定性派生recovery event ID/fingerprint，not_due不消费、exact response-loss retry、same-ID mutation优先、different-ID terminal no-op；显式Kernel timeout recovery；live monotonic、persisted absolute UTC、restart新lease；terminal唯一；late只对authorized producer写redacted digest audit；Projection派生；Recorded replay无Operation executor/recovery writer。
 

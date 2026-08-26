@@ -2,7 +2,7 @@
 title: REQ-0007 Capability、预算、取消与超时交付计划
 status: active
 owner: maintainers
-updated: 2026-08-25
+updated: 2026-08-26
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006]
 ---
 

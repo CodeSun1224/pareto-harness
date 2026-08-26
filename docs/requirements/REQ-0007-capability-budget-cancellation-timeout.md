@@ -1,7 +1,7 @@
 ---
 id: REQ-0007
 title: Capability、预算、取消与超时
-status: implementing
+status: reviewing
 owners: [maintainers]
 created: 2026-08-25
 updated: 2026-08-26
