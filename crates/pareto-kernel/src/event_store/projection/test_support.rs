@@ -117,7 +117,7 @@ impl Fixture {
     pub(super) fn projection_registry(&self) -> ProjectionRegistry {
         ProjectionRegistry::retained(
             self.source_registry(),
-            SchemaRegistry(vec![self.set.clone()]),
+            SchemaRegistry(vec![self.retained_projection_output_set()]),
             self.limits.clone(),
         )
         .unwrap()
@@ -176,6 +176,50 @@ impl Fixture {
         let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../schemas/sets")
             .join(RETAINED_LIFECYCLE_SET);
+        let manifest: SchemaSetManifest = serde_json::from_slice(
+            &std::fs::read(directory.join("schema-set-v1.0.manifest.json")).unwrap(),
+        )
+        .unwrap();
+        let reference: SchemaSetRef = serde_json::from_slice(
+            &std::fs::read(directory.join("schema-set-v1.0.ref.json")).unwrap(),
+        )
+        .unwrap();
+        let documents = manifest
+            .schemas
+            .iter()
+            .map(|schema| {
+                let filename = format!(
+                    "{}-v{}.{}.schema.json",
+                    schema.r#type, schema.major, schema.minor
+                );
+                SchemaDocument {
+                    document: serde_json::from_slice(
+                        &std::fs::read(directory.join(&filename)).unwrap(),
+                    )
+                    .unwrap(),
+                    filename,
+                }
+            })
+            .collect();
+        Arc::new(
+            SchemaSet::admit_with(
+                &TestEvolutionAuthorizer,
+                None,
+                manifest,
+                documents,
+                &reference,
+                Vec::new(),
+            )
+            .unwrap(),
+        )
+    }
+
+    pub(super) fn retained_projection_output_set(&self) -> Arc<SchemaSet> {
+        const RETAINED_OUTPUT_SET: &str =
+            "sha256-4ce3872926ce61209fdc5ed48deceeec9703ccfe94ea83be485eb8ef7512ff97";
+        let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../schemas/sets")
+            .join(RETAINED_OUTPUT_SET);
         let manifest: SchemaSetManifest = serde_json::from_slice(
             &std::fs::read(directory.join("schema-set-v1.0.manifest.json")).unwrap(),
         )

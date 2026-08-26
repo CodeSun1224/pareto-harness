@@ -1308,15 +1308,16 @@ async fn reducer_resolution() {
     let fixture = test_support::Fixture::new("run_reducer-resolution");
     let store = fixture.open_created().await;
     let evolved = fixture.evolved_set_with_unrelated_member();
+    let retained_output = fixture.retained_projection_output_set();
     let registry = ProjectionRegistry::retained(
         SchemaRegistry(vec![evolved.clone(), fixture.set.clone()]),
-        SchemaRegistry(vec![evolved.clone(), fixture.set.clone()]),
+        SchemaRegistry(vec![retained_output.clone()]),
         fixture.limits.clone(),
     )
     .unwrap();
     let reversed = ProjectionRegistry::retained(
         SchemaRegistry(vec![fixture.set.clone(), evolved.clone()]),
-        SchemaRegistry(vec![fixture.set.clone(), evolved.clone()]),
+        SchemaRegistry(vec![retained_output.clone()]),
         fixture.limits.clone(),
     )
     .unwrap();
@@ -1333,7 +1334,7 @@ async fn reducer_resolution() {
     );
     assert_eq!(
         current.descriptor.output_schema_set_ref,
-        *fixture.set.reference()
+        *retained_output.reference()
     );
 
     let mut unmapped_key = source_reducer_key(&evolved).unwrap();
@@ -1391,7 +1392,7 @@ async fn reducer_resolution() {
     assert_eq!(
         ProjectionRegistry::retained(
             fixture.source_registry(),
-            SchemaRegistry(vec![fixture.set.clone()]),
+            SchemaRegistry(vec![retained_output]),
             wrong_limits,
         )
         .err()
@@ -1447,11 +1448,11 @@ async fn digest_golden() {
     );
     assert_eq!(
         projection.projection_digest.as_str(),
-        "sha256:9afb6790070edc1c46444c0ba20cb4c97a7cbba2d65556b8e95b020ee4ce945e"
+        "sha256:d055d5fe797fa66db20920b1e2bfcff53df44d557b684c052a16907780815fac"
     );
     assert_eq!(
         snapshot.snapshot_digest.as_str(),
-        "sha256:64207266735307494818b57da04d9c215a4bae025815a62789cc6d04e60f693a"
+        "sha256:e7ff5c718bf6f51b2f7044208a64c685d6356058d499feacad2040345068e10e"
     );
     transaction.rollback().await.unwrap();
 
@@ -1499,19 +1500,19 @@ async fn digest_golden() {
     );
     assert_eq!(
         one.as_str(),
-        "sha256:23387a3dc09102d1ec539c7d5ce48497abf0ba2610830cac3c52baa6ed6b7222"
+        "sha256:ae06c8868d435b4f104f3ea9c2c308162c1f1b148042696fc5dc839431e9c542"
     );
     assert_eq!(
         two.as_str(),
-        "sha256:0066e76f4a5913eeb6acf6efc02a4d9beb1a7931b46e851534b5dad19163dc3c"
+        "sha256:cd3691d6ece113da71d3b4e4d08f27ca5cb921f5d7479e0feabff43fc129fea2"
     );
     assert_eq!(
         projection_n.projection_digest.as_str(),
-        "sha256:dcffc9bdd4d28f7bb53f1741eb6e78fe2cd8d7055f1a7e9f14031cdce32bfb42"
+        "sha256:678de6316c24d7c000dc2021b7ca16ea8a84fccb4de80450d33765a4e8e77ab2"
     );
     assert_eq!(
         snapshot_n.snapshot_digest.as_str(),
-        "sha256:5ec28c38e6158572f680413177d81d8c3710eac340fb39677296ff35c32355f8"
+        "sha256:cda01d301e0dce3020fbe9dcecf3eb9ab5a5b70d1c78aef6e043f60f7bf3dfd0"
     );
 }
 
@@ -1700,9 +1701,10 @@ async fn authority() {
     let fixture = test_support::Fixture::new("run_projection-authority");
     let store = fixture.open_created().await;
     let evolved = fixture.evolved_set_with_unrelated_member();
+    let retained_output = fixture.retained_projection_output_set();
     let registry = ProjectionRegistry::retained(
         SchemaRegistry(vec![evolved.clone(), fixture.set.clone()]),
-        SchemaRegistry(vec![evolved, fixture.set.clone()]),
+        SchemaRegistry(vec![retained_output.clone()]),
         fixture.limits.clone(),
     )
     .unwrap();
@@ -1715,7 +1717,7 @@ async fn authority() {
 
     let missing_exact_source = ProjectionRegistry::retained(
         SchemaRegistry(vec![fixture.evolved_set_with_unrelated_member()]),
-        SchemaRegistry(vec![fixture.set.clone()]),
+        SchemaRegistry(vec![retained_output]),
         fixture.limits.clone(),
     )
     .unwrap();
@@ -1750,7 +1752,7 @@ async fn compatibility() {
 #[tokio::test]
 async fn retained_source_compatibility() {
     let mut fixture = test_support::Fixture::new("run_retained-source");
-    let current_output = fixture.set.clone();
+    let current_output = fixture.retained_projection_output_set();
     let retained_source = fixture.retained_lifecycle_set();
     fixture.set = retained_source.clone();
     fixture.manifest.schema_ref = retained_source.schema_ref("run-manifest").unwrap().clone();

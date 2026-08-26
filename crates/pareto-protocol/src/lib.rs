@@ -7,6 +7,7 @@ mod canonical;
 mod compatibility;
 mod digest;
 mod error;
+mod runtime_control;
 mod schema;
 mod types;
 mod validation;
@@ -18,6 +19,7 @@ pub use digest::{
     digest_schema,
 };
 pub use error::{ErrorCode, ValidationError};
+pub use runtime_control::*;
 pub use schema::{
     GeneratedSchemaBundle, SchemaDocument, generate_schema_bundle, generate_schema_set,
 };

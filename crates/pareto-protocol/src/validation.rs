@@ -213,6 +213,39 @@ fn builtin_event_decoder(binding: &EventTypeBinding) -> Option<Arc<dyn EventVari
         binding.variant_id.as_str(),
         binding.payload_schema_ref.r#type.as_str(),
     ) {
+        ("runtime-control-initialized-v1", "runtime-control-initialized-payload") => {
+            Some(decoder!(crate::RuntimeControlInitializedPayloadV1))
+        }
+        ("capability-issued-v1", "capability-issued-payload") => {
+            Some(decoder!(crate::CapabilityIssuedPayloadV1))
+        }
+        ("capability-revoked-v1", "capability-revoked-payload") => {
+            Some(decoder!(crate::CapabilityRevokedPayloadV1))
+        }
+        ("protected-operation-denied-v1", "protected-operation-denied-payload") => {
+            Some(decoder!(crate::ProtectedOperationDeniedPayloadV1))
+        }
+        ("operation-reserved-v1", "operation-reserved-payload") => {
+            Some(decoder!(crate::OperationReservedPayloadV1))
+        }
+        ("operation-settled-v1", "operation-settled-payload") => {
+            Some(decoder!(crate::OperationSettledPayloadV1))
+        }
+        ("budget-refunded-v1", "budget-refunded-payload") => {
+            Some(decoder!(crate::BudgetRefundedPayloadV1))
+        }
+        ("cancellation-requested-v1", "cancellation-requested-payload") => {
+            Some(decoder!(crate::CancellationRequestedPayloadV1))
+        }
+        ("cancellation-acknowledged-v1", "cancellation-acknowledged-payload") => {
+            Some(decoder!(crate::CancellationAcknowledgedPayloadV1))
+        }
+        ("late-result-observed-v1", "late-result-observed-payload") => {
+            Some(decoder!(crate::LateResultObservedPayloadV1))
+        }
+        ("control-message-rejected-v1", "control-message-rejected-payload") => {
+            Some(decoder!(crate::ControlMessageRejectedPayloadV1))
+        }
         ("run-created-v1", "run-created-payload") => Some(decoder!(crate::RunCreatedPayload)),
         ("task-created-v1", "task-created-payload") => Some(decoder!(crate::TaskCreatedPayload)),
         ("run-state-transitioned-v1", "run-state-transitioned-payload") => {

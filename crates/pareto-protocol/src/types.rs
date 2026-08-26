@@ -54,6 +54,24 @@ wire_id!(StreamId, "stream_", "Event stream identifier.");
 wire_id!(EventId, "event_", "Event identifier.");
 wire_id!(RequirementId, "req_", "Requirement identifier.");
 wire_id!(RevisionId, "rev_", "Immutable revision identifier.");
+wire_id!(
+    CapabilityId,
+    "cap_",
+    "Immutable capability grant identifier."
+);
+wire_id!(BudgetAccountId, "budget_", "Budget account identifier.");
+wire_id!(
+    ReservationId,
+    "reservation_",
+    "Budget reservation identifier."
+);
+wire_id!(OperationId, "operation_", "Protected operation identifier.");
+wire_id!(CallbackId, "callback_", "Operation callback identifier.");
+wire_id!(
+    CancellationId,
+    "cancel_",
+    "Cancellation request identifier."
+);
 
 fn valid_wire_id(value: &str, prefix: &str) -> bool {
     let suffix = value.strip_prefix(prefix).unwrap_or_default();

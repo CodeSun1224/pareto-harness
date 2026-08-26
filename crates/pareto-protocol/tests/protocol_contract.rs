@@ -173,7 +173,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 26);
+    assert_eq!(first.len(), 43);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -219,7 +219,23 @@ fn projection_snapshot_contract() {
         .find(|schema| schema.filename == "run-task-projection-snapshot-v1.0.schema.json")
         .unwrap();
     assert_eq!(snapshot.document["unevaluatedProperties"], false);
-    assert_eq!(bundle.manifest.event_bindings.len(), 4);
+    assert_eq!(
+        bundle
+            .manifest
+            .event_bindings
+            .iter()
+            .filter(|binding| {
+                matches!(
+                    binding.event_type.as_str(),
+                    "run-created"
+                        | "run-state-transitioned"
+                        | "task-created"
+                        | "task-state-transitioned"
+                )
+            })
+            .count(),
+        4
+    );
 }
 
 #[test]
@@ -281,11 +297,16 @@ fn lifecycle_manifest_contract() {
             "task-state-transitioned-v1",
         ),
     ];
-    assert_eq!(
-        bundle.manifest.event_bindings.len(),
-        expected_bindings.len()
-    );
-    for (binding, expected) in bundle.manifest.event_bindings.iter().zip(expected_bindings) {
+    let lifecycle_bindings: Vec<_> = bundle
+        .manifest
+        .event_bindings
+        .iter()
+        .filter(|binding| {
+            binding.event_type.starts_with("run-") || binding.event_type.starts_with("task-")
+        })
+        .collect();
+    assert_eq!(lifecycle_bindings.len(), expected_bindings.len());
+    for (binding, expected) in lifecycle_bindings.into_iter().zip(expected_bindings) {
         assert_eq!(
             (
                 binding.event_type.as_str(),
@@ -392,6 +413,86 @@ fn lifecycle_manifest_contract() {
         }))
         .is_err()
     );
+}
+
+#[test]
+fn capability_budget_contract() {
+    let bundle = generate_schema_bundle().unwrap();
+    for required in [
+        "budget-plan",
+        "capability-grant",
+        "runtime-control-initialized-payload",
+        "operation-reserved-payload",
+        "operation-settled-payload",
+        "timeout-key",
+        "trusted-operation-contract",
+        "runtime-control-projection",
+        "runtime-control-projection-hash-view",
+    ] {
+        assert!(
+            bundle
+                .manifest
+                .schemas
+                .iter()
+                .any(|schema| schema.r#type == required),
+            "missing {required}"
+        );
+    }
+    let control_events = [
+        "budget-refunded",
+        "capability-issued",
+        "capability-revoked",
+        "cancellation-acknowledged",
+        "cancellation-requested",
+        "control-message-rejected",
+        "late-result-observed",
+        "operation-reserved",
+        "operation-settled",
+        "protected-operation-denied",
+        "runtime-control-initialized",
+    ];
+    for event_type in control_events {
+        assert!(
+            bundle
+                .manifest
+                .event_bindings
+                .iter()
+                .any(|binding| binding.event_type == event_type && binding.major == 1),
+            "missing {event_type}"
+        );
+    }
+    assert_eq!(bundle.manifest.event_bindings.len(), 15);
+    assert!(BudgetAmountV1::parse("0").is_ok());
+    assert!(BudgetAmountV1::parse(u64::MAX.to_string()).is_ok());
+    for invalid in ["", "00", "01", "-1", "1.0", "18446744073709551616"] {
+        assert!(
+            BudgetAmountV1::parse(invalid).is_err(),
+            "accepted {invalid}"
+        );
+    }
+}
+
+#[test]
+fn runtime_control_projection_contract() {
+    let bundle = generate_schema_bundle().unwrap();
+    let projection = bundle
+        .schemas
+        .iter()
+        .find(|schema| schema.filename == "runtime-control-projection-v1.0.schema.json")
+        .expect("projection schema");
+    let bytes = pareto_protocol::canonical_json(&projection.document).unwrap();
+    for required in [
+        "absolute_deadline_utc",
+        "cancellation_requested",
+        "interruptibility",
+        "gross_consumed",
+        "refunded",
+        "net_consumed",
+        "projection_digest",
+        "source_contract",
+    ] {
+        assert!(bytes.contains(required), "projection omitted {required}");
+    }
 }
 
 #[test]

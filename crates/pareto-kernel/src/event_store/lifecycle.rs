@@ -162,11 +162,11 @@ pub(super) struct LifecycleState {
 }
 
 #[derive(Debug)]
-struct EstablishedAggregate {
-    state: LifecycleState,
-    schema_set: Arc<SchemaSet>,
-    limits: ProtocolLimitsRef,
-    stream_id: StreamId,
+pub(super) struct EstablishedAggregate {
+    pub(super) state: LifecycleState,
+    pub(super) schema_set: Arc<SchemaSet>,
+    pub(super) limits: ProtocolLimitsRef,
+    pub(super) stream_id: StreamId,
 }
 
 impl EventStore {
@@ -305,6 +305,18 @@ impl EventStore {
             command.expected_sequence,
             aggregate.state.run_state == command.expected_state,
         )?;
+        if matches!(
+            command.target_state,
+            RunState::Paused | RunState::Succeeded | RunState::Failed | RunState::Cancelled
+        ) {
+            super::runtime_control::ensure_no_pending_for_run(
+                &mut transaction,
+                registry,
+                &target.scope,
+            )
+            .await
+            .map_err(|_| LifecycleError::new(LifecycleErrorKind::ParentStateConflict))?;
+        }
         validate_run_transition(
             &aggregate.state,
             command.expected_state,
@@ -367,6 +379,19 @@ impl EventStore {
             return Err(LifecycleError::new(
                 LifecycleErrorKind::OptimisticConcurrencyConflict,
             ));
+        }
+        if matches!(
+            command.target_state,
+            TaskState::Paused | TaskState::Succeeded | TaskState::Failed | TaskState::Cancelled
+        ) {
+            super::runtime_control::ensure_no_pending_for_task(
+                &mut transaction,
+                registry,
+                &target.scope,
+                &command.task_id,
+            )
+            .await
+            .map_err(|_| LifecycleError::new(LifecycleErrorKind::ParentStateConflict))?;
         }
         validate_task_transition(
             &aggregate.state,
@@ -502,7 +527,7 @@ pub(super) fn lifecycle_event<T: serde::Serialize>(
         .map_err(|_| LifecycleError::new(LifecycleErrorKind::ManifestInvalid))
 }
 
-async fn load_established(
+pub(super) async fn load_established(
     connection: &mut SqliteConnection,
     registry: &SchemaRegistry,
     target: &LifecycleTarget,

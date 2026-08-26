@@ -12,7 +12,7 @@ links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006]
 
 # Current state
 
-REQ-0003至REQ-0006均done，REQ-0005前置满足；启动时Git工作区clean，`.agents/work/active`只有`.gitkeep`，无其他Runtime Requirement。REQ-0007 high-risk影响分析已完成。REVIEW-0006对设计提交`05dd7ca`的fresh independent review结论为`changes-requested`，0 Blocker、6 open Major；Runtime实施已暂停。当前只修订REQ/SPEC/RFC/ADR和测试计划，修订必须固定commit并由同一reviewer关闭F-001至F-006后才能开始TASK-REQ-0007-01。现有基线：18 governance passed，docs 160 Markdown/44 formal IDs passed，workspace Kernel 68 passed/1 ignored、Protocol 9 unit + 21 contract/1 ignored。
+REQ-0003至REQ-0006均done，REQ-0005前置满足；启动时Git工作区clean，`.agents/work/active`只有`.gitkeep`，无其他Runtime Requirement。REQ-0007 high-risk影响分析已完成。REVIEW-0006对`05dd7ca`首轮提出6个Major，经两轮修订已独立批准`a4e3478`，0 open Blocker/Major；docs门禁170 Markdown/49 formal IDs和diff check通过。Runtime现从TASK-REQ-0007-01开始，只按批准合同实施。现有基线：18 governance passed，workspace Kernel 68 passed/1 ignored、Protocol 9 unit + 21 contract/1 ignored。
 
 # Plan
 

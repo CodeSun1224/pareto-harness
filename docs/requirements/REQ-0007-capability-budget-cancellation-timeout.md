@@ -1,10 +1,10 @@
 ---
 id: REQ-0007
 title: Capability、预算、取消与超时
-status: planned
+status: implementing
 owners: [maintainers]
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-26
 links: [EPIC-0002, REQ-0003, REQ-0004, REQ-0005, REQ-0006, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006]
 risk: high
 work: .agents/work/active/REQ-0007-capability-budget-cancellation-timeout
@@ -61,4 +61,4 @@ work: .agents/work/active/REQ-0007-capability-budget-cancellation-timeout
 
 # Risks and open questions
 
-授权链与 confused-deputy、预算原子预留和退款、取消/完成/timeout 竞态、monotonic 与 wall-clock 持久化边界、迟到结果审计、控制事件版本和 replay 零执行会被多个后续 Requirement 依赖，属于跨模块且难以回退的高风险合同。REVIEW-0006 对提交 `05dd7ca` 的 fresh independent design review 给出 `changes-requested`，0 Blocker、6 Major；Runtime 实施因此暂停。本次修订把 lifecycle 准入、取消与 callback authority、显式 timeout recovery、Manifest/SchemaSet exact 绑定和可信 resource envelope 转为可测试合同；只有同一 reviewer 对固定修订 commit 复审为0 open Blocker/Major后，SPEC/RFC/ADR的批准状态才允许实施使用。实施完成后仍需另一份 fresh independent code review。
+授权链与 confused-deputy、预算原子预留和退款、取消/完成/timeout 竞态、monotonic 与 wall-clock 持久化边界、迟到结果审计、控制事件版本和 replay 零执行会被多个后续 Requirement 依赖，属于跨模块且难以回退的高风险合同。REVIEW-0006 首轮对`05dd7ca`提出6个Major；经两轮修订，同一fresh independent reviewer已对固定提交`a4e3478`关闭全部Major并批准设计，0 open Blocker/Major。Runtime现仅按该合同实施最小纵向切片；完成后仍需新的fresh independent code review。
