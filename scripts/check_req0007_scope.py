@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+APPROVED_BASELINE = "6de3598"
 EVENT_STORE = Path("crates/pareto-kernel/src/event_store.rs")
 RUNTIME = Path("crates/pareto-kernel/src/event_store/runtime_control.rs")
 RUNTIME_TESTS = Path("crates/pareto-kernel/src/event_store/runtime_control/tests.rs")
@@ -39,9 +40,9 @@ def extract_const(source: str, name: str) -> str:
     return match.group(0).strip()
 
 
-def git_head(path: Path) -> str:
+def git_baseline(path: Path) -> str:
     completed = subprocess.run(
-        ["git", "show", f"HEAD:{path.as_posix()}"],
+        ["git", "show", f"{APPROVED_BASELINE}:{path.as_posix()}"],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -53,7 +54,7 @@ def git_head(path: Path) -> str:
 def validate() -> list[str]:
     errors: list[str] = []
     current = (ROOT / EVENT_STORE).read_text(encoding="utf-8")
-    baseline = git_head(EVENT_STORE)
+    baseline = git_baseline(EVENT_STORE)
     for name in FROZEN_CONSTANTS:
         try:
             if extract_const(current, name) != extract_const(baseline, name):
@@ -78,6 +79,10 @@ def validate() -> list[str]:
             errors.append(f"out-of-scope runtime boundary found: {token}")
     if "struct FakeClock" not in tests or "trait RuntimeClock" not in runtime:
         errors.append("Runtime tests must use the injected FakeClock contract")
+    if "struct FakeOperation" not in runtime or "dispatch_fake_operation" not in runtime:
+        errors.append("Runtime tests must use the Kernel-mediated FakeOperation boundary")
+    if "struct KernelMeterSnapshot" not in runtime or "try_consume" not in runtime:
+        errors.append("verified usage must be produced by the Kernel meter")
     replay = re.search(
         r"(?ms)pub\(super\) async fn replay_runtime_control\b.*?\n    }",
         runtime,
@@ -88,7 +93,7 @@ def validate() -> list[str]:
         Path("crates/pareto-kernel/Cargo.toml"),
         Path("crates/pareto-protocol/Cargo.toml"),
     ):
-        if (ROOT / manifest).read_text(encoding="utf-8") != git_head(manifest):
+        if (ROOT / manifest).read_text(encoding="utf-8") != git_baseline(manifest):
             errors.append(f"REQ-0007 added or changed dependencies: {manifest}")
     return errors
 

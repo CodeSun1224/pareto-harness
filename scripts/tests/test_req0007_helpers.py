@@ -33,6 +33,10 @@ class Req0007HelperTests(unittest.TestCase):
         self.assertEqual('const FIRST: &str = r#"a;b"#;', scope.extract_const(source, "FIRST"))
         self.assertEqual("const SECOND: i64 = 2;", scope.extract_const(source, "SECOND"))
 
+    def test_scope_check_uses_approved_baseline_not_head(self) -> None:
+        self.assertEqual("6de3598", scope.APPROVED_BASELINE)
+        self.assertNotIn("HEAD:", scope.git_baseline.__code__.co_consts)
+
 
 if __name__ == "__main__":
     unittest.main()

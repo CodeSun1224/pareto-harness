@@ -145,8 +145,23 @@ impl Fixture {
             source_contract: pareto_protocol::RuntimeControlSourceContractV1 {
                 schema_set_ref: self.set.reference().clone(),
                 protocol_limits_ref: self.limits.clone(),
-                reducer_revision: RevisionId::parse("rev_runtime-control-reducer").unwrap(),
+                lifecycle_cursor: EventCursor {
+                    sequence: "2".to_owned(),
+                    event_id: EventId::parse("event_task-created").unwrap(),
+                },
+                reducer_revision: RevisionId::parse(RUNTIME_REDUCER_REVISION).unwrap(),
+                accepted_event_bindings: CONTROL_EVENT_TYPES
+                    .iter()
+                    .map(|event_type| {
+                        self.set
+                            .event_type_binding(event_type, 1, 0)
+                            .unwrap()
+                            .clone()
+                    })
+                    .collect(),
+                history_digest_revision: RevisionId::parse(RUNTIME_HISTORY_REVISION).unwrap(),
                 projection_schema_ref: self.set.schema_ref("runtime-control-projection").unwrap().clone(),
+                projection_reader_revision: RevisionId::parse(RUNTIME_READER_REVISION).unwrap(),
             },
             initial_grants: vec![self.grant(
                 "cap_root", "agent_owner", "agent_owner", None, None, true, 2, 10,
@@ -164,14 +179,7 @@ impl Fixture {
                 clock_revision: RevisionId::parse("rev_fake-clock").unwrap(),
                 recovery_revision: RevisionId::parse("rev_timeout-recovery").unwrap(),
             },
-            operation_contracts: vec![TrustedOperationContractV1 {
-                contract_revision: RevisionId::parse("rev_fake-operation").unwrap(),
-                resource_kind: "fake".to_owned(), operation: "invoke".to_owned(),
-                resource_envelope: usage(4),
-                meter_revision: RevisionId::parse("rev_kernel-meter").unwrap(),
-                producer_revision: RevisionId::parse("rev_fake-producer").unwrap(),
-                redaction_policy_revision: RevisionId::parse("rev_redaction").unwrap(),
-            }],
+            operation_contract_refs: vec![RevisionId::parse(FAKE_CONTRACT_REVISION).unwrap()],
         }
     }
 
@@ -204,7 +212,8 @@ impl Fixture {
             operation_id: OperationId::parse(format!("operation_{suffix}")).unwrap(),
             reservation_id: ReservationId::parse(format!("reservation_{suffix}")).unwrap(),
             task_id: Some(self.task_id.clone()), resource: resource(), operation: "invoke".to_owned(),
-            requested_usage: usage(1), callback_namespace: "fake-callback-v1".to_owned(),
+            adapter_revision: RevisionId::parse(FAKE_ADAPTER_REVISION).unwrap(),
+            requested_usage: usage(1), callback_namespace: FAKE_CALLBACK_NAMESPACE.to_owned(),
             interruptibility: OperationInterruptibilityV1::Cooperative,
             absolute_deadline_utc: "2026-08-26T00:01:00.000Z".to_owned(),
             timeout_policy_revision: RevisionId::parse("rev_timeout-policy").unwrap(),
@@ -222,7 +231,36 @@ fn usage(amount: u64) -> Vec<BudgetVectorEntryV1> { vec![BudgetVectorEntryV1 { d
 fn resource() -> ResourceSelectorV1 { ResourceSelectorV1 { kind: "fake".to_owned(), id: Some("fixture".to_owned()) } }
 fn live_clock() -> FakeClock { FakeClock::at("2026-08-26T00:00:10.000Z", 1_000, "epoch-a") }
 
+fn timeout_request(
+    operation_id: &str,
+    correlation_id: &str,
+    meter_snapshot: Option<KernelMeterSnapshot>,
+    unknown_evidence_fingerprint: Digest,
+) -> TimeoutRecoveryRequest {
+    TimeoutRecoveryRequest {
+        operation_id: OperationId::parse(operation_id).unwrap(),
+        correlation_id: correlation_id.to_owned(),
+        meter_snapshot,
+        unknown_evidence_fingerprint,
+    }
+}
+
 async fn create_initialized(fixture: &Fixture) -> EventStore {
+    create_initialized_with_payload(fixture, fixture.initialization()).await
+}
+
+async fn create_initialized_with_payload(
+    fixture: &Fixture,
+    payload: RuntimeControlInitializedPayloadV1,
+) -> EventStore {
+    let store = create_lifecycle_only(fixture).await;
+    store.initialize_runtime_control(&fixture.registry(), &fixture.target(), &InitializeRuntimeControlCommand {
+        event_id: EventId::parse("event_control-init").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-control".to_owned(), payload,
+    }).await.unwrap();
+    store
+}
+
+async fn create_lifecycle_only(fixture: &Fixture) -> EventStore {
     let store = EventStore::open(&fixture.path).await.unwrap();
     store.create_run(&fixture.trusted(), &CreateRunCommand {
         event_id: EventId::parse("event_run-created").unwrap(), occurred_at: "2026-08-26T00:00:00.000Z".to_owned(), correlation_id: "corr-run".to_owned(), manifest: fixture.manifest.clone(),
@@ -230,14 +268,18 @@ async fn create_initialized(fixture: &Fixture) -> EventStore {
     store.create_task(&fixture.registry(), &super::lifecycle::LifecycleTarget { scope: fixture.scope.clone(), actor: fixture.scope.agent_id.clone() }, &CreateTaskCommand {
         event_id: EventId::parse("event_task-created").unwrap(), occurred_at: "2026-08-26T00:00:01.000Z".to_owned(), correlation_id: "corr-task".to_owned(), expected_sequence: 1, task_id: fixture.task_id.clone(), parent_task_id: None,
     }).await.unwrap();
-    store.initialize_runtime_control(&fixture.registry(), &fixture.target(), &InitializeRuntimeControlCommand {
-        event_id: EventId::parse("event_control-init").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-control".to_owned(), payload: fixture.initialization(),
-    }).await.unwrap();
     store
 }
 
 async fn create_running(fixture: &Fixture) -> EventStore {
-    let store = create_initialized(fixture).await;
+    create_running_with_payload(fixture, fixture.initialization()).await
+}
+
+async fn create_running_with_payload(
+    fixture: &Fixture,
+    payload: RuntimeControlInitializedPayloadV1,
+) -> EventStore {
+    let store = create_initialized_with_payload(fixture, payload).await;
     let target = super::lifecycle::LifecycleTarget { scope: fixture.scope.clone(), actor: fixture.scope.agent_id.clone() };
     store.transition_task(&fixture.registry(), &target, &TransitionTaskCommand {
         event_id: EventId::parse("event_task-ready").unwrap(), occurred_at: "2026-08-26T00:00:03.000Z".to_owned(), correlation_id: "corr-ready".to_owned(), expected_sequence: 2, task_id: fixture.task_id.clone(), expected_state: TaskState::Created, target_state: TaskState::Ready, reason_code: "ready".to_owned(),
@@ -259,17 +301,27 @@ async fn reserve(store: &EventStore, fixture: &Fixture, suffix: &str) -> Operati
     }
 }
 
-fn settlement(_fixture: &Fixture, suffix: &str, outcome: OperationOutcomeV1, metered: u64) -> SettlementCommand {
-    SettlementCommand {
-        event_id: EventId::parse(format!("event_settle-{suffix}")).unwrap(),
-        occurred_at: "2026-08-26T00:00:20.000Z".to_owned(), correlation_id: format!("corr-settle-{suffix}"),
-        callback_id: CallbackId::parse(format!("callback_{suffix}")).unwrap(),
-        operation_id: OperationId::parse(format!("operation_{suffix}")).unwrap(),
-        reservation_id: ReservationId::parse(format!("reservation_{suffix}")).unwrap(),
-        producer_revision: RevisionId::parse("rev_fake-producer").unwrap(), outcome,
-        evidence_class: UsageEvidenceClassV1::KernelMeterVerified,
-        observed_usage: usage(99), metered_usage: usage(metered), reason_code: "fake-result".to_owned(),
+fn settlement(fixture: &Fixture, suffix: &str, outcome: OperationOutcomeV1, metered: u64) -> SettlementCommand {
+    let contract = retained_operation_contract(fixture.set.reference()).unwrap();
+    let mut meter = KernelMeter::new(&contract, "epoch-a").unwrap();
+    for _ in 0..metered {
+        meter.try_consume(BudgetDimensionV1::Tokens).unwrap();
     }
+    SettlementCommand::from_producer_observation(
+        EventId::parse(format!("event_settle-{suffix}")).unwrap(),
+        format!("corr-settle-{suffix}"),
+        CallbackId::parse(format!("callback_fake-{suffix}")).unwrap(),
+        OperationId::parse(format!("operation_{suffix}")).unwrap(),
+        ReservationId::parse(format!("reservation_{suffix}")).unwrap(),
+        RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
+        outcome,
+        usage(99),
+        digest('9'),
+        "fake-result".to_owned(),
+        Some(meter.snapshot().unwrap()),
+        &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a"),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -285,7 +337,7 @@ async fn default_deny() {
     let fixture = Fixture::new("run_default-deny");
     let store = create_running(&fixture).await;
     let result = store.reserve_protected_operation(&fixture.registry(), &fixture.target_as("agent_intruder"), &fixture.proposal("denied"), &live_clock()).await.unwrap();
-    assert!(matches!(result, ReserveResult::Denied { ref reason_code, .. } if reason_code == "default_deny"));
+    assert!(matches!(result, ReserveResult::Denied { ref reason_code, .. } if reason_code == "capability_missing"));
 }
 
 #[tokio::test]
@@ -384,8 +436,8 @@ async fn settlement_release_refund_and_usage_authority() {
     let store = create_running(&fixture).await;
     let lease = reserve(&store, &fixture, "settle").await;
     let command = settlement(&fixture, "settle", OperationOutcomeV1::Succeeded, 2);
-    let settled = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command, &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap();
-    let settled_retry = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command, &FakeClock::at("2026-08-26T00:00:30.000Z", 3_000, "epoch-a")).await.unwrap();
+    let settled = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
+    let settled_retry = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
     assert_eq!(append_identity(&settled), append_identity(&settled_retry));
     let (settlement_event_id, _) = append_identity(&settled);
     let projection = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
@@ -406,7 +458,7 @@ async fn refund() {
     let fixture = Fixture::new("run_refund");
     let store = create_running(&fixture).await;
     let lease = reserve(&store, &fixture, "refund-only").await;
-    let settled = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, "refund-only", OperationOutcomeV1::Succeeded, 1), &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap();
+    let settled = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, "refund-only", OperationOutcomeV1::Succeeded, 1)).await.unwrap();
     let error = store.refund_budget(&fixture.registry(), &fixture.target(), &RefundCommand { event_id: EventId::parse("event_refund-too-much").unwrap(), occurred_at: "2026-08-26T00:00:21.000Z".to_owned(), correlation_id: "corr-refund-too-much".to_owned(), settlement_event_id: append_identity(&settled).0, operation_id: OperationId::parse("operation_refund-only").unwrap(), refunded_usage: usage(2), reason_code: "invalid".to_owned() }).await.unwrap_err();
     assert_eq!(error.kind, RuntimeControlErrorKind::BudgetExhausted);
 }
@@ -423,8 +475,8 @@ async fn unknown_usage_is_conservative() {
     let store = create_running(&fixture).await;
     let lease = reserve(&store, &fixture, "unknown").await;
     let mut command = settlement(&fixture, "unknown", OperationOutcomeV1::Failed, 1);
-    command.evidence_class = UsageEvidenceClassV1::Unknown;
-    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command, &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap();
+    command.meter_snapshot = None;
+    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
     let projection = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
     assert!(projection.accounts.iter().filter(|a| !matches!(a.account.scope, BudgetScopeV1::Actor { ref actor_id } if actor_id.as_str() == "agent_child")).all(|a| a.gross_consumed.as_u64() == 4));
 }
@@ -436,7 +488,7 @@ async fn callback_authority() {
     let lease = reserve(&store, &fixture, "producer").await;
     let mut command = settlement(&fixture, "producer", OperationOutcomeV1::Succeeded, 1);
     command.producer_revision = RevisionId::parse("rev_untrusted-producer").unwrap();
-    let error = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command, &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap_err();
+    let error = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap_err();
     assert_eq!(error.kind, RuntimeControlErrorKind::ProducerUnauthorized);
 }
 
@@ -456,12 +508,17 @@ async fn cancellation_authority_and_propagation() {
     let retry_cancel = store.request_cancellation(&fixture.registry(), &fixture.target(), &cancel).await.unwrap();
     assert_eq!(append_identity(&first_cancel), append_identity(&retry_cancel));
     let success = settlement(&fixture, "cancel", OperationOutcomeV1::Succeeded, 1);
-    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &success, &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap_err().kind, RuntimeControlErrorKind::CancellationPending);
-    store.acknowledge_cancellation(&fixture.registry(), &fixture.target(), &lease, &CancellationAckCommand {
-        event_id: EventId::parse("event_cancel-ack").unwrap(), occurred_at: "2026-08-26T00:00:13.000Z".to_owned(), correlation_id: "corr-ack".to_owned(), cancellation_id: cancel.cancellation_id, operation_id: OperationId::parse("operation_cancel").unwrap(), reservation_id: ReservationId::parse("reservation_cancel").unwrap(), producer_revision: RevisionId::parse("rev_fake-producer").unwrap(),
-    }).await.unwrap();
+    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &success).await.unwrap_err().kind, RuntimeControlErrorKind::CancellationPending);
+    let ack = CancellationAckCommand::from_producer(
+        EventId::parse("event_cancel-ack").unwrap(), "corr-ack".to_owned(),
+        cancel.cancellation_id, OperationId::parse("operation_cancel").unwrap(),
+        ReservationId::parse("reservation_cancel").unwrap(),
+        RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
+        &FakeClock::at("2026-08-26T00:00:13.000Z", 1_300, "epoch-a"),
+    ).unwrap();
+    store.acknowledge_cancellation(&fixture.registry(), &fixture.target(), &lease, &ack).await.unwrap();
     let cancelled = settlement(&fixture, "cancel", OperationOutcomeV1::Cancelled, 1);
-    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &cancelled, &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap();
+    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &cancelled).await.unwrap();
 }
 
 #[test]
@@ -493,7 +550,7 @@ async fn interruptibility() {
     store.request_cancellation(&fixture.registry(), &fixture.target(), &CancellationCommand {
         event_id: EventId::parse("event_cancel-uninterruptible").unwrap(), occurred_at: "2026-08-26T00:00:12.000Z".to_owned(), correlation_id: "corr-uninterruptible".to_owned(), cancellation_id: CancellationId::parse("cancel_uninterruptible").unwrap(), target: CancellationTargetV1::Operation { operation_id: proposal.operation_id.clone() }, reason_code: "stop".to_owned(),
     }).await.unwrap();
-    let error = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, "uninterruptible", OperationOutcomeV1::Succeeded, 1), &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap_err();
+    let error = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, "uninterruptible", OperationOutcomeV1::Succeeded, 1)).await.unwrap_err();
     assert_eq!(error.kind, RuntimeControlErrorKind::CancellationPending);
 }
 
@@ -503,13 +560,21 @@ async fn timeout_recovery() {
     let store = create_running(&fixture).await;
     let lease = reserve(&store, &fixture, "timeout").await;
     let at_deadline = FakeClock::at("2026-08-26T00:01:00.000Z", 51_000, "epoch-a");
-    let complete = settlement(&fixture, "timeout", OperationOutcomeV1::Succeeded, 1);
-    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &complete, &at_deadline).await.unwrap_err().kind, RuntimeControlErrorKind::DeadlineExceeded);
-    let command = TimeoutRecoveryCommand { correlation_id: "corr-timeout".to_owned(), operation_id: OperationId::parse("operation_timeout").unwrap(), recovery_revision: RevisionId::parse("rev_timeout-recovery").unwrap(), evidence_fingerprint: digest('e') };
-    let first = store.recover_timeout(&fixture.registry(), &fixture.target(), &command, &at_deadline).await.unwrap();
-    let retry = store.recover_timeout(&fixture.registry(), &fixture.target(), &command, &at_deadline).await.unwrap();
+    let mut complete = settlement(&fixture, "timeout", OperationOutcomeV1::Succeeded, 1);
+    complete.decision_clock = at_deadline.sample();
+    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &complete).await.unwrap_err().kind, RuntimeControlErrorKind::DeadlineExceeded);
+    let command = store.prepare_timeout_recovery(
+        &fixture.registry(), &fixture.target(), timeout_request("operation_timeout", "corr-timeout", None, digest('e')), &at_deadline,
+    ).await.unwrap();
+    assert_eq!(command.event_id.as_str(), "event_0c88f3440967d8a095efd6ad7085a7c655fd4c8e0ceb585c689600dbca85be91");
+    let first = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
+    let retry = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     assert_eq!(append_identity(&first), append_identity(&retry));
-    let later = store.recover_timeout(&fixture.registry(), &fixture.target(), &TimeoutRecoveryCommand { evidence_fingerprint: digest('f'), ..command }, &FakeClock::at("2026-08-26T00:01:01.000Z", 52_000, "epoch-a")).await.unwrap();
+    let later_command = store.prepare_timeout_recovery(
+        &fixture.registry(), &fixture.target(), timeout_request("operation_timeout", "corr-timeout-later", None, digest('f')),
+        &FakeClock::at("2026-08-26T00:01:01.000Z", 52_000, "epoch-b"),
+    ).await.unwrap();
+    let later = store.recover_timeout(&fixture.registry(), &fixture.target(), &later_command).await.unwrap();
     assert_eq!(append_identity(&retry), append_identity(&later));
 }
 
@@ -527,7 +592,10 @@ async fn timeout_not_due_consumes_no_identity() {
     let store = create_running(&fixture).await;
     reserve(&store, &fixture, "not-due").await;
     let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&store.pool).await.unwrap();
-    let error = store.recover_timeout(&fixture.registry(), &fixture.target(), &TimeoutRecoveryCommand { correlation_id: "corr-not-due".to_owned(), operation_id: OperationId::parse("operation_not-due").unwrap(), recovery_revision: RevisionId::parse("rev_timeout-recovery").unwrap(), evidence_fingerprint: digest('d') }, &live_clock()).await.unwrap_err();
+    let command = store.prepare_timeout_recovery(
+        &fixture.registry(), &fixture.target(), timeout_request("operation_not-due", "corr-not-due", None, digest('d')), &live_clock(),
+    ).await.unwrap();
+    let error = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap_err();
     assert_eq!(error.kind, RuntimeControlErrorKind::NotDue);
     let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&store.pool).await.unwrap();
     assert_eq!(before, after);
@@ -538,11 +606,23 @@ async fn terminal_race() {
     let fixture = Fixture::new("run_terminal-race");
     let store = create_running(&fixture).await;
     let lease = reserve(&store, &fixture, "winner").await;
-    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, "winner", OperationOutcomeV1::Succeeded, 2), &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap();
-    let late_timeout = store.recover_timeout(&fixture.registry(), &fixture.target(), &TimeoutRecoveryCommand { correlation_id: "corr-late-timeout".to_owned(), operation_id: OperationId::parse("operation_winner").unwrap(), recovery_revision: RevisionId::parse("rev_timeout-recovery").unwrap(), evidence_fingerprint: digest('c') }, &FakeClock::at("2026-08-26T00:01:00.000Z", 51_000, "epoch-a")).await.unwrap();
-    assert_eq!(append_identity(&late_timeout).0.as_str(), "event_settle-winner");
+    let timeout_command = store.prepare_timeout_recovery(
+        &fixture.registry(), &fixture.target(), timeout_request("operation_winner", "corr-racing-timeout", None, digest('c')),
+        &FakeClock::at("2026-08-26T00:01:00.000Z", 51_000, "epoch-b"),
+    ).await.unwrap();
+    let registry = fixture.registry();
+    let target = fixture.target();
+    let completion = settlement(&fixture, "winner", OperationOutcomeV1::Succeeded, 2);
+    let (completion_result, timeout_result) = tokio::join!(
+        store.settle_operation(&registry, &target, &lease, &completion),
+        store.recover_timeout(&registry, &target, &timeout_command),
+    );
+    assert!(completion_result.is_ok());
+    assert!(timeout_result.is_ok());
     let projection = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
-    assert_eq!(projection.operations[0].outcome, Some(OperationOutcomeV1::Succeeded));
+    assert!(matches!(projection.operations[0].outcome, Some(OperationOutcomeV1::Succeeded | OperationOutcomeV1::TimedOut)));
+    let gross = projection.accounts.iter().find(|account| matches!(account.account.scope, BudgetScopeV1::Run)).unwrap().gross_consumed.as_u64();
+    assert!(gross == 2 || gross == 4, "exactly one terminal may account budget");
 }
 
 #[tokio::test]
@@ -565,13 +645,14 @@ async fn late_and_duplicate_results_do_not_change_budget() {
     let store = create_running(&fixture).await;
     let lease = reserve(&store, &fixture, "late").await;
     let command = settlement(&fixture, "late", OperationOutcomeV1::Succeeded, 2);
-    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command, &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap();
+    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
     let before = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
     let late = LateResultCommand {
-        event_id: EventId::parse("event_late-audit").unwrap(), occurred_at: "2026-08-26T00:00:30.000Z".to_owned(), correlation_id: "corr-late".to_owned(), callback_id: CallbackId::parse("callback_late-second").unwrap(), operation_id: OperationId::parse("operation_late").unwrap(), producer_revision: RevisionId::parse("rev_fake-producer").unwrap(), redacted_payload_digest: digest('b'),
+        event_id: EventId::parse("event_late-audit").unwrap(), occurred_at: "2026-08-26T00:00:30.000Z".to_owned(), correlation_id: "corr-late".to_owned(), callback_id: CallbackId::parse("callback_fake-late-second").unwrap(), operation_id: OperationId::parse("operation_late").unwrap(), producer_revision: RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(), redacted_payload_digest: digest('b'),
     };
-    let first_late = store.observe_late_result(&fixture.registry(), &fixture.target(), &lease, &late).await.unwrap();
-    let retry_late = store.observe_late_result(&fixture.registry(), &fixture.target(), &lease, &late).await.unwrap();
+    let late_clock = FakeClock::at("2026-08-26T00:00:30.000Z", 3_000, "epoch-a");
+    let first_late = store.observe_late_result(&fixture.registry(), &fixture.target(), &lease, &late, &late_clock).await.unwrap();
+    let retry_late = store.observe_late_result(&fixture.registry(), &fixture.target(), &lease, &late, &late_clock).await.unwrap();
     assert_eq!(append_identity(&first_late), append_identity(&retry_late));
     let after = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
     assert_eq!(before.accounts, after.accounts);
@@ -595,7 +676,7 @@ async fn recovery_projection_and_recorded_replay() {
     let fixture = Fixture::new("run_recovery");
     let store = create_running(&fixture).await;
     let lease = reserve(&store, &fixture, "reopen").await;
-    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, "reopen", OperationOutcomeV1::Succeeded, 2), &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a")).await.unwrap();
+    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, "reopen", OperationOutcomeV1::Succeeded, 2)).await.unwrap();
     let expected = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
     let store_id = store.store_id.clone();
     drop(store);
@@ -612,7 +693,10 @@ async fn recorded_replay_never_dispatches() {
     let fixture = Fixture::with_mode("run_recorded-replay", ExecutionMode::RecordedReplay { source_run_id: RunId::parse("run_source").unwrap(), boundary_inventory_revision: RevisionId::parse("rev_inventory").unwrap() });
     let store = create_running(&fixture).await;
     let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&store.pool).await.unwrap();
-    assert_eq!(store.reserve_protected_operation(&fixture.registry(), &fixture.target(), &fixture.proposal("replay"), &live_clock()).await.unwrap_err().kind, RuntimeControlErrorKind::RecordedReplay);
+    let dispatch_count = Arc::new(AtomicUsize::new(0));
+    let operation = FakeOperation { units: 1, dispatch_count: dispatch_count.clone(), performed_units: Arc::new(AtomicUsize::new(0)) };
+    assert_eq!(store.dispatch_fake_operation(&fixture.registry(), &fixture.target(), &fixture.proposal("replay"), &live_clock(), &operation).await.unwrap_err().kind, RuntimeControlErrorKind::RecordedReplay);
+    assert_eq!(dispatch_count.load(Ordering::SeqCst), 0);
     let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&store.pool).await.unwrap();
     assert_eq!(before, after);
 }
@@ -628,12 +712,48 @@ async fn compatibility() {
 #[tokio::test]
 async fn schema_manifest_binding() {
     let fixture = Fixture::new("run_schema-binding");
-    let store = EventStore::open(&fixture.path).await.unwrap();
-    store.create_run(&fixture.trusted(), &CreateRunCommand { event_id: EventId::parse("event_run-created").unwrap(), occurred_at: "2026-08-26T00:00:00.000Z".to_owned(), correlation_id: "corr-run".to_owned(), manifest: fixture.manifest.clone() }).await.unwrap();
+    let store = create_lifecycle_only(&fixture).await;
     let mut payload = fixture.initialization();
     payload.source_contract.protocol_limits_ref.digest = digest('f');
     let error = store.initialize_runtime_control(&fixture.registry(), &fixture.target(), &InitializeRuntimeControlCommand { event_id: EventId::parse("event_bad-control-init").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-bad-control".to_owned(), payload }).await.unwrap_err();
     assert_eq!(error.kind, RuntimeControlErrorKind::LifecycleStateDenied);
+
+    let cursor_fixture = Fixture::new("run_schema-cursor-binding");
+    let cursor_store = create_lifecycle_only(&cursor_fixture).await;
+    let mut cursor_payload = cursor_fixture.initialization();
+    cursor_payload.source_contract.lifecycle_cursor.event_id = EventId::parse("event_run-created").unwrap();
+    assert_eq!(cursor_store.initialize_runtime_control(&cursor_fixture.registry(), &cursor_fixture.target(), &InitializeRuntimeControlCommand {
+        event_id: EventId::parse("event_bad-cursor-init").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-bad-cursor".to_owned(), payload: cursor_payload,
+    }).await.unwrap_err().kind, RuntimeControlErrorKind::LifecycleStateDenied);
+
+    let binding_fixture = Fixture::new("run_schema-event-binding");
+    let binding_store = create_lifecycle_only(&binding_fixture).await;
+    let mut binding_payload = binding_fixture.initialization();
+    binding_payload.source_contract.accepted_event_bindings.pop();
+    assert_eq!(binding_store.initialize_runtime_control(&binding_fixture.registry(), &binding_fixture.target(), &InitializeRuntimeControlCommand {
+        event_id: EventId::parse("event_bad-binding-init").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-bad-binding".to_owned(), payload: binding_payload,
+    }).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+}
+
+#[tokio::test]
+async fn initialization_rejects_duplicate_budget_scope_dimension_and_operation_limit() {
+    let account_fixture = Fixture::new("run_duplicate-account");
+    let account_store = create_lifecycle_only(&account_fixture).await;
+    let mut account_payload = account_fixture.initialization();
+    let mut duplicate_account = account_payload.budget_plan.accounts[0].clone();
+    duplicate_account.account_id = BudgetAccountId::parse("budget_duplicate").unwrap();
+    account_payload.budget_plan.accounts.push(duplicate_account);
+    assert_eq!(account_store.initialize_runtime_control(&account_fixture.registry(), &account_fixture.target(), &InitializeRuntimeControlCommand {
+        event_id: EventId::parse("event_duplicate-account-init").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-duplicate-account".to_owned(), payload: account_payload,
+    }).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+
+    let limit_fixture = Fixture::new("run_duplicate-limit");
+    let limit_store = create_lifecycle_only(&limit_fixture).await;
+    let mut limit_payload = limit_fixture.initialization();
+    limit_payload.budget_plan.operation_limits.push(limit_payload.budget_plan.operation_limits[0].clone());
+    assert_eq!(limit_store.initialize_runtime_control(&limit_fixture.registry(), &limit_fixture.target(), &InitializeRuntimeControlCommand {
+        event_id: EventId::parse("event_duplicate-limit-init").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-duplicate-limit".to_owned(), payload: limit_payload,
+    }).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
 }
 
 #[tokio::test]
@@ -667,4 +787,527 @@ fn model_sequences() {
     let vector = usage(1);
     assert_eq!(canonical_vector(&vector).unwrap(), vector);
     assert!(vector_map(&[vector[0].clone(), vector[0].clone()]).is_err());
+}
+
+#[tokio::test]
+async fn usage_authority_fake_operation_kernel_meter_and_violation() {
+    let fixture = Fixture::new("run_meter-authority");
+    let store = create_running(&fixture).await;
+    let dispatches = Arc::new(AtomicUsize::new(0));
+    let performed = Arc::new(AtomicUsize::new(0));
+    let operation = FakeOperation {
+        units: 2,
+        dispatch_count: dispatches.clone(),
+        performed_units: performed.clone(),
+    };
+    let (lease, snapshot) = store
+        .dispatch_fake_operation(
+            &fixture.registry(), &fixture.target(), &fixture.proposal("metered"),
+            &live_clock(), &operation,
+        )
+        .await
+        .unwrap();
+    assert_eq!(dispatches.load(Ordering::SeqCst), 1);
+    assert_eq!(performed.load(Ordering::SeqCst), 2);
+    let command = SettlementCommand::from_producer_observation(
+        EventId::parse("event_settle-metered").unwrap(), "corr-metered".to_owned(),
+        CallbackId::parse("callback_fake-metered").unwrap(),
+        OperationId::parse("operation_metered").unwrap(),
+        ReservationId::parse("reservation_metered").unwrap(),
+        RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
+        OperationOutcomeV1::Succeeded, Vec::new(), digest('1'), "ok".to_owned(),
+        Some(snapshot), &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a"),
+    ).unwrap();
+    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
+
+    let violation_dispatches = Arc::new(AtomicUsize::new(0));
+    let violation_performed = Arc::new(AtomicUsize::new(0));
+    let violation_operation = FakeOperation {
+        units: 5,
+        dispatch_count: violation_dispatches.clone(),
+        performed_units: violation_performed.clone(),
+    };
+    let (violation_lease, violation_snapshot) = store
+        .dispatch_fake_operation(
+            &fixture.registry(), &fixture.target(), &fixture.proposal("meter-violation"),
+            &live_clock(), &violation_operation,
+        )
+        .await
+        .unwrap();
+    assert_eq!(violation_dispatches.load(Ordering::SeqCst), 1);
+    assert_eq!(violation_performed.load(Ordering::SeqCst), 4, "fifth unit must not execute");
+    assert!(violation_snapshot.contract_violation);
+    let violation_command = SettlementCommand::from_producer_observation(
+        EventId::parse("event_settle-meter-violation").unwrap(), "corr-meter-violation".to_owned(),
+        CallbackId::parse("callback_fake-meter-violation").unwrap(),
+        OperationId::parse("operation_meter-violation").unwrap(),
+        ReservationId::parse("reservation_meter-violation").unwrap(),
+        RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
+        OperationOutcomeV1::Succeeded, Vec::new(), digest('2'), "claimed-success".to_owned(),
+        Some(violation_snapshot), &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a"),
+    ).unwrap();
+    store.settle_operation(&fixture.registry(), &fixture.target(), &violation_lease, &violation_command).await.unwrap();
+    let projection = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
+    assert_eq!(projection.operations.iter().find(|op| op.operation_id.as_str() == "operation_meter-violation").unwrap().outcome, Some(OperationOutcomeV1::Failed));
+    assert!(projection.accounts.iter().filter(|account| !matches!(account.account.scope, BudgetScopeV1::Actor { ref actor_id } if actor_id.as_str() == "agent_child")).all(|account| account.gross_consumed.as_u64() == 6));
+}
+
+#[tokio::test]
+async fn usage_authority_rejects_forged_meter_snapshot_and_unregistered_contract() {
+    let fixture = Fixture::new("run_forged-meter");
+    let store = create_running(&fixture).await;
+    let operation = FakeOperation {
+        units: 2,
+        dispatch_count: Arc::new(AtomicUsize::new(0)),
+        performed_units: Arc::new(AtomicUsize::new(0)),
+    };
+    let (lease, mut snapshot) = store.dispatch_fake_operation(
+        &fixture.registry(), &fixture.target(), &fixture.proposal("forged"), &live_clock(), &operation,
+    ).await.unwrap();
+    snapshot.usage = usage(1);
+    let command = SettlementCommand::from_producer_observation(
+        EventId::parse("event_settle-forged").unwrap(), "corr-forged".to_owned(),
+        CallbackId::parse("callback_fake-forged").unwrap(), OperationId::parse("operation_forged").unwrap(),
+        ReservationId::parse("reservation_forged").unwrap(), RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
+        OperationOutcomeV1::Succeeded, Vec::new(), digest('3'), "forged".to_owned(), Some(snapshot),
+        &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a"),
+    ).unwrap();
+    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap_err().kind, RuntimeControlErrorKind::ProducerUnauthorized);
+
+    let bad_fixture = Fixture::new("run_unregistered-contract");
+    let mut payload = bad_fixture.initialization();
+    payload.operation_contract_refs[0] = RevisionId::parse("rev_unregistered").unwrap();
+    let store = EventStore::open(&bad_fixture.path).await.unwrap();
+    store.create_run(&bad_fixture.trusted(), &CreateRunCommand {
+        event_id: EventId::parse("event_run-created").unwrap(), occurred_at: "2026-08-26T00:00:00.000Z".to_owned(), correlation_id: "corr-run".to_owned(), manifest: bad_fixture.manifest.clone(),
+    }).await.unwrap();
+    store.create_task(&bad_fixture.registry(), &super::lifecycle::LifecycleTarget { scope: bad_fixture.scope.clone(), actor: bad_fixture.scope.agent_id.clone() }, &CreateTaskCommand {
+        event_id: EventId::parse("event_task-created").unwrap(), occurred_at: "2026-08-26T00:00:01.000Z".to_owned(), correlation_id: "corr-task".to_owned(), expected_sequence: 1, task_id: bad_fixture.task_id.clone(), parent_task_id: None,
+    }).await.unwrap();
+    assert_eq!(store.initialize_runtime_control(&bad_fixture.registry(), &bad_fixture.target(), &InitializeRuntimeControlCommand {
+        event_id: EventId::parse("event_control-init-bad-contract").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-control-bad".to_owned(), payload,
+    }).await.unwrap_err().kind, RuntimeControlErrorKind::ResourceEnvelopeUnavailable);
+}
+
+#[tokio::test]
+async fn callback_authority_rejects_stale_epoch_wall_regression_and_namespace() {
+    let fixture = Fixture::new("run_epoch-authority");
+    let store = create_running(&fixture).await;
+    let lease = reserve(&store, &fixture, "epoch").await;
+    let mut stale = settlement(&fixture, "epoch", OperationOutcomeV1::Succeeded, 1);
+    stale.decision_clock = FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-b").sample();
+    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &stale).await.unwrap_err().kind, RuntimeControlErrorKind::ProducerUnauthorized);
+    let mut regressed = settlement(&fixture, "epoch", OperationOutcomeV1::Succeeded, 1);
+    regressed.decision_clock = FakeClock::at("2026-08-26T00:00:09.000Z", 900, "epoch-a").sample();
+    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &regressed).await.unwrap_err().kind, RuntimeControlErrorKind::ProducerUnauthorized);
+    let mut wrong_namespace = settlement(&fixture, "epoch", OperationOutcomeV1::Succeeded, 1);
+    wrong_namespace.callback_id = CallbackId::parse("callback_wrong-epoch").unwrap();
+    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &wrong_namespace).await.unwrap_err().kind, RuntimeControlErrorKind::ProducerUnauthorized);
+    assert!(parse_utc_millis("2026-02-30T00:00:00.000Z").is_err());
+}
+
+#[tokio::test]
+async fn callback_authority_reopen_rejects_previous_process_epoch_lease() {
+    let fixture = Fixture::new("run_reopen-stale-lease");
+    let store = create_running(&fixture).await;
+    let lease = reserve(&store, &fixture, "reopen-stale").await;
+    let store_id = store.store_id.clone();
+    drop(store);
+    let reopened = EventStore::open_pinned(&fixture.path, &store_id).await.unwrap();
+    let mut completion = settlement(&fixture, "reopen-stale", OperationOutcomeV1::Succeeded, 1);
+    completion.decision_clock = FakeClock::at("2026-08-26T00:00:20.000Z", 100, "epoch-after-reopen").sample();
+    assert_eq!(reopened.settle_operation(&fixture.registry(), &fixture.target(), &lease, &completion).await.unwrap_err().kind, RuntimeControlErrorKind::ProducerUnauthorized);
+    let recovery = reopened.prepare_timeout_recovery(
+        &fixture.registry(), &fixture.target(), timeout_request("operation_reopen-stale", "corr-reopen-new-command", None, digest('a')),
+        &FakeClock::at("2026-08-26T00:01:00.000Z", 500, "epoch-after-reopen"),
+    ).await.unwrap();
+    reopened.recover_timeout(&fixture.registry(), &fixture.target(), &recovery).await.unwrap();
+}
+
+#[tokio::test]
+async fn capability_table_root_resource_narrowing_and_stable_reasons() {
+    let fixture = Fixture::new("run_capability-matrix");
+    let store = create_running(&fixture).await;
+    let mut root = fixture.grant("cap_kind-root", "agent_owner", "agent_delegate", None, None, true, 3, 8);
+    root.resource.id = None;
+    root.issued_at_utc = "2026-08-26T00:00:06.000Z".to_owned();
+    store.issue_capability(&fixture.registry(), &fixture.target(), &EventId::parse("event_cap-kind-root").unwrap(), &root.issued_at_utc, "corr-kind-root", root.clone()).await.unwrap();
+    let mut child = fixture.grant("cap_exact-child", "agent_delegate", "agent_child", Some("cap_kind-root"), Some(fixture.task_id.clone()), false, 1, 4);
+    child.issued_at_utc = "2026-08-26T00:00:07.000Z".to_owned();
+    assert!(grant_is_subset(&child, &root).unwrap());
+    store.issue_capability(&fixture.registry(), &fixture.target_as("agent_delegate"), &EventId::parse("event_cap-exact-child").unwrap(), &child.issued_at_utc, "corr-exact-child", child.clone()).await.unwrap();
+    assert!(matches!(store.reserve_protected_operation(&fixture.registry(), &fixture.target_as("agent_child"), &fixture.proposal("narrowed"), &live_clock()).await.unwrap(), ReserveResult::Reserved { .. }));
+    let mut widened_resource = child.clone();
+    widened_resource.resource.id = None;
+    let mut exact_parent = root.clone();
+    exact_parent.resource.id = Some("fixture".to_owned());
+    assert!(!grant_is_subset(&widened_resource, &exact_parent).unwrap());
+    let mut widened_task = child.clone();
+    widened_task.scope.task_id = None;
+    let mut task_parent = root.clone();
+    task_parent.scope.task_id = Some(fixture.task_id.clone());
+    assert!(!grant_is_subset(&widened_task, &task_parent).unwrap());
+    let mut widened_usage = child.clone();
+    widened_usage.constraints.max_operation_usage = usage(9);
+    assert!(!grant_is_subset(&widened_usage, &root).unwrap());
+    let mut bad_order = child;
+    bad_order.operations = vec!["z".to_owned(), "a".to_owned()];
+    assert!(validate_grant_shape(&bad_order).is_err());
+}
+
+#[tokio::test]
+async fn capability_initial_same_scope_subject_and_revocation_reason() {
+    let fixture = Fixture::new("run_initial-subject");
+    let mut payload = fixture.initialization();
+    payload.initial_grants[0].subject_actor = AgentId::parse("agent_child").unwrap();
+    let store = create_running_with_payload(&fixture, payload).await;
+    assert!(matches!(store.reserve_protected_operation(&fixture.registry(), &fixture.target_as("agent_child"), &fixture.proposal("initial-child"), &live_clock()).await.unwrap(), ReserveResult::Reserved { .. }));
+    let other = Fixture::new("run_revoked-reason");
+    let store = create_running(&other).await;
+    store.revoke_capability(&other.registry(), &other.target(), &RevokeCapabilityCommand {
+        event_id: EventId::parse("event_revoke-reason").unwrap(), occurred_at: "2026-08-26T00:00:07.000Z".to_owned(), correlation_id: "corr-revoke-reason".to_owned(), grant_id: CapabilityId::parse("cap_root").unwrap(), reason_code: "owner".to_owned(),
+    }).await.unwrap();
+    assert!(matches!(store.reserve_protected_operation(&other.registry(), &other.target(), &other.proposal("revoked-reason"), &live_clock()).await.unwrap(), ReserveResult::Denied { reason_code, .. } if reason_code == "capability_revoked"));
+}
+
+#[tokio::test]
+async fn timeout_recovery_verified_partial_mutation_and_wall_regression() {
+    let fixture = Fixture::new("run_timeout-matrix");
+    let store = create_running(&fixture).await;
+    let operation = FakeOperation {
+        units: 2,
+        dispatch_count: Arc::new(AtomicUsize::new(0)),
+        performed_units: Arc::new(AtomicUsize::new(0)),
+    };
+    let (_lease, snapshot) = store.dispatch_fake_operation(
+        &fixture.registry(), &fixture.target(), &fixture.proposal("partial-timeout"), &live_clock(), &operation,
+    ).await.unwrap();
+    let at_deadline = FakeClock::at("2026-08-26T00:01:00.000Z", 51_000, "epoch-a");
+    let command = store.prepare_timeout_recovery(
+        &fixture.registry(), &fixture.target(), timeout_request("operation_partial-timeout", "corr-partial-timeout", Some(snapshot), digest('4')), &at_deadline,
+    ).await.unwrap();
+    let mut mutation = command.clone();
+    mutation.decision_clock.canonical_utc = "2026-08-26T00:01:01.000Z".to_owned();
+    mutation.decision_clock.wall_millis += 1_000;
+    assert_eq!(store.recover_timeout(&fixture.registry(), &fixture.target(), &mutation).await.unwrap_err().kind, RuntimeControlErrorKind::IdempotencyConflict);
+    let first = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
+    let retry = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
+    assert_eq!(append_identity(&first), append_identity(&retry), "commit-response-loss retry must be byte exact");
+    let projection = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
+    assert!(projection.accounts.iter().filter(|account| !matches!(account.account.scope, BudgetScopeV1::Actor { ref actor_id } if actor_id.as_str() == "agent_child")).all(|account| account.gross_consumed.as_u64() == 2 && account.reserved.as_u64() == 0));
+
+    let other = Fixture::new("run_wall-regression");
+    let other_store = create_running(&other).await;
+    reserve(&other_store, &other, "wall-regression").await;
+    assert_eq!(other_store.prepare_timeout_recovery(
+        &other.registry(), &other.target(), timeout_request("operation_wall-regression", "corr-wall-regression", None, digest('5')),
+        &FakeClock::at("2026-08-26T00:00:09.000Z", 900, "epoch-b"),
+    ).await.unwrap_err().kind, RuntimeControlErrorKind::ClockInvalid);
+}
+
+#[tokio::test]
+async fn cancellation_authority_probe_admission_future_and_recovery_ack() {
+    let fixture = Fixture::new("run_cancel-matrix");
+    let store = create_running(&fixture).await;
+    let lease = reserve(&store, &fixture, "probe-current").await;
+    let before_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&store.pool).await.unwrap();
+    let before_probe = store.cancellation_probe(&fixture.registry(), &fixture.target(), &lease, &live_clock()).await.unwrap();
+    assert!(!before_probe.requested);
+    let after_probe_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&store.pool).await.unwrap();
+    assert_eq!(before_count, after_probe_count, "probe must be read only");
+    let nonexistent = CancellationCommand {
+        event_id: EventId::parse("event_cancel-missing-task").unwrap(), occurred_at: "2026-08-26T00:00:11.000Z".to_owned(), correlation_id: "corr-cancel-missing".to_owned(), cancellation_id: CancellationId::parse("cancel_missing-task").unwrap(), target: CancellationTargetV1::Task { task_id: TaskId::parse("task_missing").unwrap() }, reason_code: "missing".to_owned(),
+    };
+    assert_eq!(store.request_cancellation(&fixture.registry(), &fixture.target(), &nonexistent).await.unwrap_err().kind, RuntimeControlErrorKind::LifecycleStateDenied);
+    let cancel = CancellationCommand {
+        event_id: EventId::parse("event_cancel-task-matrix").unwrap(), occurred_at: "2026-08-26T00:00:12.000Z".to_owned(), correlation_id: "corr-cancel-task-matrix".to_owned(), cancellation_id: CancellationId::parse("cancel_task-matrix").unwrap(), target: CancellationTargetV1::Task { task_id: fixture.task_id.clone() }, reason_code: "stop".to_owned(),
+    };
+    store.request_cancellation(&fixture.registry(), &fixture.target(), &cancel).await.unwrap();
+    let probe = store.cancellation_probe(&fixture.registry(), &fixture.target(), &lease, &live_clock()).await.unwrap();
+    assert_eq!(probe.cancellation_ids, vec![cancel.cancellation_id.clone()]);
+    assert_eq!(store.reserve_protected_operation(&fixture.registry(), &fixture.target(), &fixture.proposal("future-after-cancel"), &live_clock()).await.unwrap_err().kind, RuntimeControlErrorKind::CancellationPending);
+    let ack = CancellationAckCommand::from_producer(
+        EventId::parse("event_cancel-recovery-ack").unwrap(), "corr-recovery-ack".to_owned(), cancel.cancellation_id,
+        OperationId::parse("operation_probe-current").unwrap(), ReservationId::parse("reservation_probe-current").unwrap(),
+        RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(), &FakeClock::at("2026-08-26T00:00:13.000Z", 1_300, "epoch-b"),
+    ).unwrap();
+    store.acknowledge_cancellation_recovery(&fixture.registry(), &fixture.target(), &ack).await.unwrap();
+    let mut ack_mutation = ack.clone();
+    ack_mutation.decision_clock.canonical_utc = "2026-08-26T00:00:14.000Z".to_owned();
+    ack_mutation.decision_clock.wall_millis += 1_000;
+    assert_eq!(store.acknowledge_cancellation_recovery(&fixture.registry(), &fixture.target(), &ack_mutation).await.unwrap_err().kind, RuntimeControlErrorKind::IdempotencyConflict);
+}
+
+#[tokio::test]
+async fn idempotency_denial_and_callback_state_changes_are_locked() {
+    let fixture = Fixture::new("run_idempotency-matrix");
+    let store = create_running(&fixture).await;
+    let proposal = fixture.proposal("locked-denial");
+    let denied = store.reserve_protected_operation(&fixture.registry(), &fixture.target_as("agent_intruder"), &proposal, &live_clock()).await.unwrap();
+    let mut root = fixture.grant("cap_intruder-root", "agent_owner", "agent_intruder", None, None, false, 1, 4);
+    root.issued_at_utc = "2026-08-26T00:00:11.000Z".to_owned();
+    let issued_at = root.issued_at_utc.clone();
+    store.issue_capability(&fixture.registry(), &fixture.target(), &EventId::parse("event_cap-intruder-root").unwrap(), &issued_at, "corr-intruder", root).await.unwrap();
+    let retry = store.reserve_protected_operation(&fixture.registry(), &fixture.target_as("agent_intruder"), &proposal, &live_clock()).await.unwrap();
+    assert_eq!(append_identity_from_reserve(&denied), append_identity_from_reserve(&retry));
+
+    let lease = reserve(&store, &fixture, "callback-lock").await;
+    let command = settlement(&fixture, "callback-lock", OperationOutcomeV1::Succeeded, 1);
+    let first = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
+    let exact = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
+    assert_eq!(append_identity(&first), append_identity(&exact));
+    let mut mutation = command.clone();
+    mutation.event_id = EventId::parse("event_settle-callback-mutation").unwrap();
+    mutation.reason_code = "mutated".to_owned();
+    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &mutation).await.unwrap_err().kind, RuntimeControlErrorKind::IdempotencyConflict);
+    let before = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
+    let mut late = command.clone();
+    late.event_id = EventId::parse("event_late-unified").unwrap();
+    late.callback_id = CallbackId::parse("callback_fake-callback-lock-late").unwrap();
+    late.redacted_payload_digest = digest('6');
+    store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &late).await.unwrap();
+    let after = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
+    assert_eq!(before.accounts, after.accounts);
+    assert_eq!(after.late_result_count.parse::<u64>().unwrap(), before.late_result_count.parse::<u64>().unwrap() + 1);
+}
+
+fn append_identity_from_reserve(result: &ReserveResult) -> (EventId, i64) {
+    match result {
+        ReserveResult::Reserved { event_id, sequence, .. }
+        | ReserveResult::AlreadyReserved { event_id, sequence }
+        | ReserveResult::Denied { event_id, sequence, .. } => (event_id.clone(), *sequence),
+    }
+}
+
+#[tokio::test]
+async fn budget_concurrency_reverse_winner_and_lifecycle_race() {
+    let fixture = Fixture::new("run_reverse-budget-race");
+    let mut payload = fixture.initialization();
+    for account in &mut payload.budget_plan.accounts {
+        account.hard_limit = BudgetAmountV1::new(6);
+        account.soft_limit = None;
+    }
+    let store = create_running_with_payload(&fixture, payload).await;
+    let registry = fixture.registry();
+    let target = fixture.target();
+    let left_proposal = fixture.proposal("reverse-left");
+    let right_proposal = fixture.proposal("reverse-right");
+    let clock = live_clock();
+    let (left, right) = tokio::join!(
+        store.reserve_protected_operation(&registry, &target, &left_proposal, &clock),
+        store.reserve_protected_operation(&registry, &target, &right_proposal, &clock),
+    );
+    let outcomes = [left.unwrap(), right.unwrap()];
+    assert_eq!(outcomes.iter().filter(|result| matches!(result, ReserveResult::Reserved { .. })).count(), 1);
+    assert_eq!(outcomes.iter().filter(|result| matches!(result, ReserveResult::Denied { reason_code, .. } if reason_code == "budget_hard_limit")).count(), 1);
+
+    let race_fixture = Fixture::new("run_lifecycle-two-writer");
+    let race_store = create_running(&race_fixture).await;
+    let lifecycle_target = super::lifecycle::LifecycleTarget { scope: race_fixture.scope.clone(), actor: race_fixture.scope.agent_id.clone() };
+    let transition = TransitionRunCommand {
+        event_id: EventId::parse("event_run-pause-race").unwrap(), occurred_at: "2026-08-26T00:00:11.000Z".to_owned(), correlation_id: "corr-pause-race".to_owned(), expected_sequence: 5, expected_state: RunState::Running, target_state: RunState::Paused, reason_code: "race".to_owned(),
+    };
+    let race_registry = race_fixture.registry();
+    let race_target = race_fixture.target();
+    let race_proposal = race_fixture.proposal("lifecycle-race-live");
+    let race_clock = live_clock();
+    let (reserve_result, transition_result) = tokio::join!(
+        race_store.reserve_protected_operation(&race_registry, &race_target, &race_proposal, &race_clock),
+        race_store.transition_run(&race_registry, &lifecycle_target, &transition),
+    );
+    assert!(reserve_result.is_ok() ^ transition_result.is_ok(), "only the serialized winner may commit");
+}
+
+#[tokio::test]
+async fn compatibility_rejects_schema_valid_illegal_capability_history() {
+    let fixture = Fixture::new("run_illegal-grant-history");
+    let store = create_running(&fixture).await;
+    let mut illegal = fixture.grant("cap_illegal-history", "agent_child", "agent_intruder", Some("cap_root"), None, true, 9, 99);
+    illegal.issued_at_utc = "2026-08-26T00:00:12.000Z".to_owned();
+    let illegal_issued_at = illegal.issued_at_utc.clone();
+    let mut tx = store.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let aggregate = load_control(&mut tx, &fixture.registry(), &fixture.target()).await.unwrap();
+    append_control(
+        tx, &aggregate, &EventId::parse("event_illegal-grant-history").unwrap(),
+        &illegal_issued_at, "corr-illegal-grant", "capability-issued",
+        &CapabilityIssuedPayloadV1 { grant: illegal },
+    ).await.unwrap();
+    assert_eq!(store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+}
+
+#[tokio::test]
+async fn compatibility_rejects_schema_valid_illegal_budget_and_cancel_history() {
+    let fixture = Fixture::new("run_illegal-budget-history");
+    let store = create_running(&fixture).await;
+    reserve(&store, &fixture, "illegal-budget").await;
+    let payload = OperationSettledPayloadV1 {
+        operation_id: OperationId::parse("operation_illegal-budget").unwrap(),
+        reservation_id: ReservationId::parse("reservation_illegal-budget").unwrap(),
+        callback_id: Some(CallbackId::parse("callback_fake-illegal-budget").unwrap()),
+        callback_fingerprint: Some(digest('7')),
+        outcome: OperationOutcomeV1::Succeeded,
+        evidence_class: UsageEvidenceClassV1::KernelMeterVerified,
+        kernel_meter_evidence: None,
+        observed_usage: Vec::new(), accounted_usage: usage(5), released_usage: Vec::new(),
+        reason_code: "illegal".to_owned(), timeout_command_fingerprint: None,
+        settled_at_utc: "2026-08-26T00:00:20.000Z".to_owned(),
+    };
+    let mut tx = store.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let aggregate = load_control(&mut tx, &fixture.registry(), &fixture.target()).await.unwrap();
+    append_control(
+        tx, &aggregate, &EventId::parse("event_illegal-budget-settlement").unwrap(),
+        &payload.settled_at_utc, "corr-illegal-budget", "operation-settled", &payload,
+    ).await.unwrap();
+    assert_eq!(store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+
+    let cancel_fixture = Fixture::new("run_illegal-cancel-history");
+    let cancel_store = create_running(&cancel_fixture).await;
+    let ack = CancellationAcknowledgedPayloadV1 {
+        cancellation_id: CancellationId::parse("cancel_never-requested").unwrap(),
+        operation_id: OperationId::parse("operation_never-reserved").unwrap(),
+        reservation_id: ReservationId::parse("reservation_never-reserved").unwrap(),
+        producer_revision: RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
+        authority_kind: "kernel_recovery".to_owned(),
+        acknowledged_at_utc: "2026-08-26T00:00:20.000Z".to_owned(),
+    };
+    let mut tx = cancel_store.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let aggregate = load_control(&mut tx, &cancel_fixture.registry(), &cancel_fixture.target()).await.unwrap();
+    append_control(
+        tx, &aggregate, &EventId::parse("event_illegal-cancel-ack").unwrap(),
+        &ack.acknowledged_at_utc, "corr-illegal-cancel", "cancellation-acknowledged", &ack,
+    ).await.unwrap();
+    assert_eq!(cancel_store.runtime_control_projection(&cancel_fixture.registry(), &cancel_fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+}
+
+#[tokio::test]
+async fn isolation_full_scope_and_business_id_matrix_is_no_write() {
+    let fixture = Fixture::new("run_isolation-matrix");
+    let store = create_running(&fixture).await;
+    let mut targets = Vec::new();
+    let mut tenant = fixture.target();
+    tenant.scope.tenant_id = TenantId::parse("tenant_other").unwrap();
+    targets.push(tenant);
+    let mut no_user = fixture.target();
+    no_user.scope.user_id = None;
+    targets.push(no_user);
+    let mut user = fixture.target();
+    user.scope.user_id = Some(UserId::parse("user_bob").unwrap());
+    targets.push(user);
+    let mut workspace = fixture.target();
+    workspace.scope.workspace_id = WorkspaceId::parse("workspace_other").unwrap();
+    targets.push(workspace);
+    let mut run = fixture.target();
+    run.scope.run_id = RunId::parse("run_other").unwrap();
+    targets.push(run);
+    let mut owner = fixture.target();
+    owner.scope.agent_id = AgentId::parse("agent_other-owner").unwrap();
+    targets.push(owner);
+    let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&store.pool).await.unwrap();
+    for (index, target) in targets.iter().enumerate() {
+        let mut proposal = fixture.proposal(&format!("isolation-{index}"));
+        proposal.operation_id = OperationId::parse("operation_shadowed").unwrap();
+        assert_eq!(store.reserve_protected_operation(&fixture.registry(), target, &proposal, &live_clock()).await.unwrap_err().kind, RuntimeControlErrorKind::Unauthorized);
+    }
+    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&store.pool).await.unwrap();
+    assert_eq!(before, after);
+}
+
+#[tokio::test]
+async fn projection_contains_complete_initialization_cancellation_and_history_provenance() {
+    let fixture = Fixture::new("run_projection-provenance");
+    let store = create_running(&fixture).await;
+    let lease = reserve(&store, &fixture, "projection-provenance").await;
+    let cancel = CancellationCommand {
+        event_id: EventId::parse("event_cancel-projection").unwrap(), occurred_at: "2026-08-26T00:00:12.000Z".to_owned(), correlation_id: "corr-cancel-projection".to_owned(), cancellation_id: CancellationId::parse("cancel_projection").unwrap(), target: CancellationTargetV1::Operation { operation_id: OperationId::parse("operation_projection-provenance").unwrap() }, reason_code: "projection".to_owned(),
+    };
+    store.request_cancellation(&fixture.registry(), &fixture.target(), &cancel).await.unwrap();
+    let ack = CancellationAckCommand::from_producer(
+        EventId::parse("event_ack-projection").unwrap(), "corr-ack-projection".to_owned(), cancel.cancellation_id,
+        OperationId::parse("operation_projection-provenance").unwrap(), ReservationId::parse("reservation_projection-provenance").unwrap(),
+        RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(), &FakeClock::at("2026-08-26T00:00:13.000Z", 1_300, "epoch-a"),
+    ).unwrap();
+    store.acknowledge_cancellation(&fixture.registry(), &fixture.target(), &lease, &ack).await.unwrap();
+    let projection = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
+    assert_eq!(projection.budget_revision, fixture.manifest.budget_revision);
+    assert_eq!(projection.clock_contract, fixture.initialization().clock_contract);
+    assert_eq!(projection.operation_contracts, vec![retained_operation_contract(fixture.set.reference()).unwrap()]);
+    assert_eq!(projection.cancellations.len(), 1);
+    assert_eq!(projection.cancellations[0].acknowledgements.len(), 1);
+    assert_eq!(projection.source_contract.lifecycle_cursor.sequence, "2");
+    assert_ne!(projection.history_digest, digest('0'));
+    assert_eq!(projection.source_contract.accepted_event_bindings.len(), CONTROL_EVENT_TYPES.len());
+}
+
+#[tokio::test]
+async fn lifecycle_admission_paused_and_terminal_task_run_matrix() {
+    let paused_fixture = Fixture::new("run_paused-task-admission");
+    let paused_store = create_running(&paused_fixture).await;
+    let target = super::lifecycle::LifecycleTarget { scope: paused_fixture.scope.clone(), actor: paused_fixture.scope.agent_id.clone() };
+    paused_store.transition_task(&paused_fixture.registry(), &target, &TransitionTaskCommand {
+        event_id: EventId::parse("event_task-paused-admission").unwrap(), occurred_at: "2026-08-26T00:00:11.000Z".to_owned(), correlation_id: "corr-task-paused".to_owned(), expected_sequence: 5, task_id: paused_fixture.task_id.clone(), expected_state: TaskState::Running, target_state: TaskState::Paused, reason_code: "pause".to_owned(),
+    }).await.unwrap();
+    assert_eq!(paused_store.reserve_protected_operation(&paused_fixture.registry(), &paused_fixture.target(), &paused_fixture.proposal("paused-task"), &live_clock()).await.unwrap_err().kind, RuntimeControlErrorKind::LifecycleStateDenied);
+
+    let terminal_fixture = Fixture::new("run_terminal-admission");
+    let terminal_store = create_running(&terminal_fixture).await;
+    let terminal_target = super::lifecycle::LifecycleTarget { scope: terminal_fixture.scope.clone(), actor: terminal_fixture.scope.agent_id.clone() };
+    terminal_store.transition_task(&terminal_fixture.registry(), &terminal_target, &TransitionTaskCommand {
+        event_id: EventId::parse("event_task-succeeded-admission").unwrap(), occurred_at: "2026-08-26T00:00:11.000Z".to_owned(), correlation_id: "corr-task-succeeded".to_owned(), expected_sequence: 5, task_id: terminal_fixture.task_id.clone(), expected_state: TaskState::Running, target_state: TaskState::Succeeded, reason_code: "done".to_owned(),
+    }).await.unwrap();
+    assert_eq!(terminal_store.reserve_protected_operation(&terminal_fixture.registry(), &terminal_fixture.target(), &terminal_fixture.proposal("terminal-task"), &live_clock()).await.unwrap_err().kind, RuntimeControlErrorKind::LifecycleStateDenied);
+    terminal_store.transition_run(&terminal_fixture.registry(), &terminal_target, &TransitionRunCommand {
+        event_id: EventId::parse("event_run-succeeded-admission").unwrap(), occurred_at: "2026-08-26T00:00:12.000Z".to_owned(), correlation_id: "corr-run-succeeded".to_owned(), expected_sequence: 6, expected_state: RunState::Running, target_state: RunState::Succeeded, reason_code: "done".to_owned(),
+    }).await.unwrap();
+    assert_eq!(terminal_store.reserve_protected_operation(&terminal_fixture.registry(), &terminal_fixture.target(), &terminal_fixture.proposal("terminal-run"), &live_clock()).await.unwrap_err().kind, RuntimeControlErrorKind::LifecycleStateDenied);
+}
+
+#[tokio::test]
+async fn cancellation_authority_principal_and_terminal_task_matrix() {
+    let fixture = Fixture::new("run_cancel-principal-matrix");
+    let store = create_running(&fixture).await;
+    let mut delegated = fixture.grant("cap_cancel-child", "agent_owner", "agent_child", Some("cap_root"), Some(fixture.task_id.clone()), false, 1, 4);
+    delegated.issued_at_utc = "2026-08-26T00:00:06.000Z".to_owned();
+    store.issue_capability(&fixture.registry(), &fixture.target(), &EventId::parse("event_cap-cancel-child").unwrap(), &delegated.issued_at_utc.clone(), "corr-cap-cancel", delegated).await.unwrap();
+    store.reserve_protected_operation(&fixture.registry(), &fixture.target_as("agent_child"), &fixture.proposal("subject-cancel"), &live_clock()).await.unwrap();
+    let subject_cancel = CancellationCommand {
+        event_id: EventId::parse("event_cancel-by-subject").unwrap(), occurred_at: "2026-08-26T00:00:12.000Z".to_owned(), correlation_id: "corr-subject-cancel".to_owned(), cancellation_id: CancellationId::parse("cancel_by-subject").unwrap(), target: CancellationTargetV1::Operation { operation_id: OperationId::parse("operation_subject-cancel").unwrap() }, reason_code: "subject".to_owned(),
+    };
+    store.request_cancellation(&fixture.registry(), &fixture.target_as("agent_child"), &subject_cancel).await.unwrap();
+    let unrelated = CancellationCommand {
+        event_id: EventId::parse("event_cancel-by-unrelated").unwrap(), occurred_at: "2026-08-26T00:00:13.000Z".to_owned(), correlation_id: "corr-unrelated-cancel".to_owned(), cancellation_id: CancellationId::parse("cancel_by-unrelated").unwrap(), target: subject_cancel.target.clone(), reason_code: "unrelated".to_owned(),
+    };
+    assert_eq!(store.request_cancellation(&fixture.registry(), &fixture.target_as("agent_delegate"), &unrelated).await.unwrap_err().kind, RuntimeControlErrorKind::Unauthorized);
+
+    let terminal_fixture = Fixture::new("run_cancel-terminal-task");
+    let terminal_store = create_running(&terminal_fixture).await;
+    let lifecycle_target = super::lifecycle::LifecycleTarget { scope: terminal_fixture.scope.clone(), actor: terminal_fixture.scope.agent_id.clone() };
+    terminal_store.transition_task(&terminal_fixture.registry(), &lifecycle_target, &TransitionTaskCommand {
+        event_id: EventId::parse("event_task-succeeded-cancel").unwrap(), occurred_at: "2026-08-26T00:00:11.000Z".to_owned(), correlation_id: "corr-terminal-task".to_owned(), expected_sequence: 5, task_id: terminal_fixture.task_id.clone(), expected_state: TaskState::Running, target_state: TaskState::Succeeded, reason_code: "done".to_owned(),
+    }).await.unwrap();
+    assert_eq!(terminal_store.request_cancellation(&terminal_fixture.registry(), &terminal_fixture.target(), &CancellationCommand {
+        event_id: EventId::parse("event_cancel-terminal-task").unwrap(), occurred_at: "2026-08-26T00:00:12.000Z".to_owned(), correlation_id: "corr-cancel-terminal-task".to_owned(), cancellation_id: CancellationId::parse("cancel_terminal-task").unwrap(), target: CancellationTargetV1::Task { task_id: terminal_fixture.task_id.clone() }, reason_code: "late".to_owned(),
+    }).await.unwrap_err().kind, RuntimeControlErrorKind::LifecycleStateDenied);
+}
+
+#[tokio::test]
+async fn late_and_duplicate_out_of_order_messages_use_safe_rejected_audit() {
+    let fixture = Fixture::new("run_rejected-control-audit");
+    let store = create_running(&fixture).await;
+    let lease = reserve(&store, &fixture, "lease-source").await;
+    let command = SettlementCommand::from_producer_observation(
+        EventId::parse("event_rejected-pre-reserve").unwrap(), "corr-rejected-pre-reserve".to_owned(),
+        CallbackId::parse("callback_fake-never-reserved").unwrap(), OperationId::parse("operation_never-reserved").unwrap(),
+        ReservationId::parse("reservation_never-reserved").unwrap(), RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
+        OperationOutcomeV1::Succeeded, Vec::new(), digest('8'), "out-of-order".to_owned(), None,
+        &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a"),
+    ).unwrap();
+    let first = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
+    let retry = store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &command).await.unwrap();
+    assert_eq!(append_identity(&first), append_identity(&retry));
+    let projection = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
+    assert_eq!(projection.rejected_message_count, "1");
+    assert!(projection.operations[0].outcome.is_none());
+    let mut mutation = command;
+    mutation.reason_code = "changed".to_owned();
+    assert_eq!(store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &mutation).await.unwrap_err().kind, RuntimeControlErrorKind::IdempotencyConflict);
 }

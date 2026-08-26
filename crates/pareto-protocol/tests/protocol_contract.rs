@@ -173,7 +173,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 43);
+    assert_eq!(first.len(), 44);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -424,6 +424,7 @@ fn capability_budget_contract() {
         "runtime-control-initialized-payload",
         "operation-reserved-payload",
         "operation-settled-payload",
+        "kernel-meter-evidence",
         "timeout-key",
         "trusted-operation-contract",
         "runtime-control-projection",
@@ -490,6 +491,18 @@ fn runtime_control_projection_contract() {
         "net_consumed",
         "projection_digest",
         "source_contract",
+        "history_digest",
+        "budget_revision",
+        "clock_contract",
+        "operation_contracts",
+        "cancellations",
+        "acknowledgements",
+        "lifecycle_cursor",
+        "accepted_event_bindings",
+        "projection_reader_revision",
+        "callback_namespace",
+        "required_dimensions",
+        "adapter_revision",
     ] {
         assert!(bytes.contains(required), "projection omitted {required}");
     }

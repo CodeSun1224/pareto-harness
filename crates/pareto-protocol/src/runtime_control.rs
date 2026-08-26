@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AgentId, BudgetAccountId, CallbackId, CancellationId, CapabilityId, Digest, EventCursor,
-    EventId, IsolationScope, OperationId, ProtocolLimitsRef, ReservationId, RevisionId, SchemaRef,
-    SchemaSetRef, StreamId, TaskId,
+    EventId, EventTypeBinding, IsolationScope, OperationId, ProtocolLimitsRef, ReservationId,
+    RevisionId, SchemaRef, SchemaSetRef, StreamId, TaskId,
 };
 
 fn deserialize_present_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -253,16 +253,26 @@ pub struct BudgetPlanV1 {
 pub struct TrustedOperationContractV1 {
     /// Exact contract revision.
     pub contract_revision: RevisionId,
+    /// Exact retained source SchemaSet for this contract.
+    pub source_schema_set_ref: SchemaSetRef,
+    /// Exact trusted adapter revision.
+    pub adapter_revision: RevisionId,
     /// Resource kind.
     pub resource_kind: String,
     /// Operation name.
     pub operation: String,
+    /// Sorted unique dimensions that the trusted envelope must cover.
+    pub required_dimensions: Vec<BudgetDimensionV1>,
     /// Authoritative maximum resource vector.
     pub resource_envelope: Vec<BudgetVectorEntryV1>,
     /// Kernel meter revision.
     pub meter_revision: RevisionId,
+    /// Exact Kernel enforcement policy revision.
+    pub meter_policy_revision: RevisionId,
     /// Approved producer revision.
     pub producer_revision: RevisionId,
+    /// Exact callback namespace bound at dispatch and callback admission.
+    pub callback_namespace: String,
     /// Late-result redaction policy revision.
     pub redaction_policy_revision: RevisionId,
 }
@@ -275,10 +285,18 @@ pub struct RuntimeControlSourceContractV1 {
     pub schema_set_ref: SchemaSetRef,
     /// Exact source protocol limits.
     pub protocol_limits_ref: ProtocolLimitsRef,
+    /// Exact lifecycle cursor observed by sequence-one initialization.
+    pub lifecycle_cursor: EventCursor,
     /// Exact reducer revision.
     pub reducer_revision: RevisionId,
+    /// Sorted exact control event payload bindings accepted by the reducer.
+    pub accepted_event_bindings: Vec<EventTypeBinding>,
+    /// Exact history-chain algorithm revision.
+    pub history_digest_revision: RevisionId,
     /// Exact projection output Schema.
     pub projection_schema_ref: SchemaRef,
+    /// Exact retained output reader revision.
+    pub projection_reader_revision: RevisionId,
 }
 
 /// Runtime clock policy fixed at initialization.
@@ -303,8 +321,8 @@ pub struct RuntimeControlInitializedPayloadV1 {
     pub budget_plan: BudgetPlanV1,
     /// Clock and recovery contract.
     pub clock_contract: RuntimeClockContractV1,
-    /// Retained operation contracts.
-    pub operation_contracts: Vec<TrustedOperationContractV1>,
+    /// Sorted exact references resolved only through the retained Kernel registry.
+    pub operation_contract_refs: Vec<RevisionId>,
 }
 
 /// Capability issue/delegation payload.
@@ -495,6 +513,22 @@ pub enum UsageEvidenceClassV1 {
     Unknown,
 }
 
+/// Durable, independently verifiable Kernel meter evidence.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KernelMeterEvidenceV1 {
+    /// Exact retained meter revision.
+    pub meter_revision: RevisionId,
+    /// Live process epoch in which metering occurred.
+    pub process_epoch: String,
+    /// Canonical metered vector.
+    pub usage: Vec<BudgetVectorEntryV1>,
+    /// Whether the Kernel stopped an attempted unit before envelope overflow.
+    pub contract_violation: bool,
+    /// Domain-separated canonical evidence fingerprint.
+    pub snapshot_fingerprint: Digest,
+}
+
 /// Authoritative terminal settlement payload.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -510,10 +544,24 @@ pub struct OperationSettledPayloadV1 {
         deserialize_with = "deserialize_present_option"
     )]
     pub callback_id: Option<CallbackId>,
+    /// Canonical callback command fingerprint when callback-driven.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub callback_fingerprint: Option<Digest>,
     /// Terminal outcome.
     pub outcome: OperationOutcomeV1,
     /// Usage evidence authority.
     pub evidence_class: UsageEvidenceClassV1,
+    /// Durable Kernel meter evidence when present.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub kernel_meter_evidence: Option<KernelMeterEvidenceV1>,
     /// Non-authoritative observation.
     pub observed_usage: Vec<BudgetVectorEntryV1>,
     /// Authoritative accounted vector.
@@ -599,6 +647,8 @@ pub struct CancellationAcknowledgedPayloadV1 {
     pub reservation_id: ReservationId,
     /// Approved producer.
     pub producer_revision: RevisionId,
+    /// Closed acknowledgement authority (`producer_lease` or `kernel_recovery`).
+    pub authority_kind: String,
     /// Canonical UTC acknowledgement time.
     pub acknowledged_at_utc: String,
 }
@@ -611,6 +661,8 @@ pub struct LateResultObservedPayloadV1 {
     pub operation_id: OperationId,
     /// Late callback identity.
     pub callback_id: CallbackId,
+    /// Canonical callback command fingerprint.
+    pub callback_fingerprint: Digest,
     /// Safe classification.
     pub classification: String,
     /// Digest of redacted source bytes.
@@ -655,6 +707,8 @@ pub struct RuntimeControlAccountProjectionV1 {
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuntimeControlOperationProjectionV1 {
+    /// Complete immutable reservation and authority identity.
+    pub reservation: OperationReservedPayloadV1,
     /// Operation identity.
     pub operation_id: OperationId,
     /// Reservation identity.
@@ -672,10 +726,27 @@ pub struct RuntimeControlOperationProjectionV1 {
         deserialize_with = "deserialize_present_option"
     )]
     pub outcome: Option<OperationOutcomeV1>,
+    /// Complete terminal settlement when present.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub settlement: Option<OperationSettledPayloadV1>,
     /// Reserved vector.
     pub reserved_usage: Vec<BudgetVectorEntryV1>,
     /// Accounted terminal usage.
     pub accounted_usage: Vec<BudgetVectorEntryV1>,
+}
+
+/// Complete recoverable cancellation request and acknowledgement state.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeControlCancellationProjectionV1 {
+    /// Durable request.
+    pub request: CancellationRequestedPayloadV1,
+    /// Sorted operation acknowledgements for this request.
+    pub acknowledgements: Vec<CancellationAcknowledgedPayloadV1>,
 }
 
 /// Digest preimage for Runtime Control Projection.
@@ -696,6 +767,14 @@ pub struct RuntimeControlProjectionHashViewV1 {
     pub cursor: EventCursor,
     /// Exact source contract.
     pub source_contract: RuntimeControlSourceContractV1,
+    /// Digest of the exact admitted authoritative history.
+    pub history_digest: Digest,
+    /// Immutable initialization budget identity.
+    pub budget_revision: RevisionId,
+    /// Immutable initialization clock contract.
+    pub clock_contract: RuntimeClockContractV1,
+    /// Sorted retained trusted operation contracts.
+    pub operation_contracts: Vec<TrustedOperationContractV1>,
     /// Sorted account totals.
     pub accounts: Vec<RuntimeControlAccountProjectionV1>,
     /// Sorted operations.
@@ -704,6 +783,8 @@ pub struct RuntimeControlProjectionHashViewV1 {
     pub active_grants: Vec<CapabilityGrantV1>,
     /// Sorted revoked grant IDs.
     pub revoked_grants: Vec<CapabilityId>,
+    /// Sorted complete cancellation state.
+    pub cancellations: Vec<RuntimeControlCancellationProjectionV1>,
     /// Cancellation request count.
     pub cancellation_count: String,
     /// Late-result audit count.
@@ -730,6 +811,14 @@ pub struct RuntimeControlProjectionV1 {
     pub cursor: EventCursor,
     /// Exact source contract.
     pub source_contract: RuntimeControlSourceContractV1,
+    /// Digest of the exact admitted authoritative history.
+    pub history_digest: Digest,
+    /// Immutable initialization budget identity.
+    pub budget_revision: RevisionId,
+    /// Immutable initialization clock contract.
+    pub clock_contract: RuntimeClockContractV1,
+    /// Sorted retained trusted operation contracts.
+    pub operation_contracts: Vec<TrustedOperationContractV1>,
     /// Sorted account totals.
     pub accounts: Vec<RuntimeControlAccountProjectionV1>,
     /// Sorted operations.
@@ -738,6 +827,8 @@ pub struct RuntimeControlProjectionV1 {
     pub active_grants: Vec<CapabilityGrantV1>,
     /// Sorted revoked grant IDs.
     pub revoked_grants: Vec<CapabilityId>,
+    /// Sorted complete cancellation state.
+    pub cancellations: Vec<RuntimeControlCancellationProjectionV1>,
     /// Cancellation request count.
     pub cancellation_count: String,
     /// Late-result audit count.

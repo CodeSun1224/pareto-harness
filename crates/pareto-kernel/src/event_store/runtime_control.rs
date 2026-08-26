@@ -10,10 +10,11 @@ use pareto_protocol::{
     BudgetVectorEntryV1, CallbackId, CancellationAcknowledgedPayloadV1, CancellationId,
     CancellationRequestedPayloadV1, CancellationTargetV1, CapabilityGrantV1, CapabilityId,
     CapabilityIssuedPayloadV1, CapabilityRevokedPayloadV1, ControlMessageRejectedPayloadV1, Digest,
-    EventCursor, EventId, ExecutionMode, IsolationScope, LateResultObservedPayloadV1, OperationId,
-    OperationInterruptibilityV1, OperationOutcomeV1, OperationReservedPayloadV1,
-    OperationSettledPayloadV1, ProtectedOperationDeniedPayloadV1, ReservationId, RevisionId,
-    RunState, RuntimeControlAccountProjectionV1, RuntimeControlInitializedPayloadV1,
+    EventCursor, EventId, ExecutionMode, IsolationScope, KernelMeterEvidenceV1,
+    LateResultObservedPayloadV1, OperationId, OperationInterruptibilityV1, OperationOutcomeV1,
+    OperationReservedPayloadV1, OperationSettledPayloadV1, ProtectedOperationDeniedPayloadV1,
+    ReservationId, RevisionId, RunState, RuntimeControlAccountProjectionV1,
+    RuntimeControlCancellationProjectionV1, RuntimeControlInitializedPayloadV1,
     RuntimeControlOperationProjectionV1, RuntimeControlProjectionHashViewV1,
     RuntimeControlProjectionV1, StreamId, TaskId, TaskState, TimeoutKeyV1,
     TrustedOperationContractV1, UsageEvidenceClassV1, ValidatedEvent, canonical_json, digest_json,
@@ -22,6 +23,35 @@ use serde::Serialize;
 use sha2::{Digest as _, Sha256};
 use sqlx::{Row, Sqlite, SqliteConnection, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+const TIMEOUT_COMMAND_DOMAIN: &[u8] = b"pareto.runtime-timeout-recovery.command.v1\0";
+const RUNTIME_REDUCER_REVISION: &str = "rev_runtime-control-reducer-v1";
+const RUNTIME_HISTORY_REVISION: &str = "rev_runtime-control-history-chain-v1";
+const RUNTIME_READER_REVISION: &str = "rev_runtime-control-projection-reader-v1";
+const FAKE_CONTRACT_REVISION: &str = "rev_fake-operation-v1";
+const FAKE_ADAPTER_REVISION: &str = "rev_fake-adapter-v1";
+const FAKE_METER_REVISION: &str = "rev_kernel-meter-v1";
+const FAKE_METER_POLICY_REVISION: &str = "rev_kernel-meter-policy-v1";
+const FAKE_PRODUCER_REVISION: &str = "rev_fake-producer-v1";
+const FAKE_CALLBACK_NAMESPACE: &str = "callback_fake-";
+// Updated only when the generated control-capable SchemaSet is deliberately published.
+const RETAINED_CONTROL_SCHEMA_SET_DIGEST: &str =
+    "sha256:19566903f801e66b5a4367ff173b9ff1982232456f9b432fd075db4e4639b1f9";
+const CONTROL_EVENT_TYPES: [&str; 11] = [
+    "budget-refunded",
+    "capability-issued",
+    "capability-revoked",
+    "cancellation-acknowledged",
+    "cancellation-requested",
+    "control-message-rejected",
+    "late-result-observed",
+    "operation-reserved",
+    "operation-settled",
+    "protected-operation-denied",
+    "runtime-control-initialized",
+];
 
 use super::lifecycle::{EstablishedAggregate, LifecycleTarget, load_established};
 use super::{
@@ -47,6 +77,8 @@ pub(super) enum RuntimeControlErrorKind {
     TerminalConflict,
     IdempotencyConflict,
     ProducerUnauthorized,
+    MeterContractViolation,
+    ClockInvalid,
     NotDue,
     RecordedReplay,
     Busy,
@@ -121,6 +153,7 @@ pub(super) struct ProtectedOperationProposal {
     pub(super) task_id: Option<TaskId>,
     pub(super) resource: pareto_protocol::ResourceSelectorV1,
     pub(super) operation: String,
+    pub(super) adapter_revision: RevisionId,
     /// Audit-only and never used to lower the trusted envelope.
     pub(super) requested_usage: Vec<BudgetVectorEntryV1>,
     pub(super) callback_namespace: String,
@@ -137,6 +170,8 @@ pub(super) struct OperationLease {
     reservation_id: ReservationId,
     producer_revision: RevisionId,
     process_epoch: String,
+    reserved_wall_millis: u64,
+    reserved_monotonic_millis: u64,
     deadline_monotonic_millis: u64,
     seal: Digest,
 }
@@ -160,21 +195,21 @@ pub(super) enum ReserveResult {
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub(super) struct SettlementCommand {
     pub(super) event_id: EventId,
-    pub(super) occurred_at: String,
     pub(super) correlation_id: String,
     pub(super) callback_id: CallbackId,
     pub(super) operation_id: OperationId,
     pub(super) reservation_id: ReservationId,
     pub(super) producer_revision: RevisionId,
     pub(super) outcome: OperationOutcomeV1,
-    pub(super) evidence_class: UsageEvidenceClassV1,
     pub(super) observed_usage: Vec<BudgetVectorEntryV1>,
-    /// Kernel-meter result. Ignored unless `evidence_class` is verified.
-    pub(super) metered_usage: Vec<BudgetVectorEntryV1>,
+    /// Digest of the redacted callback bytes for duplicate/late admission.
+    pub(super) redacted_payload_digest: Digest,
     pub(super) reason_code: String,
+    decision_clock: ClockSample,
+    meter_snapshot: Option<KernelMeterSnapshot>,
 }
 
 #[derive(Clone)]
@@ -196,18 +231,18 @@ pub(super) struct CancellationCommand {
     pub(super) reason_code: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub(super) struct CancellationAckCommand {
     pub(super) event_id: EventId,
-    pub(super) occurred_at: String,
     pub(super) correlation_id: String,
     pub(super) cancellation_id: CancellationId,
     pub(super) operation_id: OperationId,
     pub(super) reservation_id: ReservationId,
     pub(super) producer_revision: RevisionId,
+    decision_clock: ClockSample,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub(super) struct LateResultCommand {
     pub(super) event_id: EventId,
     pub(super) occurred_at: String,
@@ -229,12 +264,198 @@ pub(super) struct RefundCommand {
     pub(super) reason_code: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) struct TimeoutRecoveryCommand {
     pub(super) correlation_id: String,
+    timeout_key: TimeoutKeyV1,
+    decision_clock: ClockSample,
+    evidence: TimeoutEvidence,
+    command_fingerprint: Digest,
+    event_id: EventId,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct TimeoutRecoveryRequest {
     pub(super) operation_id: OperationId,
-    pub(super) recovery_revision: RevisionId,
-    pub(super) evidence_fingerprint: Digest,
+    pub(super) correlation_id: String,
+    pub(super) meter_snapshot: Option<KernelMeterSnapshot>,
+    pub(super) unknown_evidence_fingerprint: Digest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+enum TimeoutEvidence {
+    Verified { snapshot: KernelMeterSnapshot },
+    Unknown { evidence_fingerprint: Digest },
+}
+
+/// Kernel-owned meter result. Its fields and constructor are inaccessible to producers.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(super) struct KernelMeterSnapshot {
+    meter_revision: RevisionId,
+    process_epoch: String,
+    usage: Vec<BudgetVectorEntryV1>,
+    contract_violation: bool,
+    seal: Digest,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct KernelMeter {
+    meter_revision: RevisionId,
+    process_epoch: String,
+    envelope: BTreeMap<BudgetDimensionV1, u64>,
+    usage: BTreeMap<BudgetDimensionV1, u64>,
+    contract_violation: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct CancellationProbe {
+    pub(super) requested: bool,
+    pub(super) interruptibility: OperationInterruptibilityV1,
+    pub(super) cancellation_ids: Vec<CancellationId>,
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+pub(super) struct FakeOperation {
+    pub(super) units: u64,
+    pub(super) dispatch_count: std::sync::Arc<AtomicUsize>,
+    pub(super) performed_units: std::sync::Arc<AtomicUsize>,
+}
+
+#[cfg(test)]
+impl FakeOperation {
+    fn execute(
+        &self,
+        contract: &TrustedOperationContractV1,
+        process_epoch: &str,
+    ) -> Result<KernelMeterSnapshot, RuntimeControlError> {
+        self.dispatch_count.fetch_add(1, Ordering::SeqCst);
+        let mut meter = KernelMeter::new(contract, process_epoch)?;
+        for _ in 0..self.units {
+            if meter.try_consume(BudgetDimensionV1::Tokens).is_err() {
+                break;
+            }
+            self.performed_units.fetch_add(1, Ordering::SeqCst);
+        }
+        meter.snapshot()
+    }
+}
+
+#[derive(Serialize)]
+struct MeterSealView<'a> {
+    meter_revision: &'a RevisionId,
+    process_epoch: &'a str,
+    usage: &'a [BudgetVectorEntryV1],
+    contract_violation: bool,
+}
+
+impl KernelMeter {
+    fn new(
+        contract: &TrustedOperationContractV1,
+        process_epoch: &str,
+    ) -> Result<Self, RuntimeControlError> {
+        Ok(Self {
+            meter_revision: contract.meter_revision.clone(),
+            process_epoch: process_epoch.to_owned(),
+            envelope: vector_map(&contract.resource_envelope)?,
+            usage: BTreeMap::new(),
+            contract_violation: false,
+        })
+    }
+
+    /// Accounts one unit before the fake protected action occurs.
+    fn try_consume(&mut self, dimension: BudgetDimensionV1) -> Result<(), RuntimeControlError> {
+        let current = self.usage.get(&dimension).copied().unwrap_or(0);
+        let next = current.checked_add(1).ok_or_else(corrupt_error)?;
+        if next > self.envelope.get(&dimension).copied().unwrap_or(0) {
+            self.contract_violation = true;
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::MeterContractViolation,
+            ));
+        }
+        self.usage.insert(dimension, next);
+        Ok(())
+    }
+
+    fn snapshot(&self) -> Result<KernelMeterSnapshot, RuntimeControlError> {
+        let usage = map_vector(&self.usage);
+        let seal = safe_digest(
+            "kernel-meter-snapshot",
+            &MeterSealView {
+                meter_revision: &self.meter_revision,
+                process_epoch: &self.process_epoch,
+                usage: &usage,
+                contract_violation: self.contract_violation,
+            },
+        )?;
+        Ok(KernelMeterSnapshot {
+            meter_revision: self.meter_revision.clone(),
+            process_epoch: self.process_epoch.clone(),
+            usage,
+            contract_violation: self.contract_violation,
+            seal,
+        })
+    }
+}
+
+impl SettlementCommand {
+    #[allow(clippy::too_many_arguments)]
+    fn from_producer_observation<C: RuntimeClock>(
+        event_id: EventId,
+        correlation_id: String,
+        callback_id: CallbackId,
+        operation_id: OperationId,
+        reservation_id: ReservationId,
+        producer_revision: RevisionId,
+        outcome: OperationOutcomeV1,
+        observed_usage: Vec<BudgetVectorEntryV1>,
+        redacted_payload_digest: Digest,
+        reason_code: String,
+        meter_snapshot: Option<KernelMeterSnapshot>,
+        clock: &C,
+    ) -> Result<Self, RuntimeControlError> {
+        let decision_clock = clock.sample();
+        validate_clock_sample(&decision_clock)?;
+        Ok(Self {
+            event_id,
+            correlation_id,
+            callback_id,
+            operation_id,
+            reservation_id,
+            producer_revision,
+            outcome,
+            observed_usage: canonical_vector(&observed_usage)?,
+            redacted_payload_digest,
+            reason_code,
+            decision_clock,
+            meter_snapshot,
+        })
+    }
+}
+
+impl CancellationAckCommand {
+    #[allow(clippy::too_many_arguments)]
+    fn from_producer<C: RuntimeClock>(
+        event_id: EventId,
+        correlation_id: String,
+        cancellation_id: CancellationId,
+        operation_id: OperationId,
+        reservation_id: ReservationId,
+        producer_revision: RevisionId,
+        clock: &C,
+    ) -> Result<Self, RuntimeControlError> {
+        let decision_clock = clock.sample();
+        validate_clock_sample(&decision_clock)?;
+        Ok(Self {
+            event_id,
+            correlation_id,
+            cancellation_id,
+            operation_id,
+            reservation_id,
+            producer_revision,
+            decision_clock,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -248,24 +469,28 @@ struct AccountTotals {
 struct OperationRecord {
     reservation: OperationReservedPayloadV1,
     settlement: Option<(EventId, OperationSettledPayloadV1)>,
-    callbacks: BTreeMap<CallbackId, EventId>,
+    callbacks: BTreeMap<CallbackId, (EventId, Digest)>,
     refunded: BTreeMap<BudgetDimensionV1, u64>,
 }
 
 #[derive(Clone, Debug)]
 struct RuntimeControlState {
     initialized: RuntimeControlInitializedPayloadV1,
+    operation_contracts: Vec<TrustedOperationContractV1>,
     grants: BTreeMap<CapabilityId, CapabilityGrantV1>,
     revoked: BTreeMap<CapabilityId, EventId>,
     accounts: BTreeMap<BudgetAccountId, (BudgetAccountV1, AccountTotals)>,
     operations: BTreeMap<OperationId, OperationRecord>,
+    denials: BTreeMap<OperationId, (EventId, ProtectedOperationDeniedPayloadV1)>,
     cancellations: BTreeMap<CancellationId, (EventId, CancellationRequestedPayloadV1)>,
-    cancellation_acks: BTreeMap<(CancellationId, OperationId), EventId>,
+    cancellation_acks:
+        BTreeMap<(CancellationId, OperationId), (EventId, CancellationAcknowledgedPayloadV1)>,
     cancellation_count: u64,
     late_result_count: u64,
     rejected_message_count: u64,
     sequence: i64,
     last_event_id: EventId,
+    history_digest: Digest,
 }
 
 struct EstablishedControl {
@@ -296,6 +521,45 @@ impl EventStore {
             ));
         }
         validate_initialization(&lifecycle, &command.payload)?;
+        let lifecycle_cursor_sequence = command
+            .payload
+            .source_contract
+            .lifecycle_cursor
+            .sequence
+            .parse::<i64>()
+            .map_err(|_| corrupt_error())?;
+        if lifecycle_cursor_sequence != lifecycle.state.sequence {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::LifecycleStateDenied,
+            ));
+        }
+        let lifecycle_cursor_event: Option<String> = sqlx::query_scalar(
+            "SELECT event_id FROM events WHERE tenant_id=? AND user_present=? AND user_id=? AND workspace_id=? AND run_id=? AND agent_id=? AND stream_id=? AND sequence_i64=?",
+        )
+        .bind(target.scope.tenant_id.as_str())
+        .bind(user_key(&target.scope).0)
+        .bind(user_key(&target.scope).1)
+        .bind(target.scope.workspace_id.as_str())
+        .bind(target.scope.run_id.as_str())
+        .bind(target.scope.agent_id.as_str())
+        .bind(lifecycle.stream_id.as_str())
+        .bind(lifecycle_cursor_sequence)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if lifecycle_cursor_event.as_deref()
+            != Some(
+                command
+                    .payload
+                    .source_contract
+                    .lifecycle_cursor
+                    .event_id
+                    .as_str(),
+            )
+        {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::LifecycleStateDenied,
+            ));
+        }
         let stream = runtime_control_stream_id(&target.scope)?;
         let event = control_event(
             &lifecycle,
@@ -473,6 +737,22 @@ impl EventStore {
                 RuntimeControlErrorKind::IdempotencyConflict,
             ));
         }
+        if let Some((event_id, denial)) = aggregate.state.denials.get(&proposal.operation_id) {
+            if denial.decision.request_digest != request_digest {
+                return Err(RuntimeControlError::new(
+                    RuntimeControlErrorKind::IdempotencyConflict,
+                ));
+            }
+            let sequence = event_sequence(&mut tx, event_id)
+                .await?
+                .ok_or_else(corrupt_error)?;
+            tx.commit().await?;
+            return Ok(ReserveResult::Denied {
+                event_id: event_id.clone(),
+                sequence,
+                reason_code: denial.decision.reason_code.clone(),
+            });
+        }
         if matches!(
             aggregate.lifecycle.state.manifest.execution_mode,
             ExecutionMode::RecordedReplay { .. }
@@ -501,14 +781,14 @@ impl EventStore {
                     tx,
                     &aggregate,
                     &proposal.denied_event_id,
-                    &proposal.occurred_at,
+                    &sample.canonical_utc,
                     &proposal.correlation_id,
                     "protected-operation-denied",
                     &ProtectedOperationDeniedPayloadV1 {
                         operation_id: proposal.operation_id.clone(),
                         subject_actor: target.principal.clone(),
                         decision,
-                        decided_at_utc: sample.canonical_utc,
+                        decided_at_utc: sample.canonical_utc.clone(),
                     },
                 )
                 .await?;
@@ -540,6 +820,13 @@ impl EventStore {
             &proposal.resource.kind,
             &proposal.operation,
         )?;
+        if proposal.adapter_revision != contract.adapter_revision
+            || proposal.callback_namespace != contract.callback_namespace
+        {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::ProducerUnauthorized,
+            ));
+        }
         let (allocations, warnings) = match reserve_allocations(
             &aggregate.state,
             proposal.task_id.as_ref(),
@@ -555,7 +842,7 @@ impl EventStore {
                     tx,
                     &aggregate,
                     &proposal.denied_event_id,
-                    &proposal.occurred_at,
+                    &sample.canonical_utc,
                     &proposal.correlation_id,
                     "protected-operation-denied",
                     &ProtectedOperationDeniedPayloadV1 {
@@ -567,7 +854,7 @@ impl EventStore {
                             grant_id: Some(grant.grant_id.clone()),
                             request_digest,
                         },
-                        decided_at_utc: sample.canonical_utc,
+                        decided_at_utc: sample.canonical_utc.clone(),
                     },
                 )
                 .await?;
@@ -634,7 +921,7 @@ impl EventStore {
             allocations,
             operation_contract_revision: contract.contract_revision.clone(),
             producer_revision: contract.producer_revision.clone(),
-            callback_namespace: proposal.callback_namespace.clone(),
+            callback_namespace: contract.callback_namespace.clone(),
             interruptibility: proposal.interruptibility,
             absolute_deadline_utc: proposal.absolute_deadline_utc.clone(),
             timeout_key,
@@ -645,7 +932,7 @@ impl EventStore {
             tx,
             &aggregate,
             &proposal.event_id,
-            &proposal.occurred_at,
+            &sample.canonical_utc,
             &proposal.correlation_id,
             "operation-reserved",
             &payload,
@@ -661,31 +948,52 @@ impl EventStore {
         })
     }
 
-    pub(super) async fn settle_operation<C: RuntimeClock>(
+    pub(super) async fn settle_operation(
         &self,
         registry: &SchemaRegistry,
         target: &RuntimeControlTarget,
         lease: &OperationLease,
         command: &SettlementCommand,
-        clock: &C,
     ) -> Result<AppendResult, RuntimeControlError> {
-        let sample = clock.sample();
-        validate_clock_sample(&sample)?;
+        let sample = &command.decision_clock;
+        validate_clock_sample(sample)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let aggregate = load_control(&mut tx, registry, target).await?;
-        let record = aggregate
-            .state
-            .operations
-            .get(&command.operation_id)
-            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+        let Some(record) = aggregate.state.operations.get(&command.operation_id) else {
+            return append_control(
+                tx,
+                &aggregate,
+                &command.event_id,
+                &sample.canonical_utc,
+                &command.correlation_id,
+                "control-message-rejected",
+                &ControlMessageRejectedPayloadV1 {
+                    message_kind: "callback_settlement".to_owned(),
+                    reason_code: "operation_not_reserved".to_owned(),
+                    message_digest: safe_digest("rejected-callback", command)?,
+                    rejected_at_utc: sample.canonical_utc.clone(),
+                },
+            )
+            .await;
+        };
         verify_lease(
             target,
             lease,
             &record.reservation,
             &command.producer_revision,
+            sample,
         )?;
         if command.reservation_id != record.reservation.reservation_id
             || command.producer_revision != record.reservation.producer_revision
+        {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::ProducerUnauthorized,
+            ));
+        }
+        if !command
+            .callback_id
+            .as_str()
+            .starts_with(&record.reservation.callback_namespace)
         {
             return Err(RuntimeControlError::new(
                 RuntimeControlErrorKind::ProducerUnauthorized,
@@ -697,23 +1005,60 @@ impl EventStore {
                 tx,
                 &aggregate,
                 &command.event_id,
-                &command.occurred_at,
+                &sample.canonical_utc,
                 &command.correlation_id,
                 "operation-settled",
                 &payload,
             )
             .await;
         }
-        if record.settlement.is_some() || record.callbacks.contains_key(&command.callback_id) {
-            return Err(RuntimeControlError::new(
-                RuntimeControlErrorKind::TerminalConflict,
-            ));
+        let callback_fingerprint = safe_digest("callback-command", command)?;
+        if let Some((existing_event_id, existing_fingerprint)) =
+            record.callbacks.get(&command.callback_id)
+        {
+            if existing_fingerprint != &callback_fingerprint {
+                return Err(RuntimeControlError::new(
+                    RuntimeControlErrorKind::IdempotencyConflict,
+                ));
+            }
+            let sequence = event_sequence(&mut tx, existing_event_id)
+                .await?
+                .ok_or_else(corrupt_error)?;
+            tx.commit().await?;
+            return Ok(AppendResult::AlreadyCommitted {
+                event_id: existing_event_id.clone(),
+                sequence,
+            });
         }
-        let deadline_elapsed = if sample.process_epoch == lease.process_epoch {
-            sample.monotonic_millis >= lease.deadline_monotonic_millis
-        } else {
-            sample.canonical_utc >= record.reservation.absolute_deadline_utc
-        };
+        if let Some((_, settlement)) = &record.settlement {
+            let late_payload = LateResultObservedPayloadV1 {
+                operation_id: command.operation_id.clone(),
+                callback_id: command.callback_id.clone(),
+                callback_fingerprint: callback_fingerprint.clone(),
+                classification: format!("late_after_{:?}", settlement.outcome).to_ascii_lowercase(),
+                payload_digest: command.redacted_payload_digest.clone(),
+                redaction_policy_revision: find_contract(
+                    &aggregate.state,
+                    &record.reservation.resource.kind,
+                    &record.reservation.operation,
+                )?
+                .redaction_policy_revision
+                .clone(),
+                received_at_utc: sample.canonical_utc.clone(),
+            };
+            return append_control(
+                tx,
+                &aggregate,
+                &command.event_id,
+                &sample.canonical_utc,
+                &command.correlation_id,
+                "late-result-observed",
+                &late_payload,
+            )
+            .await;
+        }
+        let deadline_elapsed = sample.monotonic_millis >= lease.deadline_monotonic_millis
+            || sample.canonical_utc >= record.reservation.absolute_deadline_utc;
         if deadline_elapsed {
             return Err(RuntimeControlError::new(
                 RuntimeControlErrorKind::DeadlineExceeded,
@@ -736,7 +1081,7 @@ impl EventStore {
             tx,
             &aggregate,
             &command.event_id,
-            &command.occurred_at,
+            &sample.canonical_utc,
             &command.correlation_id,
             "operation-settled",
             &payload,
@@ -790,16 +1135,37 @@ impl EventStore {
             });
         }
         ensure_management_state(&aggregate.lifecycle)?;
-        if let CancellationTargetV1::Operation { operation_id } = &command.target {
-            if aggregate
-                .state
-                .operations
-                .get(operation_id)
-                .is_none_or(|record| record.settlement.is_some())
-            {
-                return Err(RuntimeControlError::new(
-                    RuntimeControlErrorKind::TerminalConflict,
-                ));
+        match &command.target {
+            CancellationTargetV1::Run => {}
+            CancellationTargetV1::Task { task_id } => {
+                if aggregate
+                    .lifecycle
+                    .state
+                    .tasks
+                    .get(task_id)
+                    .is_none_or(|task| {
+                        matches!(
+                            task.state,
+                            TaskState::Succeeded | TaskState::Failed | TaskState::Cancelled
+                        )
+                    })
+                {
+                    return Err(RuntimeControlError::new(
+                        RuntimeControlErrorKind::LifecycleStateDenied,
+                    ));
+                }
+            }
+            CancellationTargetV1::Operation { operation_id } => {
+                if aggregate
+                    .state
+                    .operations
+                    .get(operation_id)
+                    .is_none_or(|record| record.settlement.is_some())
+                {
+                    return Err(RuntimeControlError::new(
+                        RuntimeControlErrorKind::TerminalConflict,
+                    ));
+                }
             }
         }
         append_control(
@@ -821,23 +1187,55 @@ impl EventStore {
         lease: &OperationLease,
         command: &CancellationAckCommand,
     ) -> Result<AppendResult, RuntimeControlError> {
+        let sample = command.decision_clock.clone();
+        validate_clock_sample(&sample)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let aggregate = load_control(&mut tx, registry, target).await?;
-        let (_, request) = aggregate
-            .state
-            .cancellations
-            .get(&command.cancellation_id)
-            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
-        let record = aggregate
-            .state
-            .operations
-            .get(&command.operation_id)
-            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+        let Some((_, request)) = aggregate.state.cancellations.get(&command.cancellation_id) else {
+            return append_control(
+                tx,
+                &aggregate,
+                &command.event_id,
+                &sample.canonical_utc,
+                &command.correlation_id,
+                "control-message-rejected",
+                &ControlMessageRejectedPayloadV1 {
+                    message_kind: "cancellation_ack".to_owned(),
+                    reason_code: "cancellation_not_requested".to_owned(),
+                    message_digest: safe_digest("rejected-cancellation-ack", command)?,
+                    rejected_at_utc: sample.canonical_utc.clone(),
+                },
+            )
+            .await;
+        };
+        let Some(record) = aggregate.state.operations.get(&command.operation_id) else {
+            return append_control(
+                tx,
+                &aggregate,
+                &command.event_id,
+                &sample.canonical_utc,
+                &command.correlation_id,
+                "control-message-rejected",
+                &ControlMessageRejectedPayloadV1 {
+                    message_kind: "cancellation_ack".to_owned(),
+                    reason_code: "operation_not_reserved".to_owned(),
+                    message_digest: safe_digest("rejected-cancellation-ack", command)?,
+                    rejected_at_utc: sample.canonical_utc.clone(),
+                },
+            )
+            .await;
+        };
+        if record.settlement.is_some() {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::TerminalConflict,
+            ));
+        }
         verify_lease(
             target,
             lease,
             &record.reservation,
             &command.producer_revision,
+            &sample,
         )?;
         if !cancel_target_matches(&request.target, &record.reservation)
             || command.reservation_id != record.reservation.reservation_id
@@ -851,24 +1249,32 @@ impl EventStore {
             operation_id: command.operation_id.clone(),
             reservation_id: command.reservation_id.clone(),
             producer_revision: command.producer_revision.clone(),
-            acknowledged_at_utc: command.occurred_at.clone(),
+            authority_kind: "producer_lease".to_owned(),
+            acknowledged_at_utc: sample.canonical_utc.clone(),
         };
         if event_sequence(&mut tx, &command.event_id).await?.is_some() {
             return append_control(
                 tx,
                 &aggregate,
                 &command.event_id,
-                &command.occurred_at,
+                &sample.canonical_utc,
                 &command.correlation_id,
                 "cancellation-acknowledged",
                 &payload,
             )
             .await;
         }
-        if let Some(existing_event_id) = aggregate.state.cancellation_acks.get(&(
-            command.cancellation_id.clone(),
-            command.operation_id.clone(),
-        )) {
+        if let Some((existing_event_id, existing_payload)) =
+            aggregate.state.cancellation_acks.get(&(
+                command.cancellation_id.clone(),
+                command.operation_id.clone(),
+            ))
+        {
+            if existing_payload != &payload {
+                return Err(RuntimeControlError::new(
+                    RuntimeControlErrorKind::IdempotencyConflict,
+                ));
+            }
             let sequence = event_sequence(&mut tx, existing_event_id)
                 .await?
                 .ok_or_else(corrupt_error)?;
@@ -882,7 +1288,7 @@ impl EventStore {
             tx,
             &aggregate,
             &command.event_id,
-            &command.occurred_at,
+            &sample.canonical_utc,
             &command.correlation_id,
             "cancellation-acknowledged",
             &payload,
@@ -890,13 +1296,127 @@ impl EventStore {
         .await
     }
 
-    pub(super) async fn observe_late_result(
+    pub(super) async fn cancellation_probe<C: RuntimeClock>(
+        &self,
+        registry: &SchemaRegistry,
+        target: &RuntimeControlTarget,
+        lease: &OperationLease,
+        clock: &C,
+    ) -> Result<CancellationProbe, RuntimeControlError> {
+        let sample = clock.sample();
+        validate_clock_sample(&sample)?;
+        let mut connection = self.pool.acquire().await?;
+        let aggregate = load_control(&mut connection, registry, target).await?;
+        let record = aggregate
+            .state
+            .operations
+            .get(&lease.operation_id)
+            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+        verify_lease(
+            target,
+            lease,
+            &record.reservation,
+            &lease.producer_revision,
+            &sample,
+        )?;
+        let cancellation_ids = aggregate
+            .state
+            .cancellations
+            .iter()
+            .filter(|(_, (_, request))| cancel_target_matches(&request.target, &record.reservation))
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        Ok(CancellationProbe {
+            requested: !cancellation_ids.is_empty(),
+            interruptibility: record.reservation.interruptibility,
+            cancellation_ids,
+        })
+    }
+
+    pub(super) async fn acknowledge_cancellation_recovery(
+        &self,
+        registry: &SchemaRegistry,
+        target: &RuntimeControlTarget,
+        command: &CancellationAckCommand,
+    ) -> Result<AppendResult, RuntimeControlError> {
+        if target.principal != target.scope.agent_id {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::Unauthorized,
+            ));
+        }
+        let sample = command.decision_clock.clone();
+        validate_clock_sample(&sample)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let aggregate = load_control(&mut tx, registry, target).await?;
+        let (_, request) = aggregate
+            .state
+            .cancellations
+            .get(&command.cancellation_id)
+            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+        let record = aggregate
+            .state
+            .operations
+            .get(&command.operation_id)
+            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+        if record.settlement.is_some()
+            || !cancel_target_matches(&request.target, &record.reservation)
+            || command.reservation_id != record.reservation.reservation_id
+            || command.producer_revision != record.reservation.producer_revision
+        {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::TerminalConflict,
+            ));
+        }
+        let payload = CancellationAcknowledgedPayloadV1 {
+            cancellation_id: command.cancellation_id.clone(),
+            operation_id: command.operation_id.clone(),
+            reservation_id: command.reservation_id.clone(),
+            producer_revision: command.producer_revision.clone(),
+            authority_kind: "kernel_recovery".to_owned(),
+            acknowledged_at_utc: sample.canonical_utc.clone(),
+        };
+        if let Some((existing_event_id, existing_payload)) =
+            aggregate.state.cancellation_acks.get(&(
+                command.cancellation_id.clone(),
+                command.operation_id.clone(),
+            ))
+        {
+            if existing_payload != &payload {
+                return Err(RuntimeControlError::new(
+                    RuntimeControlErrorKind::IdempotencyConflict,
+                ));
+            }
+            let sequence = event_sequence(&mut tx, existing_event_id)
+                .await?
+                .ok_or_else(corrupt_error)?;
+            tx.commit().await?;
+            return Ok(AppendResult::AlreadyCommitted {
+                event_id: existing_event_id.clone(),
+                sequence,
+            });
+        }
+        append_control(
+            tx,
+            &aggregate,
+            &command.event_id,
+            &sample.canonical_utc,
+            &command.correlation_id,
+            "cancellation-acknowledged",
+            &payload,
+        )
+        .await
+    }
+
+    pub(super) async fn observe_late_result<C: RuntimeClock>(
         &self,
         registry: &SchemaRegistry,
         target: &RuntimeControlTarget,
         lease: &OperationLease,
         command: &LateResultCommand,
+        clock: &C,
     ) -> Result<AppendResult, RuntimeControlError> {
+        let sample = clock.sample();
+        validate_clock_sample(&sample)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let aggregate = load_control(&mut tx, registry, target).await?;
         let record = aggregate
@@ -909,7 +1429,17 @@ impl EventStore {
             lease,
             &record.reservation,
             &command.producer_revision,
+            &sample,
         )?;
+        if !command
+            .callback_id
+            .as_str()
+            .starts_with(&record.reservation.callback_namespace)
+        {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::ProducerUnauthorized,
+            ));
+        }
         if record.settlement.is_none() {
             return Err(RuntimeControlError::new(
                 RuntimeControlErrorKind::TerminalConflict,
@@ -917,7 +1447,6 @@ impl EventStore {
         }
         let contract = aggregate
             .state
-            .initialized
             .operation_contracts
             .iter()
             .find(|contract| {
@@ -927,24 +1456,33 @@ impl EventStore {
         let payload = LateResultObservedPayloadV1 {
             operation_id: command.operation_id.clone(),
             callback_id: command.callback_id.clone(),
+            callback_fingerprint: safe_digest("late-callback-command", command)?,
             classification: "late_after_terminal".to_owned(),
             payload_digest: command.redacted_payload_digest.clone(),
             redaction_policy_revision: contract.redaction_policy_revision.clone(),
-            received_at_utc: command.occurred_at.clone(),
+            received_at_utc: sample.canonical_utc.clone(),
         };
         if event_sequence(&mut tx, &command.event_id).await?.is_some() {
             return append_control(
                 tx,
                 &aggregate,
                 &command.event_id,
-                &command.occurred_at,
+                &sample.canonical_utc,
                 &command.correlation_id,
                 "late-result-observed",
                 &payload,
             )
             .await;
         }
-        if let Some(existing_event_id) = record.callbacks.get(&command.callback_id) {
+        let callback_fingerprint = payload.callback_fingerprint.clone();
+        if let Some((existing_event_id, existing_fingerprint)) =
+            record.callbacks.get(&command.callback_id)
+        {
+            if existing_fingerprint != &callback_fingerprint {
+                return Err(RuntimeControlError::new(
+                    RuntimeControlErrorKind::IdempotencyConflict,
+                ));
+            }
             let sequence = event_sequence(&mut tx, existing_event_id)
                 .await?
                 .ok_or_else(corrupt_error)?;
@@ -1056,13 +1594,13 @@ impl EventStore {
         .await
     }
 
-    pub(super) async fn recover_timeout<C: RuntimeClock>(
+    pub(super) async fn prepare_timeout_recovery<C: RuntimeClock>(
         &self,
         registry: &SchemaRegistry,
         target: &RuntimeControlTarget,
-        command: &TimeoutRecoveryCommand,
+        request: TimeoutRecoveryRequest,
         clock: &C,
-    ) -> Result<AppendResult, RuntimeControlError> {
+    ) -> Result<TimeoutRecoveryCommand, RuntimeControlError> {
         if target.principal != target.scope.agent_id {
             return Err(RuntimeControlError::new(
                 RuntimeControlErrorKind::Unauthorized,
@@ -1070,47 +1608,109 @@ impl EventStore {
         }
         let sample = clock.sample();
         validate_clock_sample(&sample)?;
+        let mut connection = self.pool.acquire().await?;
+        let aggregate = load_control(&mut connection, registry, target).await?;
+        let record = aggregate
+            .state
+            .operations
+            .get(&request.operation_id)
+            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+        if sample.wall_millis < parse_utc_millis(&record.reservation.reserved_at_utc)? {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::ClockInvalid,
+            ));
+        }
+        let evidence = match request.meter_snapshot {
+            Some(snapshot) => {
+                verify_meter_snapshot(&snapshot, &record.reservation, &sample)?;
+                TimeoutEvidence::Verified { snapshot }
+            }
+            None => TimeoutEvidence::Unknown {
+                evidence_fingerprint: request.unknown_evidence_fingerprint,
+            },
+        };
+        TimeoutRecoveryCommand::build(
+            request.correlation_id,
+            record.reservation.timeout_key.clone(),
+            sample,
+            evidence,
+        )
+    }
+
+    pub(super) async fn recover_timeout(
+        &self,
+        registry: &SchemaRegistry,
+        target: &RuntimeControlTarget,
+        command: &TimeoutRecoveryCommand,
+    ) -> Result<AppendResult, RuntimeControlError> {
+        if target.principal != target.scope.agent_id {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::Unauthorized,
+            ));
+        }
+        command.validate_integrity()?;
+        let sample = &command.decision_clock;
+        validate_clock_sample(sample)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let aggregate = load_control(&mut tx, registry, target).await?;
         let record = aggregate
             .state
             .operations
-            .get(&command.operation_id)
+            .get(&command.timeout_key.operation_id)
             .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
-        if command.recovery_revision != record.reservation.timeout_key.recovery_revision {
+        if command.timeout_key != record.reservation.timeout_key {
             return Err(RuntimeControlError::new(
                 RuntimeControlErrorKind::Unauthorized,
             ));
         }
-        let identity = TimeoutCommandIdentity {
-            timeout_key: &record.reservation.timeout_key,
-            clock: &sample,
-            evidence_fingerprint: &command.evidence_fingerprint,
-        };
-        let digest = safe_digest("timeout-recovery-command", &identity)?;
-        let suffix = &digest.as_str()[7..];
-        let event_id = EventId::parse(format!("event_timeout-{suffix}"))
-            .map_err(|_| RuntimeControlError::new(RuntimeControlErrorKind::AggregateCorrupt))?;
+        if let TimeoutEvidence::Verified { snapshot } = &command.evidence {
+            verify_meter_snapshot(snapshot, &record.reservation, sample)?;
+        }
         let reserved = vector_map(&record.reservation.trusted_reservation)?;
+        let (evidence_class, meter_evidence, accounted) = match &command.evidence {
+            TimeoutEvidence::Verified { snapshot } if !snapshot.contract_violation => {
+                let usage = vector_map(&snapshot.usage)?;
+                if !vector_lte(&usage, &reserved) {
+                    return Err(RuntimeControlError::new(
+                        RuntimeControlErrorKind::MeterContractViolation,
+                    ));
+                }
+                (
+                    UsageEvidenceClassV1::KernelMeterVerified,
+                    Some(persisted_meter_evidence(snapshot)),
+                    usage,
+                )
+            }
+            TimeoutEvidence::Verified { snapshot } => (
+                UsageEvidenceClassV1::Unknown,
+                Some(persisted_meter_evidence(snapshot)),
+                reserved.clone(),
+            ),
+            TimeoutEvidence::Unknown { .. } => {
+                (UsageEvidenceClassV1::Unknown, None, reserved.clone())
+            }
+        };
         let payload = OperationSettledPayloadV1 {
             operation_id: record.reservation.operation_id.clone(),
             reservation_id: record.reservation.reservation_id.clone(),
             callback_id: None,
+            callback_fingerprint: None,
             outcome: OperationOutcomeV1::TimedOut,
-            evidence_class: UsageEvidenceClassV1::Unknown,
+            evidence_class,
+            kernel_meter_evidence: meter_evidence,
             observed_usage: Vec::new(),
-            accounted_usage: map_vector(&reserved),
-            released_usage: Vec::new(),
+            accounted_usage: map_vector(&accounted),
+            released_usage: map_vector(&vector_sub(&reserved, &accounted)?),
             reason_code: "deadline_elapsed".to_owned(),
-            timeout_command_fingerprint: Some(digest),
+            timeout_command_fingerprint: Some(command.command_fingerprint.clone()),
             settled_at_utc: sample.canonical_utc.clone(),
         };
         if let Some((terminal_event_id, _)) = &record.settlement {
-            if terminal_event_id == &event_id {
+            if terminal_event_id == &command.event_id {
                 return append_control(
                     tx,
                     &aggregate,
-                    &event_id,
+                    &command.event_id,
                     &sample.canonical_utc,
                     &command.correlation_id,
                     "operation-settled",
@@ -1130,13 +1730,13 @@ impl EventStore {
             tx.commit().await?;
             return Ok(result);
         }
-        if sample.canonical_utc < record.reservation.absolute_deadline_utc {
+        if sample.wall_millis < parse_utc_millis(&record.reservation.absolute_deadline_utc)? {
             return Err(RuntimeControlError::new(RuntimeControlErrorKind::NotDue));
         }
         append_control(
             tx,
             &aggregate,
-            &event_id,
+            &command.event_id,
             &sample.canonical_utc,
             &command.correlation_id,
             "operation-settled",
@@ -1162,6 +1762,43 @@ impl EventStore {
         target: &RuntimeControlTarget,
     ) -> Result<RuntimeControlProjectionV1, RuntimeControlError> {
         self.runtime_control_projection(registry, target).await
+    }
+
+    #[cfg(test)]
+    pub(super) async fn dispatch_fake_operation<C: RuntimeClock>(
+        &self,
+        registry: &SchemaRegistry,
+        target: &RuntimeControlTarget,
+        proposal: &ProtectedOperationProposal,
+        clock: &C,
+        operation: &FakeOperation,
+    ) -> Result<(OperationLease, KernelMeterSnapshot), RuntimeControlError> {
+        let sample = clock.sample();
+        let lease = match self
+            .reserve_protected_operation(registry, target, proposal, clock)
+            .await?
+        {
+            ReserveResult::Reserved { lease, .. } => *lease,
+            ReserveResult::AlreadyReserved { .. } => {
+                return Err(RuntimeControlError::new(
+                    RuntimeControlErrorKind::OperationConflict,
+                ));
+            }
+            ReserveResult::Denied { .. } => {
+                return Err(RuntimeControlError::new(
+                    RuntimeControlErrorKind::Unauthorized,
+                ));
+            }
+        };
+        let mut connection = self.pool.acquire().await?;
+        let aggregate = load_control(&mut connection, registry, target).await?;
+        let contract = find_contract(
+            &aggregate.state,
+            &proposal.resource.kind,
+            &proposal.operation,
+        )?;
+        let snapshot = operation.execute(contract, &sample.process_epoch)?;
+        Ok((lease, snapshot))
     }
 }
 
@@ -1216,10 +1853,68 @@ pub(super) async fn ensure_no_pending_for_task(
 }
 
 #[derive(Serialize)]
-struct TimeoutCommandIdentity<'a> {
+struct TimeoutCommandPreimage<'a> {
     timeout_key: &'a TimeoutKeyV1,
-    clock: &'a ClockSample,
-    evidence_fingerprint: &'a Digest,
+    decision_clock: &'a ClockSample,
+    evidence: &'a TimeoutEvidence,
+}
+
+impl TimeoutRecoveryCommand {
+    fn build(
+        correlation_id: String,
+        timeout_key: TimeoutKeyV1,
+        decision_clock: ClockSample,
+        evidence: TimeoutEvidence,
+    ) -> Result<Self, RuntimeControlError> {
+        let command_fingerprint = timeout_fingerprint(&TimeoutCommandPreimage {
+            timeout_key: &timeout_key,
+            decision_clock: &decision_clock,
+            evidence: &evidence,
+        })?;
+        let event_id = EventId::parse(format!(
+            "event_{}",
+            command_fingerprint
+                .as_str()
+                .strip_prefix("sha256:")
+                .ok_or_else(corrupt_error)?
+        ))
+        .map_err(|_| corrupt_error())?;
+        Ok(Self {
+            correlation_id,
+            timeout_key,
+            decision_clock,
+            evidence,
+            command_fingerprint,
+            event_id,
+        })
+    }
+
+    fn validate_integrity(&self) -> Result<(), RuntimeControlError> {
+        let expected = Self::build(
+            self.correlation_id.clone(),
+            self.timeout_key.clone(),
+            self.decision_clock.clone(),
+            self.evidence.clone(),
+        )?;
+        if self.command_fingerprint == expected.command_fingerprint
+            && self.event_id == expected.event_id
+        {
+            Ok(())
+        } else {
+            Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::IdempotencyConflict,
+            ))
+        }
+    }
+}
+
+fn timeout_fingerprint<T: Serialize>(value: &T) -> Result<Digest, RuntimeControlError> {
+    let json = serde_json::to_value(value).map_err(|_| corrupt_error())?;
+    let bytes = canonical_json(&json).map_err(|_| corrupt_error())?;
+    let mut hasher = Sha256::new();
+    hasher.update(TIMEOUT_COMMAND_DOMAIN);
+    hasher.update(bytes.as_bytes());
+    Digest::parse(format!("sha256:{:x}", hasher.finalize())).map_err(|_| corrupt_error())
 }
 
 fn runtime_control_stream_id(scope: &IsolationScope) -> Result<StreamId, RuntimeControlError> {
@@ -1336,6 +2031,9 @@ fn fold_control(
     validate_initialization(lifecycle, initialized)?;
     let mut state = RuntimeControlState {
         initialized: initialized.clone(),
+        operation_contracts: vec![retained_operation_contract(
+            &initialized.source_contract.schema_set_ref,
+        )?],
         grants: initialized
             .initial_grants
             .iter()
@@ -1351,6 +2049,7 @@ fn fold_control(
             .map(|a| (a.account_id.clone(), (a, AccountTotals::default())))
             .collect(),
         operations: BTreeMap::new(),
+        denials: BTreeMap::new(),
         cancellations: BTreeMap::new(),
         cancellation_acks: BTreeMap::new(),
         cancellation_count: 0,
@@ -1358,6 +2057,7 @@ fn fold_control(
         rejected_message_count: 0,
         sequence: 1,
         last_event_id: first.envelope().event_id.clone(),
+        history_digest: history_digest(events)?,
     };
     for (index, event) in events.iter().enumerate().skip(1) {
         let sequence = i64::try_from(index + 1)
@@ -1374,7 +2074,7 @@ fn fold_control(
                 RuntimeControlErrorKind::AggregateCorrupt,
             ));
         }
-        apply_control_event(&mut state, event)?;
+        apply_control_event(&mut state, &lifecycle.state, event)?;
         state.sequence = sequence;
         state.last_event_id = envelope.event_id.clone();
     }
@@ -1383,11 +2083,22 @@ fn fold_control(
 
 fn apply_control_event(
     state: &mut RuntimeControlState,
+    lifecycle: &super::lifecycle::LifecycleState,
     event: &ValidatedEvent,
 ) -> Result<(), RuntimeControlError> {
     match event.envelope().event_type.as_str() {
         "capability-issued" => {
             let payload = downcast::<CapabilityIssuedPayloadV1>(event)?;
+            validate_delegation(
+                state,
+                &RuntimeControlTarget {
+                    scope: lifecycle.manifest.scope.clone(),
+                    principal: payload.grant.issuer_actor.clone(),
+                },
+                &payload.grant,
+                &payload.grant.issued_at_utc,
+            )
+            .map_err(|_| corrupt_error())?;
             if state
                 .grants
                 .insert(payload.grant.grant_id.clone(), payload.grant.clone())
@@ -1397,22 +2108,64 @@ fn apply_control_event(
             }
         }
         "capability-revoked" => {
-            if state
-                .revoked
-                .insert(
-                    downcast::<CapabilityRevokedPayloadV1>(event)?
-                        .grant_id
-                        .clone(),
-                    event.envelope().event_id.clone(),
-                )
-                .is_some()
+            let payload = downcast::<CapabilityRevokedPayloadV1>(event)?;
+            let grant = state
+                .grants
+                .get(&payload.grant_id)
+                .ok_or_else(corrupt_error)?;
+            if (payload.revoked_by != lifecycle.manifest.scope.agent_id
+                && payload.revoked_by != grant.issuer_actor)
+                || state
+                    .revoked
+                    .insert(payload.grant_id.clone(), event.envelope().event_id.clone())
+                    .is_some()
             {
                 return corrupt();
             }
         }
         "operation-reserved" => {
             let payload = downcast::<OperationReservedPayloadV1>(event)?.clone();
-            if state.operations.contains_key(&payload.operation_id) {
+            let contract = find_contract(state, &payload.resource.kind, &payload.operation)?;
+            let grant = active_grant(state, &payload.grant_id, &payload.reserved_at_utc)
+                .map_err(|_| corrupt_error())?;
+            let expected_allocations = reserve_allocations(
+                state,
+                payload.task_id.as_ref(),
+                &payload.subject_actor,
+                &contract.resource_envelope,
+                &payload.resource.kind,
+                &payload.operation,
+            )?
+            .0;
+            if state.operations.contains_key(&payload.operation_id)
+                || state.denials.contains_key(&payload.operation_id)
+                || payload.authorization_decision.outcome != AuthorizationOutcomeV1::Allowed
+                || payload.authorization_decision.grant_id.as_ref() != Some(&payload.grant_id)
+                || grant.subject_actor != payload.subject_actor
+                || grant
+                    .scope
+                    .task_id
+                    .as_ref()
+                    .is_some_and(|task| payload.task_id.as_ref() != Some(task))
+                || grant.resource.kind != payload.resource.kind
+                || grant
+                    .resource
+                    .id
+                    .as_ref()
+                    .is_some_and(|id| payload.resource.id.as_ref() != Some(id))
+                || grant.operations.binary_search(&payload.operation).is_err()
+                || payload.trusted_reservation != contract.resource_envelope
+                || payload.allocations != expected_allocations
+                || payload.operation_contract_revision != contract.contract_revision
+                || payload.producer_revision != contract.producer_revision
+                || payload.callback_namespace != contract.callback_namespace
+                || payload.timeout_key.scope != lifecycle.manifest.scope
+                || payload.timeout_key.operation_id != payload.operation_id
+                || payload.timeout_key.reservation_id != payload.reservation_id
+                || payload.timeout_key.operation_contract_revision != contract.contract_revision
+                || payload.timeout_key.meter_revision != contract.meter_revision
+                || payload.reserved_at_utc != event.envelope().occurred_at
+            {
                 return corrupt();
             }
             for allocation in &payload.allocations {
@@ -1446,7 +2199,39 @@ fn apply_control_event(
             {
                 return corrupt();
             }
+            let reserved = vector_map(&record.reservation.trusted_reservation)?;
             let accounted = vector_map(&payload.accounted_usage)?;
+            let released = vector_map(&payload.released_usage)?;
+            let meter_evidence_valid =
+                match (&payload.evidence_class, &payload.kernel_meter_evidence) {
+                    (UsageEvidenceClassV1::KernelMeterVerified, Some(evidence)) => {
+                        validate_persisted_meter_evidence(evidence, &record.reservation)?;
+                        !evidence.contract_violation && vector_map(&evidence.usage)? == accounted
+                    }
+                    (UsageEvidenceClassV1::Unknown, Some(evidence)) => {
+                        validate_persisted_meter_evidence(evidence, &record.reservation)?;
+                        evidence.contract_violation && accounted == reserved
+                    }
+                    (UsageEvidenceClassV1::Unknown, None) => accounted == reserved,
+                    (UsageEvidenceClassV1::KernelMeterVerified, None) => false,
+                };
+            if !vector_lte(&accounted, &reserved)
+                || !meter_evidence_valid
+                || released != vector_sub(&reserved, &accounted)?
+                || (payload.evidence_class == UsageEvidenceClassV1::Unknown
+                    && accounted != reserved)
+                || (payload.outcome == OperationOutcomeV1::TimedOut
+                    && (payload.callback_id.is_some()
+                        || payload.callback_fingerprint.is_some()
+                        || payload.timeout_command_fingerprint.is_none()))
+                || (payload.outcome != OperationOutcomeV1::TimedOut
+                    && (payload.callback_id.is_none()
+                        || payload.callback_fingerprint.is_none()
+                        || payload.timeout_command_fingerprint.is_some()))
+                || payload.settled_at_utc != event.envelope().occurred_at
+            {
+                return corrupt();
+            }
             for allocation in &record.reservation.allocations {
                 let (account, totals) = state
                     .accounts
@@ -1463,9 +2248,14 @@ fn apply_control_event(
                     .ok_or_else(corrupt_error)?;
             }
             if let Some(callback) = &payload.callback_id {
-                record
-                    .callbacks
-                    .insert(callback.clone(), event.envelope().event_id.clone());
+                let fingerprint = payload
+                    .callback_fingerprint
+                    .clone()
+                    .ok_or_else(corrupt_error)?;
+                record.callbacks.insert(
+                    callback.clone(),
+                    (event.envelope().event_id.clone(), fingerprint),
+                );
             }
             record.settlement = Some((event.envelope().event_id.clone(), payload));
         }
@@ -1529,6 +2319,23 @@ fn apply_control_event(
         }
         "cancellation-requested" => {
             let payload = downcast::<CancellationRequestedPayloadV1>(event)?.clone();
+            let authorized = match &payload.target {
+                CancellationTargetV1::Run => payload.requester == lifecycle.manifest.scope.agent_id,
+                CancellationTargetV1::Task { task_id } => {
+                    payload.requester == lifecycle.manifest.scope.agent_id
+                        && lifecycle.tasks.contains_key(task_id)
+                }
+                CancellationTargetV1::Operation { operation_id } => {
+                    state.operations.get(operation_id).is_some_and(|operation| {
+                        operation.settlement.is_none()
+                            && (payload.requester == lifecycle.manifest.scope.agent_id
+                                || payload.requester == operation.reservation.subject_actor)
+                    })
+                }
+            };
+            if !authorized || payload.requested_at_utc != event.envelope().occurred_at {
+                return corrupt();
+            }
             if state
                 .cancellations
                 .insert(
@@ -1542,7 +2349,27 @@ fn apply_control_event(
             state.cancellation_count += 1;
         }
         "cancellation-acknowledged" => {
-            let payload = downcast::<CancellationAcknowledgedPayloadV1>(event)?;
+            let payload = downcast::<CancellationAcknowledgedPayloadV1>(event)?.clone();
+            let (_, request) = state
+                .cancellations
+                .get(&payload.cancellation_id)
+                .ok_or_else(corrupt_error)?;
+            let operation = state
+                .operations
+                .get(&payload.operation_id)
+                .ok_or_else(corrupt_error)?;
+            if operation.settlement.is_some()
+                || payload.reservation_id != operation.reservation.reservation_id
+                || !cancel_target_matches(&request.target, &operation.reservation)
+                || (payload.authority_kind == "producer_lease"
+                    && payload.producer_revision != operation.reservation.producer_revision)
+                || !matches!(
+                    payload.authority_kind.as_str(),
+                    "producer_lease" | "kernel_recovery"
+                )
+            {
+                return corrupt();
+            }
             if state
                 .cancellation_acks
                 .insert(
@@ -1550,7 +2377,7 @@ fn apply_control_event(
                         payload.cancellation_id.clone(),
                         payload.operation_id.clone(),
                     ),
-                    event.envelope().event_id.clone(),
+                    (event.envelope().event_id.clone(), payload),
                 )
                 .is_some()
             {
@@ -1559,6 +2386,7 @@ fn apply_control_event(
         }
         "late-result-observed" => {
             let payload = downcast::<LateResultObservedPayloadV1>(event)?;
+            let fingerprint = payload.callback_fingerprint.clone();
             let record = state
                 .operations
                 .get_mut(&payload.operation_id)
@@ -1568,7 +2396,7 @@ fn apply_control_event(
                     .callbacks
                     .insert(
                         payload.callback_id.clone(),
-                        event.envelope().event_id.clone(),
+                        (event.envelope().event_id.clone(), fingerprint),
                     )
                     .is_some()
             {
@@ -1577,14 +2405,56 @@ fn apply_control_event(
             state.late_result_count += 1;
         }
         "control-message-rejected" => {
-            let _ = downcast::<ControlMessageRejectedPayloadV1>(event)?;
+            let payload = downcast::<ControlMessageRejectedPayloadV1>(event)?;
+            if payload.message_kind.is_empty()
+                || payload.reason_code.is_empty()
+                || payload.rejected_at_utc != event.envelope().occurred_at
+            {
+                return corrupt();
+            }
             state.rejected_message_count += 1;
         }
         "protected-operation-denied" => {
-            let _ = downcast::<ProtectedOperationDeniedPayloadV1>(event)?;
+            let payload = downcast::<ProtectedOperationDeniedPayloadV1>(event)?.clone();
+            if payload.decision.outcome != AuthorizationOutcomeV1::Denied
+                || payload.decided_at_utc != event.envelope().occurred_at
+                || state.operations.contains_key(&payload.operation_id)
+                || state
+                    .denials
+                    .insert(
+                        payload.operation_id.clone(),
+                        (event.envelope().event_id.clone(), payload),
+                    )
+                    .is_some()
+            {
+                return corrupt();
+            }
             state.rejected_message_count += 1;
         }
         _ => return corrupt(),
+    }
+    Ok(())
+}
+
+fn validate_persisted_meter_evidence(
+    evidence: &KernelMeterEvidenceV1,
+    reservation: &OperationReservedPayloadV1,
+) -> Result<(), RuntimeControlError> {
+    let expected = safe_digest(
+        "kernel-meter-snapshot",
+        &MeterSealView {
+            meter_revision: &evidence.meter_revision,
+            process_epoch: &evidence.process_epoch,
+            usage: &evidence.usage,
+            contract_violation: evidence.contract_violation,
+        },
+    )?;
+    if evidence.snapshot_fingerprint != expected
+        || evidence.meter_revision != reservation.timeout_key.meter_revision
+        || evidence.process_epoch.is_empty()
+        || canonical_vector(&evidence.usage)? != evidence.usage
+    {
+        return corrupt();
     }
     Ok(())
 }
@@ -1595,26 +2465,48 @@ fn validate_initialization(
 ) -> Result<(), RuntimeControlError> {
     if payload.initial_grants.is_empty()
         || payload.budget_plan.accounts.is_empty()
-        || payload.operation_contracts.is_empty()
+        || payload.operation_contract_refs.is_empty()
     {
         return corrupt();
     }
-    if payload.source_contract.projection_schema_ref
-        != *lifecycle
-            .schema_set
-            .schema_ref("runtime-control-projection")
-            .ok_or_else(corrupt_error)?
+    if payload.source_contract.reducer_revision.as_str() != RUNTIME_REDUCER_REVISION
+        || payload.source_contract.history_digest_revision.as_str() != RUNTIME_HISTORY_REVISION
+        || payload.source_contract.projection_reader_revision.as_str() != RUNTIME_READER_REVISION
+        || payload
+            .source_contract
+            .lifecycle_cursor
+            .sequence
+            .parse::<i64>()
+            .ok()
+            .is_none_or(|v| v < 1)
+        || payload.source_contract.projection_schema_ref
+            != *lifecycle
+                .schema_set
+                .schema_ref("runtime-control-projection")
+                .ok_or_else(corrupt_error)?
     {
+        return corrupt();
+    }
+    let accepted = CONTROL_EVENT_TYPES
+        .iter()
+        .map(|event_type| {
+            lifecycle
+                .schema_set
+                .event_type_binding(event_type, 1, 0)
+                .cloned()
+                .ok_or_else(corrupt_error)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if payload.source_contract.accepted_event_bindings != accepted {
         return corrupt();
     }
     let mut grant_ids = BTreeSet::new();
     for grant in &payload.initial_grants {
+        validate_grant_shape(grant)?;
         if !grant_ids.insert(grant.grant_id.clone())
             || grant.issuer_actor != lifecycle.state.manifest.scope.agent_id
-            || grant.subject_actor != lifecycle.state.manifest.scope.agent_id
             || grant.scope.isolation != lifecycle.state.manifest.scope
             || grant.parent_grant_id.is_some()
-            || grant.operations.is_empty()
             || grant.schema_ref
                 != *lifecycle
                     .schema_set
@@ -1625,8 +2517,10 @@ fn validate_initialization(
         }
     }
     let mut accounts = BTreeSet::new();
+    let mut account_scopes = BTreeSet::new();
     for account in &payload.budget_plan.accounts {
         if !accounts.insert(account.account_id.clone())
+            || !account_scopes.insert((account.scope.clone(), account.dimension.clone()))
             || account
                 .soft_limit
                 .as_ref()
@@ -1635,18 +2529,91 @@ fn validate_initialization(
             return corrupt();
         }
     }
-    validate_contracts(&payload.operation_contracts)
+    let mut operation_limit_keys = BTreeSet::new();
+    if payload.budget_plan.operation_limits.iter().any(|limit| {
+        !operation_limit_keys.insert((
+            limit.resource_kind.clone(),
+            limit.operation.clone(),
+            limit.dimension.clone(),
+        )) || limit
+            .soft_limit
+            .as_ref()
+            .is_some_and(|soft| soft.as_u64() > limit.hard_limit.as_u64())
+    }) {
+        return corrupt();
+    }
+    let retained = retained_operation_contract(&payload.source_contract.schema_set_ref)?;
+    if payload.operation_contract_refs != [retained.contract_revision.clone()] {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::ResourceEnvelopeUnavailable,
+        ));
+    }
+    validate_contracts(&[retained], &payload.source_contract.schema_set_ref)
 }
 
-fn validate_contracts(contracts: &[TrustedOperationContractV1]) -> Result<(), RuntimeControlError> {
+fn retained_operation_contract(
+    source: &pareto_protocol::SchemaSetRef,
+) -> Result<TrustedOperationContractV1, RuntimeControlError> {
+    if source.manifest_digest.as_str() != RETAINED_CONTROL_SCHEMA_SET_DIGEST {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::ResourceEnvelopeUnavailable,
+        ));
+    }
+    Ok(TrustedOperationContractV1 {
+        contract_revision: RevisionId::parse(FAKE_CONTRACT_REVISION)
+            .map_err(|_| corrupt_error())?,
+        source_schema_set_ref: source.clone(),
+        adapter_revision: RevisionId::parse(FAKE_ADAPTER_REVISION).map_err(|_| corrupt_error())?,
+        resource_kind: "fake".to_owned(),
+        operation: "invoke".to_owned(),
+        required_dimensions: vec![BudgetDimensionV1::Tokens],
+        resource_envelope: vec![BudgetVectorEntryV1 {
+            dimension: BudgetDimensionV1::Tokens,
+            amount: BudgetAmountV1::new(4),
+        }],
+        meter_revision: RevisionId::parse(FAKE_METER_REVISION).map_err(|_| corrupt_error())?,
+        meter_policy_revision: RevisionId::parse(FAKE_METER_POLICY_REVISION)
+            .map_err(|_| corrupt_error())?,
+        producer_revision: RevisionId::parse(FAKE_PRODUCER_REVISION)
+            .map_err(|_| corrupt_error())?,
+        callback_namespace: FAKE_CALLBACK_NAMESPACE.to_owned(),
+        redaction_policy_revision: RevisionId::parse("rev_redaction-v1")
+            .map_err(|_| corrupt_error())?,
+    })
+}
+
+fn validate_contracts(
+    contracts: &[TrustedOperationContractV1],
+    source: &pareto_protocol::SchemaSetRef,
+) -> Result<(), RuntimeControlError> {
     let mut keys = BTreeSet::new();
     for contract in contracts {
         if contract.resource_envelope.is_empty()
+            || contract.source_schema_set_ref != *source
+            || contract.required_dimensions.is_empty()
+            || !contract
+                .required_dimensions
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+            || contract.callback_namespace.is_empty()
             || !keys.insert((contract.resource_kind.clone(), contract.operation.clone()))
         {
             return corrupt();
         }
-        canonical_vector(&contract.resource_envelope)?;
+        let envelope = canonical_vector(&contract.resource_envelope)?;
+        if envelope
+            .iter()
+            .map(|entry| &entry.dimension)
+            .collect::<Vec<_>>()
+            != contract.required_dimensions.iter().collect::<Vec<_>>()
+        {
+            return corrupt();
+        }
+    }
+    if contracts != [retained_operation_contract(source)?] {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::ResourceEnvelopeUnavailable,
+        ));
     }
     Ok(())
 }
@@ -1694,51 +2661,88 @@ fn validate_delegation(
     child: &CapabilityGrantV1,
     now: &str,
 ) -> Result<(), RuntimeControlError> {
+    validate_grant_shape(child)?;
     if child.scope.isolation != target.scope
         || child.issuer_actor != target.principal
         || state.grants.contains_key(&child.grant_id)
         || child.issued_at_utc != now
-        || child.constraints.not_before_utc >= child.constraints.expires_at_utc
-        || child.constraints.max_operation_usage.is_empty()
     {
         return Err(RuntimeControlError::new(
             RuntimeControlErrorKind::Unauthorized,
         ));
     }
-    let parent_id = child
-        .parent_grant_id
-        .as_ref()
-        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::DelegationWidening))?;
+    let Some(parent_id) = child.parent_grant_id.as_ref() else {
+        if target.principal == target.scope.agent_id && child.issuer_actor == target.scope.agent_id
+        {
+            return Ok(());
+        }
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::DelegationWidening,
+        ));
+    };
     let parent = active_grant(state, parent_id, now)?;
     if parent.subject_actor != target.principal
         || child.schema_ref != parent.schema_ref
         || !parent.constraints.allow_delegation
         || parent.constraints.remaining_delegation_depth == 0
-        || child.constraints.remaining_delegation_depth
-            >= parent.constraints.remaining_delegation_depth
-        || child.scope.task_id.is_none() && parent.scope.task_id.is_some()
-        || child
-            .scope
-            .task_id
-            .as_ref()
-            .is_some_and(|task| parent.scope.task_id.as_ref().is_some_and(|p| p != task))
-        || child.resource != parent.resource
-        || !child
-            .operations
-            .iter()
-            .all(|op| parent.operations.contains(op))
-        || child.constraints.not_before_utc < parent.constraints.not_before_utc
-        || child.constraints.expires_at_utc > parent.constraints.expires_at_utc
-        || !vector_lte(
-            &vector_map(&child.constraints.max_operation_usage)?,
-            &vector_map(&parent.constraints.max_operation_usage)?,
-        )
+        || !grant_is_subset(child, parent)?
     {
         return Err(RuntimeControlError::new(
             RuntimeControlErrorKind::DelegationWidening,
         ));
     }
     Ok(())
+}
+
+fn validate_grant_shape(grant: &CapabilityGrantV1) -> Result<(), RuntimeControlError> {
+    parse_utc_millis(&grant.issued_at_utc)?;
+    parse_utc_millis(&grant.constraints.not_before_utc)?;
+    parse_utc_millis(&grant.constraints.expires_at_utc)?;
+    if grant.constraints.not_before_utc >= grant.constraints.expires_at_utc
+        || grant.operations.is_empty()
+        || grant
+            .operations
+            .iter()
+            .any(|operation| operation.is_empty())
+        || !grant.operations.windows(2).all(|pair| pair[0] < pair[1])
+        || grant.resource.kind.is_empty()
+        || grant.resource.id.as_ref().is_some_and(String::is_empty)
+        || canonical_vector(&grant.constraints.max_operation_usage)?
+            != grant.constraints.max_operation_usage
+    {
+        return corrupt();
+    }
+    Ok(())
+}
+
+fn grant_is_subset(
+    child: &CapabilityGrantV1,
+    parent: &CapabilityGrantV1,
+) -> Result<bool, RuntimeControlError> {
+    Ok(child.scope.isolation == parent.scope.isolation
+        && match (&parent.scope.task_id, &child.scope.task_id) {
+            (None, _) => true,
+            (Some(parent), Some(child)) => parent == child,
+            (Some(_), None) => false,
+        }
+        && child.resource.kind == parent.resource.kind
+        && match (&parent.resource.id, &child.resource.id) {
+            (None, _) => true,
+            (Some(parent), Some(child)) => parent == child,
+            (Some(_), None) => false,
+        }
+        && child
+            .operations
+            .iter()
+            .all(|operation| parent.operations.binary_search(operation).is_ok())
+        && child.constraints.not_before_utc >= parent.constraints.not_before_utc
+        && child.constraints.expires_at_utc <= parent.constraints.expires_at_utc
+        && vector_lte(
+            &vector_map(&child.constraints.max_operation_usage)?,
+            &vector_map(&parent.constraints.max_operation_usage)?,
+        )
+        && child.constraints.remaining_delegation_depth
+            < parent.constraints.remaining_delegation_depth)
 }
 
 fn active_grant<'a>(
@@ -1778,31 +2782,102 @@ fn authorize(
     sample: &ClockSample,
     _digest: Digest,
 ) -> Result<CapabilityGrantV1, String> {
+    let mut saw_subject = false;
+    let mut saw_scope = false;
+    let mut saw_resource = false;
+    let mut saw_operation = false;
+    let mut inactive_reason = None;
     for grant in state.grants.values() {
-        if grant.subject_actor == target.principal
-            && grant.scope.isolation == target.scope
-            && grant
+        if grant.subject_actor != target.principal {
+            continue;
+        }
+        saw_subject = true;
+        if grant.scope.isolation != target.scope
+            || grant
                 .scope
                 .task_id
                 .as_ref()
-                .is_none_or(|task| proposal.task_id.as_ref() == Some(task))
-            && grant.resource == proposal.resource
-            && grant.operations.contains(&proposal.operation)
-            && active_grant(state, &grant.grant_id, &sample.canonical_utc).is_ok()
+                .is_some_and(|task| proposal.task_id.as_ref() != Some(task))
         {
-            let contract = find_contract(state, &proposal.resource.kind, &proposal.operation)
-                .map_err(|_| "resource_envelope_unavailable".to_owned())?;
-            if vector_lte(
-                &vector_map(&contract.resource_envelope)
-                    .map_err(|_| "resource_envelope_invalid".to_owned())?,
-                &vector_map(&grant.constraints.max_operation_usage)
-                    .map_err(|_| "capability_limit_invalid".to_owned())?,
-            ) {
-                return Ok(grant.clone());
+            continue;
+        }
+        saw_scope = true;
+        if grant.resource.kind != proposal.resource.kind
+            || grant
+                .resource
+                .id
+                .as_ref()
+                .is_some_and(|id| proposal.resource.id.as_ref() != Some(id))
+        {
+            continue;
+        }
+        saw_resource = true;
+        if grant.operations.binary_search(&proposal.operation).is_err() {
+            continue;
+        }
+        saw_operation = true;
+        match active_grant_reason(state, &grant.grant_id, &sample.canonical_utc) {
+            Ok(()) => {
+                let contract = find_contract(state, &proposal.resource.kind, &proposal.operation)
+                    .map_err(|_| "resource_envelope_unavailable".to_owned())?;
+                if vector_lte(
+                    &vector_map(&contract.resource_envelope)
+                        .map_err(|_| "resource_envelope_invalid".to_owned())?,
+                    &vector_map(&grant.constraints.max_operation_usage)
+                        .map_err(|_| "capability_limit_invalid".to_owned())?,
+                ) {
+                    return Ok(grant.clone());
+                }
             }
+            Err(reason) => inactive_reason = Some(reason),
         }
     }
-    Err("default_deny".to_owned())
+    Err(inactive_reason.unwrap_or_else(|| {
+        if saw_operation {
+            "capability_constraint_mismatch".to_owned()
+        } else if saw_resource {
+            "capability_operation_mismatch".to_owned()
+        } else if saw_scope {
+            "capability_resource_mismatch".to_owned()
+        } else if saw_subject {
+            "capability_scope_mismatch".to_owned()
+        } else {
+            "capability_missing".to_owned()
+        }
+    }))
+}
+
+fn active_grant_reason(
+    state: &RuntimeControlState,
+    id: &CapabilityId,
+    now: &str,
+) -> Result<(), String> {
+    let mut current = state
+        .grants
+        .get(id)
+        .ok_or_else(|| "capability_missing".to_owned())?;
+    let mut seen = BTreeSet::new();
+    loop {
+        if !seen.insert(current.grant_id.clone()) {
+            return Err("capability_chain_invalid".to_owned());
+        }
+        if state.revoked.contains_key(&current.grant_id) {
+            return Err("capability_revoked".to_owned());
+        }
+        if now < current.constraints.not_before_utc.as_str() {
+            return Err("capability_not_yet_valid".to_owned());
+        }
+        if now >= current.constraints.expires_at_utc.as_str() {
+            return Err("capability_expired".to_owned());
+        }
+        let Some(parent) = &current.parent_grant_id else {
+            return Ok(());
+        };
+        current = state
+            .grants
+            .get(parent)
+            .ok_or_else(|| "capability_parent_missing".to_owned())?;
+    }
 }
 
 fn find_contract<'a>(
@@ -1811,7 +2886,6 @@ fn find_contract<'a>(
     operation: &str,
 ) -> Result<&'a TrustedOperationContractV1, RuntimeControlError> {
     state
-        .initialized
         .operation_contracts
         .iter()
         .find(|c| c.resource_kind == kind && c.operation == operation)
@@ -1963,31 +3037,94 @@ fn settlement_payload(
     command: &SettlementCommand,
 ) -> Result<OperationSettledPayloadV1, RuntimeControlError> {
     let reserved = vector_map(&reservation.trusted_reservation)?;
-    let accounted = if command.evidence_class == UsageEvidenceClassV1::KernelMeterVerified {
-        let metered = vector_map(&command.metered_usage)?;
-        if !vector_lte(&metered, &reserved) {
-            return Err(RuntimeControlError::new(
-                RuntimeControlErrorKind::BudgetExhausted,
-            ));
-        }
-        metered
-    } else {
-        reserved.clone()
-    };
+    let (evidence_class, meter_evidence, accounted, outcome, reason_code) =
+        match &command.meter_snapshot {
+            Some(snapshot) => {
+                verify_meter_snapshot(snapshot, reservation, &command.decision_clock)?;
+                if snapshot.contract_violation {
+                    (
+                        UsageEvidenceClassV1::Unknown,
+                        Some(persisted_meter_evidence(snapshot)),
+                        reserved.clone(),
+                        OperationOutcomeV1::Failed,
+                        "meter_contract_violation".to_owned(),
+                    )
+                } else {
+                    let metered = vector_map(&snapshot.usage)?;
+                    if !vector_lte(&metered, &reserved) {
+                        return Err(RuntimeControlError::new(
+                            RuntimeControlErrorKind::MeterContractViolation,
+                        ));
+                    }
+                    (
+                        UsageEvidenceClassV1::KernelMeterVerified,
+                        Some(persisted_meter_evidence(snapshot)),
+                        metered,
+                        command.outcome,
+                        command.reason_code.clone(),
+                    )
+                }
+            }
+            None => (
+                UsageEvidenceClassV1::Unknown,
+                None,
+                reserved.clone(),
+                command.outcome,
+                command.reason_code.clone(),
+            ),
+        };
     let released = vector_sub(&reserved, &accounted)?;
     Ok(OperationSettledPayloadV1 {
         operation_id: command.operation_id.clone(),
         reservation_id: command.reservation_id.clone(),
         callback_id: Some(command.callback_id.clone()),
-        outcome: command.outcome,
-        evidence_class: command.evidence_class,
+        callback_fingerprint: Some(safe_digest("callback-command", command)?),
+        outcome,
+        evidence_class,
+        kernel_meter_evidence: meter_evidence,
         observed_usage: canonical_vector(&command.observed_usage)?,
         accounted_usage: map_vector(&accounted),
         released_usage: map_vector(&released),
-        reason_code: command.reason_code.clone(),
+        reason_code,
         timeout_command_fingerprint: None,
-        settled_at_utc: command.occurred_at.clone(),
+        settled_at_utc: command.decision_clock.canonical_utc.clone(),
     })
+}
+
+fn persisted_meter_evidence(snapshot: &KernelMeterSnapshot) -> KernelMeterEvidenceV1 {
+    KernelMeterEvidenceV1 {
+        meter_revision: snapshot.meter_revision.clone(),
+        process_epoch: snapshot.process_epoch.clone(),
+        usage: snapshot.usage.clone(),
+        contract_violation: snapshot.contract_violation,
+        snapshot_fingerprint: snapshot.seal.clone(),
+    }
+}
+
+fn verify_meter_snapshot(
+    snapshot: &KernelMeterSnapshot,
+    reservation: &OperationReservedPayloadV1,
+    clock: &ClockSample,
+) -> Result<(), RuntimeControlError> {
+    let expected = safe_digest(
+        "kernel-meter-snapshot",
+        &MeterSealView {
+            meter_revision: &snapshot.meter_revision,
+            process_epoch: &snapshot.process_epoch,
+            usage: &snapshot.usage,
+            contract_violation: snapshot.contract_violation,
+        },
+    )?;
+    if snapshot.seal != expected
+        || snapshot.meter_revision != reservation.timeout_key.meter_revision
+        || snapshot.process_epoch != clock.process_epoch
+        || canonical_vector(&snapshot.usage)? != snapshot.usage
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::ProducerUnauthorized,
+        ));
+    }
+    Ok(())
 }
 
 fn make_lease(
@@ -2009,6 +3146,8 @@ fn make_lease(
         reservation_id: reservation.reservation_id.clone(),
         producer_revision: reservation.producer_revision.clone(),
         process_epoch: sample.process_epoch.clone(),
+        reserved_wall_millis: sample.wall_millis,
+        reserved_monotonic_millis: sample.monotonic_millis,
         deadline_monotonic_millis,
         seal: Digest::parse(format!("sha256:{}", "0".repeat(64))).expect("constant digest"),
     };
@@ -2021,12 +3160,16 @@ fn verify_lease(
     lease: &OperationLease,
     reservation: &OperationReservedPayloadV1,
     producer: &RevisionId,
+    current: &ClockSample,
 ) -> Result<(), RuntimeControlError> {
     if lease.seal == lease_seal(lease)?
         && lease.scope == target.scope
         && lease.operation_id == reservation.operation_id
         && lease.reservation_id == reservation.reservation_id
         && &lease.producer_revision == producer
+        && lease.process_epoch == current.process_epoch
+        && current.wall_millis >= lease.reserved_wall_millis
+        && current.monotonic_millis >= lease.reserved_monotonic_millis
     {
         Ok(())
     } else {
@@ -2045,6 +3188,8 @@ fn lease_seal(lease: &OperationLease) -> Result<Digest, RuntimeControlError> {
         producer: &'a RevisionId,
         epoch: &'a str,
         deadline_monotonic_millis: u64,
+        reserved_wall_millis: u64,
+        reserved_monotonic_millis: u64,
     }
     safe_digest(
         "operation-lease",
@@ -2055,6 +3200,8 @@ fn lease_seal(lease: &OperationLease) -> Result<Digest, RuntimeControlError> {
             producer: &lease.producer_revision,
             epoch: &lease.process_epoch,
             deadline_monotonic_millis: lease.deadline_monotonic_millis,
+            reserved_wall_millis: lease.reserved_wall_millis,
+            reserved_monotonic_millis: lease.reserved_monotonic_millis,
         },
     )
 }
@@ -2190,6 +3337,7 @@ fn project_control(
         .operations
         .values()
         .map(|record| RuntimeControlOperationProjectionV1 {
+            reservation: record.reservation.clone(),
             operation_id: record.reservation.operation_id.clone(),
             reservation_id: record.reservation.reservation_id.clone(),
             absolute_deadline_utc: record.reservation.absolute_deadline_utc.clone(),
@@ -2200,6 +3348,10 @@ fn project_control(
                 &record.reservation.operation_id,
             ),
             outcome: record.settlement.as_ref().map(|(_, p)| p.outcome),
+            settlement: record
+                .settlement
+                .as_ref()
+                .map(|(_, payload)| payload.clone()),
             reserved_usage: record.reservation.trusted_reservation.clone(),
             accounted_usage: record
                 .settlement
@@ -2215,6 +3367,24 @@ fn project_control(
         .cloned()
         .collect::<Vec<_>>();
     let revoked_grants = aggregate.state.revoked.keys().cloned().collect::<Vec<_>>();
+    let cancellations = aggregate
+        .state
+        .cancellations
+        .values()
+        .map(|(_, request)| RuntimeControlCancellationProjectionV1 {
+            request: request.clone(),
+            acknowledgements: aggregate
+                .state
+                .cancellation_acks
+                .values()
+                .map(|(_, acknowledgement)| acknowledgement)
+                .filter(|acknowledgement| {
+                    acknowledgement.cancellation_id == request.cancellation_id
+                })
+                .cloned()
+                .collect(),
+        })
+        .collect::<Vec<_>>();
     let cursor = EventCursor {
         sequence: aggregate.state.sequence.to_string(),
         event_id: aggregate.state.last_event_id.clone(),
@@ -2227,10 +3397,20 @@ fn project_control(
         stream_id: aggregate.stream_id.clone(),
         cursor: cursor.clone(),
         source_contract: aggregate.state.initialized.source_contract.clone(),
+        history_digest: aggregate.state.history_digest.clone(),
+        budget_revision: aggregate
+            .state
+            .initialized
+            .budget_plan
+            .budget_revision
+            .clone(),
+        clock_contract: aggregate.state.initialized.clock_contract.clone(),
+        operation_contracts: aggregate.state.operation_contracts.clone(),
         accounts: accounts.clone(),
         operations: operations.clone(),
         active_grants: active_grants.clone(),
         revoked_grants: revoked_grants.clone(),
+        cancellations: cancellations.clone(),
         cancellation_count: aggregate.state.cancellation_count.to_string(),
         late_result_count: aggregate.state.late_result_count.to_string(),
         rejected_message_count: aggregate.state.rejected_message_count.to_string(),
@@ -2247,10 +3427,20 @@ fn project_control(
         stream_id: aggregate.stream_id.clone(),
         cursor,
         source_contract: aggregate.state.initialized.source_contract.clone(),
+        history_digest: aggregate.state.history_digest.clone(),
+        budget_revision: aggregate
+            .state
+            .initialized
+            .budget_plan
+            .budget_revision
+            .clone(),
+        clock_contract: aggregate.state.initialized.clock_contract.clone(),
+        operation_contracts: aggregate.state.operation_contracts.clone(),
         accounts,
         operations,
         active_grants,
         revoked_grants,
+        cancellations,
         cancellation_count: aggregate.state.cancellation_count.to_string(),
         late_result_count: aggregate.state.late_result_count.to_string(),
         rejected_message_count: aggregate.state.rejected_message_count.to_string(),
@@ -2270,6 +3460,14 @@ fn safe_digest<T: Serialize>(domain: &str, value: &T) -> Result<Digest, RuntimeC
     hasher.update(bytes.as_bytes());
     Digest::parse(format!("sha256:{:x}", hasher.finalize()))
         .map_err(|_| RuntimeControlError::new(RuntimeControlErrorKind::AggregateCorrupt))
+}
+
+fn history_digest(events: &[ValidatedEvent]) -> Result<Digest, RuntimeControlError> {
+    let envelopes = events
+        .iter()
+        .map(ValidatedEvent::envelope)
+        .collect::<Vec<_>>();
+    safe_digest(RUNTIME_HISTORY_REVISION, &envelopes)
 }
 
 fn parse_utc_millis(value: &str) -> Result<u64, RuntimeControlError> {
@@ -2301,8 +3499,17 @@ fn parse_utc_millis(value: &str) -> Result<u64, RuntimeControlError> {
     let minute = number(14, 16)?;
     let second = number(17, 19)?;
     let millis = number(20, 23)?;
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let max_day = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => 0,
+    };
     if !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
+        || day < 1
+        || day > max_day
         || hour > 23
         || minute > 59
         || second > 59
@@ -2336,7 +3543,7 @@ fn validate_clock_sample(sample: &ClockSample) -> Result<(), RuntimeControlError
         Ok(())
     } else {
         Err(RuntimeControlError::new(
-            RuntimeControlErrorKind::AggregateCorrupt,
+            RuntimeControlErrorKind::ClockInvalid,
         ))
     }
 }
@@ -2388,12 +3595,12 @@ fn vector_sub(
 ) -> Result<BTreeMap<BudgetDimensionV1, u64>, RuntimeControlError> {
     let mut result = BTreeMap::new();
     for (dimension, amount) in left {
-        result.insert(
-            dimension.clone(),
-            amount
-                .checked_sub(right.get(dimension).copied().unwrap_or(0))
-                .ok_or_else(corrupt_error)?,
-        );
+        let remaining = amount
+            .checked_sub(right.get(dimension).copied().unwrap_or(0))
+            .ok_or_else(corrupt_error)?;
+        if remaining > 0 {
+            result.insert(dimension.clone(), remaining);
+        }
     }
     Ok(result)
 }

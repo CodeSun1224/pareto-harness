@@ -41,9 +41,24 @@
 | Full language gates | `cargo fmt --all -- --check`; workspace clippy `-D warnings`; `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 100 passed/1 ignored；Protocol 9 + 23 passed/1 ignored | no warning suppression or gate weakening |
 | Docs freshness before implementation review | `python scripts/check_docs.py` | expected gate failure | only REVIEW-0001..0005 stale against implementation paths | fresh independent code review must substantively restore freshness；not treated as pass |
 
+## REVIEW-0007 repair candidate
+
+独立实现评审 REVIEW-0007 在 `1b40e92` 上记录 0 Blocker、9 open Major。FIX-0001
+按 F-001 至 F-009 完成修复；本节结果属于实现者证据，不能自行关闭 finding。
+
+| Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
+|---|---|---|---|---|
+| Trusted operation and meter | `cargo test -p pareto-kernel --all-features --offline runtime_control` | passed | 50 passed | retained contract reference only；Kernel meter/Fake Operation；超 envelope 在执行前拒绝；forged/unknown usage 负例 |
+| Authority, time and recovery | 同一 focused command | passed | capability、cancel、callback、timeout、late、race、reopen 命名矩阵 | exact lifecycle cursor/event bindings；process epoch；frozen Clock sample；deterministic command ID；response-loss retry |
+| Pure fold/projection/replay | 同一 focused command | passed | illegal capability/budget/cancel history、complete provenance、Recorded replay zero-dispatch | Schema-valid 但语义非法历史 fail closed；终态后结果只进入隔离审计 |
+| Protocol/Schema | `cargo test -p pareto-protocol --all-features --offline`; schema generator twice | passed | 9 unit + 23 contract；1 ignored observation；`sha256:19566903…` | 新增 Kernel meter evidence；最终内容寻址 set 稳定；两个未发布中间 set 已删除 |
+| Governance/static scope | `python -m unittest discover -s scripts/tests -p "test_*.py"`; `python scripts/check_req0007_scope.py`; workspace clippy `-D warnings` | passed | 21 tests；scope check green；clippy green | scope baseline 固定 `6de3598`，不再与 HEAD 自比较；DB v2/依赖/real I/O 未变 |
+| Full regression | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 118 passed/1 ignored；Protocol 9 + 23 passed/1 ignored | Projection golden 随最终 SchemaSet canonical identity 更新后全仓绿色 |
+| Docs freshness before focused re-review | `python scripts/check_docs.py` | expected gate failure | only REVIEW-0001..0005 stale against repaired substantive paths | 原独立 REVIEW-0007 reviewer 必须在 exact repair revision 上复审并实质恢复 freshness |
+
 ## Skipped tests
 
-Independent code review and post-review full gate rerun remain pending. Real Provider/Tool/network/performance claims are out of scope；ignored tests are observation-only baselines already marked by the repository。
+REVIEW-0007 focused independent re-review and post-review full gate rerun remain pending. Real Provider/Tool/network/performance claims are out of scope；ignored tests are observation-only baselines already marked by the repository。
 
 ## Remaining limitations
 
