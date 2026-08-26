@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: a4e34785908207e622365250ae1466b85b4baecb
+reviewed_revision: 1b40e92be11e73a497ec821118b7cb4e0c1af1ce
 open_blockers: 0
 open_majors: 0
 ---
@@ -89,3 +89,4 @@ Remaining Notes/limitations:
 - Exact closure `907eee7295a7c3e7c2fa408a035c52d684f52fb4` freshness-only re-review: `14b5438..907eee7`只更新REQ-0006 durable status/navigation/architecture facts和归档work；`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API、SchemaSet bytes与reader identity零差异。新增文案准确描述已批准current output set、retained source reader和Recorded replay边界，不扩大协议合同。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `907eee7`。
 - Exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f` substantive freshness re-review: `907eee7..cfa7a06`仅设计新的REQ-0007 closed protocol、control-capable SchemaSet和retained operation/source contracts；没有修改`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API、四个既有SchemaSet bytes、canonicalization、limits、isolation或reader实现。新合同仍要求Manifest exact pin、旧set不升级和protocol不依赖Kernel；实现及golden证据尚未发生且受REVIEW-0006阻塞。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `cfa7a06`。
 - Exact candidate `a4e34785908207e622365250ae1466b85b4baecb` substantive freshness re-review: `cfa7a06..a4e3478`只在REQ-0007设计层冻结`TimeoutKeyV1`与`TimeoutRecoveryCommandV1`的未来closed wire identity；没有修改`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API、四个既有SchemaSet bytes、canonicalization、limits、isolation或reader实现。新增类型、Schema与golden仍须在实施中生成并独立评审，既有协议批准事实未改变。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `a4e3478`。
+- Exact implementation candidate `1b40e92be11e73a497ec821118b7cb4e0c1af1ce` substantive freshness re-review: 新增closed Runtime Control v1类型、43个生成Schema member和内容地址set `sha256-a1f960...`；四个retained set byte-diff无变化，protocol仍不依赖Kernel/SQLite，Cargo依赖无变化。Reviewer独立复跑Protocol 9 unit + 23 contract，retained-set completeness、old-writer exact reader和Schema generation worktree identity均通过。REVIEW-0007对新REQ-0007 v1完整性保持open Major，但没有放宽REQ-0003已批准canonicalization、limits、retained reader或依赖方向。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `1b40e92`。

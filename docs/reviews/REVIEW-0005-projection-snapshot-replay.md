@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-25
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REVIEW-0002, REVIEW-0003, REVIEW-0004]
 independence: independent
-reviewed_revision: a4e34785908207e622365250ae1466b85b4baecb
+reviewed_revision: 1b40e92be11e73a497ec821118b7cb4e0c1af1ce
 open_blockers: 0
 open_majors: 0
 ---
@@ -83,3 +83,4 @@ remediation产品代码限于Event Store v2 migration、Projection/Snapshot/Repl
 - 2026-08-25：final freshness-only independent confirmation of exact closure `907eee7295a7c3e7c2fa408a035c52d684f52fb4`，以approved remediation `1d271549c2607f9c00377bdaa0fa999a131dafe3`和review-record commit `14b5438`为基线。完整`14b5438..907eee7` diff只含REQ-0006 done/navigation/architecture implemented facts、validation/handoff/plan/tasks和active→archived move；`crates/`、Schema、Cargo、治理代码和既有Review finding bytes均无变化。实现事实与REVIEW-0005批准范围一致，REQ-0007/Effect/Provider/Memory/DAG仍明确未实现；F-001/F-002/F-003保持closed，F-004保持accepted Minor，归档Handoff的旧实施期句子记录为F-005 accepted Note；最终仍approved、0 Blocker、0 Major，freshness前移至exact `907eee7`。
 - 2026-08-25：substantive freshness confirmation of exact candidate `cfa7a06c3588a6ad975a9511140d0984f5eb1b8f`。完整`907eee7..cfa7a06`无Projection/Snapshot/Replay Runtime、Schema、DB、Cargo或API实现变化；REQ-0007设计使用独立control stream/reducer/Projection，明确RunTask reducer仍只消费四类lifecycle binding、既有Snapshot identity/digest不变、Recorded control replay无executor/append/recovery writer。新control-capable set和RuntimeControl Projection尚未生成/实现且受REVIEW-0006 open Major阻塞。REVIEW-0005既有F-001..F-003保持closed，F-004/F-005保持accepted，approved与0 open Blocker/Major不变，freshness前移至exact`cfa7a06`。
 - 2026-08-25：substantive freshness confirmation of exact candidate `a4e34785908207e622365250ae1466b85b4baecb`。`cfa7a06..a4e3478`无Projection/Snapshot/Replay Runtime、Schema、DB、Cargo或API实现变化，只冻结未来timeout recovery identity及reopen从pending Projection显式调用、既有terminal no-op的合同；Recorded replay仍无executor/append/recovery authority，RunTask reducer与Snapshot identity/digest不变。REVIEW-0005既有findings状态、approved与0 open Blocker/Major不变，freshness前移至exact`a4e3478`。
+- 2026-08-26：substantive freshness confirmation of exact implementation candidate `1b40e92be11e73a497ec821118b7cb4e0c1af1ce`。RunTask Projection/Snapshot/Replay产品reducer、snapshot DDL/reader和replay effect boundary未改；测试fixture对新control-capable source set显式解析retained output set `4ce387...`，并更新与source provenance相关的golden。Reviewer逐行检查该适配，独立复跑35个Projection/Snapshot/Replay tests与全workspace，四个retained set、old reader、v2 migration、recorded/simulated no-effect均通过；无control writer进入REQ-0006 replay API。REVIEW-0007对新RuntimeControl Projection完整性保持open Major，不改变REQ-0006既有批准。REVIEW-0005保持approved、0 open Blocker/Major，freshness前移至exact`1b40e92`。
