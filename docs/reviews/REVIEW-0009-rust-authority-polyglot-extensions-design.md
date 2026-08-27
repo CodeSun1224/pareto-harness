@@ -7,7 +7,7 @@ created: 2026-08-27
 updated: 2026-08-27
 links: [REQ-0001, SPEC-0001, RFC-0007, RFC-0001, ADR-0001, ADR-0002, ARCH-0001, ARCH-0002, ARCH-0004, ROADMAP-0001, BACKLOG-0001, RES-0001, RES-0002]
 independence: independent
-reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
+reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
 open_blockers: 0
 open_majors: 0
 ---
@@ -32,8 +32,10 @@ bounded operation；Sandbox policy/admission 与 OS/container/WASI enforcement �
 provenance/admission 与 retrieval/rerank/compression 分离；transport 留给具体 Requirement；新增 Runtime
 需要以可复现收益覆盖协议、部署、冷启动和调试复杂度。
 
-本 Reviewer 未修改 RFC、ARCH、Roadmap、Backlog 或 Research；只关闭自身 finding 并在实质核对后维护
-REVIEW-0001..0008 freshness。RFC 仍为 proposed；接受、建立 ADR 及同步 accepted architecture/Roadmap 属于维护者后续任务。
+Focused accepted-doc review 进一步确认 exact `b42ccdc3216f518ff60303cec20da92b78d190a1`（baseline reviewer
+commit `2c80b89e6d0a5f5f1f6bca3dc1677bd14a8ca2e5`）只执行已经批准的接受步骤：RFC-0007 改为 accepted、
+建立 ADR-0008，并同步 ARCH-0001/0004、ROADMAP-0001、BACKLOG-0001、RES-0001/0002 和导航。七项前提无回退，
+Requirement 顺序与 prerequisite 保持，且没有选择 transport 或授权任何具体外部 Runtime。
 
 # Acceptance trace
 
@@ -69,12 +71,13 @@ REVIEW-0001..0008 freshness。RFC 仍为 proposed；接受、建立 ADR 及同�
 
 # Regression and test review
 
-候选及整改只有 proposed RFC、研究证据、综合判断、导航和 Review 文档，没有 Runtime、Cargo、Schema、DB、
-API、依赖或测试实现。Focused re-review 完成 E-017..E-027 source-to-claim 检查并确认七项前提无回退。更新
+候选、整改与最终接受只有 RFC/ADR、架构/路线/研究/导航和 Review 文档，没有 Runtime、Cargo、Schema、DB、
+API、依赖或测试实现。Focused re-review 完成 E-017..E-027 source-to-claim 检查；accepted-doc re-review 又核对
+七项前提、Requirement 顺序、transport neutrality 及 REQ-0007..0033 authority/security 传播。更新
 REVIEW-0001..0009 后，Reviewer 独立执行：
 
 - `python -m unittest discover -s scripts/tests -p "test_*.py"`：21 passed。
-- `python scripts/check_docs.py`：passed，175 Markdown files / 54 formal IDs。
+- `python scripts/check_docs.py`：passed，176 Markdown files / 55 formal IDs。
 - `git diff --check`：passed。
 - `git status --short`：只有九份 reviewer-owned `docs/reviews/REVIEW-0001..0009` 修改。
 
@@ -86,10 +89,14 @@ REVIEW-0001..0009 后，Reviewer 独立执行：
 只修改 RES-0001、RES-0002 与 RFC-0007 的证据/措辞，共14 insertions、11 deletions。没有 Runtime、Schema、
 数据库、Cargo、CI、治理规则或依赖变化；未发现无关产品实现。
 
+Accepted-doc diff `2c80b89e6d0a5f5f1f6bca3dc1677bd14a8ca2e5..b42ccdc3216f518ff60303cec20da92b78d190a1`
+新增 ADR-0008 并修改 RFC-0007、ARCH-0001/0004、ROADMAP-0001、BACKLOG-0001、RES-0001/0002 与导航，
+共83 insertions、28 deletions。Requirement 表32行及 prerequisite 未重排；没有 Runtime、Schema、数据库、
+Cargo、CI、治理规则或依赖变化。
+
 # Re-review conditions
 
-设计评审门禁已满足。维护者可以另行接受 RFC、建立 ADR 并同步 accepted architecture/Roadmap；本 Review 不代替
-这些状态变更。未来若来源变化、事实/推论重新混写、提前冻结transport或授权外部Runtime，必须在对应 exact commit
+设计与 accepted-doc 传播评审门禁均满足。未来若来源变化、事实/推论重新混写、提前冻结transport或授权外部Runtime，必须在对应 exact commit
 重新评审 permissions/isolation/effect/budget/cancel/late/replay/evidence/promotion、rollback 与quality/cost/latency。
 
 # Re-review history
@@ -102,3 +109,10 @@ REVIEW-0001..0009 后，Reviewer 独立执行：
   `6892a8faae25db9b1f1471f12847bf76c5359b82`。逐项打开E-017..E-027当前官方来源，确认Codex workspace/core/
   binary/TS/Python/sandbox和Claude delivery/Hook/Plugin/Memory/Sandbox原子声明、限制与fact/inference传播；七项前提、
   G2–G5非授权边界及REQ-0008..0033 authority合同无回退。F-001 closed；0 Blocker、0 Major，`approved`。
+- 2026-08-27：focused independent accepted-doc review of exact
+  `b42ccdc3216f518ff60303cec20da92b78d190a1` against approved reviewer baseline
+  `2c80b89e6d0a5f5f1f6bca3dc1677bd14a8ca2e5`。逐项核对 RFC accepted 状态、ADR-0008、ARCH-0001/0004、
+  ROADMAP/BACKLOG、RES/index：七项前提忠实传播；G2–G5 仅表达可由后续 Requirement 批准的计算面，不构成外部
+  Runtime 授权；Requirement 顺序/prerequisite 不变；未预选 JSONL/MCP/WASI/RPC；REQ-0007 及 REQ-0008..0033
+  的 authority、isolation、Effect、Budget、Cancellation、late、Replay、Evidence 与 Promotion 边界无削弱。
+  0 Blocker、0 Major，`approved`。

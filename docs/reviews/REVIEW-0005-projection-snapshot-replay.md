@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-25
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REVIEW-0002, REVIEW-0003, REVIEW-0004]
 independence: independent
-reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
+reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
 open_blockers: 0
 open_majors: 0
 ---
@@ -92,3 +92,4 @@ remediation产品代码限于Event Store v2 migration、Projection/Snapshot/Repl
 - 2026-08-27：substantive freshness confirmation exact `53338a836f646cdcefb6858ce07b0b0e8e12b11e`。`828f9aa..53338a8`只重组归档Validation历史叙述，对Projection/Snapshot/Replay、Schema、golden、reader和effect boundary零差异；Recorded replay和REQ-0006合同不变。REVIEW-0005保持approved、0 open Blocker/Major，freshness前移至exact`53338a8`。
 - 2026-08-27：substantive freshness confirmation exact `8bb885bda678f5f785706e9eb335f472b5244974`。`53338a8..8bb885b`对Projection/Snapshot/Replay、Schema、golden、reader和effect boundary零差异；`ARCH-0004`继续要求版本化artifact、摘要和provenance，并禁止离线输出直接提交权威状态。Recorded replay与REQ-0006合同不变。REVIEW-0005保持approved、0 open Blocker/Major。
 - 2026-08-27：substantive freshness confirmation exact `1748f69d01044a936727b3b5b7659882981b9129`。`8bb885b..1748f69`对Projection/Snapshot/Replay、Schema、golden、reader、DB和effect boundary零差异；RFC-0007要求Recorded replay不执行、Simulated/Reexecute显式经过Effect gate，并禁止外部cache/index成为第二事实源。REQ-0006合同不变，REVIEW-0005保持approved、0 open Blocker/Major。
+- 2026-08-27：substantive freshness confirmation exact `b42ccdc3216f518ff60303cec20da92b78d190a1`。`2c80b89..b42ccdc`对Projection/Snapshot/Replay、Schema、golden、reader、DB和effect boundary零差异；accepted ADR保留Rust Replay admission，且真实边界仍须单独冻结Replay与Effect合同。REVIEW-0005保持approved、0 open Blocker/Major。

@@ -7,7 +7,7 @@ created: 2026-08-26
 updated: 2026-08-27
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
+reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
 open_blockers: 0
 open_majors: 0
 ---
@@ -163,3 +163,4 @@ REQ-0008未实现。后续若改变callback authority、meter evidence epoch、d
   Capability、Budget、Cancellation、deadline、callback/late authority与Recorded replay实现零差异；RFC-0007
   明确未来Provider/Tool/Worker不得构造opaque authority、自报usage evidence或重复Effect。REQ-0007批准实现无回退，
   REVIEW-0007保持approved、0 open Blocker/Major。
+- 2026-08-27：focused accepted-doc freshness re-review exact `b42ccdc3216f518ff60303cec20da92b78d190a1`。`2c80b89..b42ccdc`对Runtime、Protocol、Schema、DB、Cargo、Capability、Budget、Cancellation、deadline、callback/late authority与Recorded replay实现零差异；accepted ADR/architecture延续default-deny与Rust admission。REQ-0007批准实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。

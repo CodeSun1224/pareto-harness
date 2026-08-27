@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
+reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
 open_blockers: 0
 open_majors: 0
 ---
@@ -98,3 +98,4 @@ Remaining Notes/limitations:
 - Exact F-010 remediation `53338a836f646cdcefb6858ce07b0b0e8e12b11e` substantive freshness re-review: `828f9aa..53338a8`只重组归档Validation历史失败叙述，对protocol、schemas、Cargo、API和retained sets零差异；历史设计拒绝与最终批准均保留。F-010关闭不改变REQ-0003批准合同。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `53338a8`。
 - Exact architecture clarification `8bb885bda678f5f785706e9eb335f472b5244974` substantive freshness re-review: `53338a8..8bb885b`对protocol、schemas、Cargo、API和retained sets零差异；`ARCH-0004`只要求未来离线工具依赖版本化公共协议或artifact，并明确不冻结Worker transport。REQ-0003 canonical JSON、closed Schema、dependency direction与retained-reader合同不变。REVIEW-0002保持approved、0 open Blocker/Major。
 - Exact polyglot design remediation `1748f69d01044a936727b3b5b7659882981b9129` substantive freshness re-review: `8bb885b..1748f69`对`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API、canonicalization、limits及retained readers零差异。RFC-0007仍禁止首个真实跨语言Requirement之前发布wire Schema或暴露Rust ABI/SQLite layout，并要求unknown/old version fail closed。REVIEW-0002保持approved、0 open Blocker/Major。
+- Exact accepted-doc candidate `b42ccdc3216f518ff60303cec20da92b78d190a1` substantive freshness re-review: `2c80b89..b42ccdc`对protocol、schemas、Cargo、API、canonicalization、limits和retained readers零差异；ADR-0008与ARCH-0004继续把wire Schema、identity、compatibility和transport留给首次真实Requirement，且禁止Rust ABI/SQLite layout成为跨语言合同。REVIEW-0002保持approved、0 open Blocker/Major。
