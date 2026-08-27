@@ -7,7 +7,7 @@ created: 2026-08-24
 updated: 2026-08-25
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: 53338a836f646cdcefb6858ce07b0b0e8e12b11e
+reviewed_revision: 8bb885bda678f5f785706e9eb335f472b5244974
 open_blockers: 0
 open_majors: 0
 ---
@@ -109,3 +109,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-27：exact fourth-repair candidate `80249cc5c73575a3f92027f843cc657536905b9e` substantive freshness re-review。`97bca8b..80249cc`未修改lifecycle module、Run/Task状态边、parent/child guard、Manifest admission、owner authority或四类wire Event；source SchemaSet identity变化仅来自新增Runtime Control callback authority必填字段。lifecycle、two-writer guard与full workspace通过，REQ-0005合同无回退。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`80249cc`。
 - 2026-08-27：exact closure candidate `87be5391c40fdaa5b423c921747e7c941f7e2d42` substantive freshness re-review。`f18f410..87be539`未修改lifecycle Runtime、Run/Task状态边、parent/child guard、Manifest admission、owner authority、wire Event或two-stream guard，只把已独立批准的REQ-0007事实标记done并归档。REVIEW-0007 F-010是归档Validation格式问题，不重释REQ-0005。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`87be539`。
 - 2026-08-27：exact F-010 remediation `53338a836f646cdcefb6858ce07b0b0e8e12b11e` substantive freshness re-review。`828f9aa..53338a8`只重组归档Validation历史失败记录，lifecycle Runtime、Manifest、状态边、authority和wire Event零差异。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`53338a8`。
+- 2026-08-27：exact architecture clarification `8bb885bda678f5f785706e9eb335f472b5244974` substantive freshness re-review。`53338a8..8bb885b`未修改lifecycle Runtime、Manifest、状态边、authority或wire Event；`ARCH-0004`反而明确非Rust扩展不得修改Run Manifest、标记Run成功或直接写权威状态。REQ-0005合同不变。REVIEW-0004保持approved、0 open Blocker/Major。

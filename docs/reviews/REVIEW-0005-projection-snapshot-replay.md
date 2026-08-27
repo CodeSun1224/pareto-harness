@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-25
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REVIEW-0002, REVIEW-0003, REVIEW-0004]
 independence: independent
-reviewed_revision: 53338a836f646cdcefb6858ce07b0b0e8e12b11e
+reviewed_revision: 8bb885bda678f5f785706e9eb335f472b5244974
 open_blockers: 0
 open_majors: 0
 ---
@@ -90,3 +90,4 @@ remediation产品代码限于Event Store v2 migration、Projection/Snapshot/Repl
 - 2026-08-27：substantive freshness confirmation exact `80249cc5c73575a3f92027f843cc657536905b9e`。RunTask reducer、Snapshot DDL/reader、retained output `4ce387…`和Recorded replay effect boundary未改；六个golden仅因Manifest source SchemaSet从未发布`c3e2fda5…`前移到`a95c824d…`而更新。RuntimeControl两类validly re-sealed非法history在Projection、Recorded replay和close/reopen均fail closed；normal replay仍零dispatch/append/accounting。完整Event Store/Projection/Snapshot/Replay及workspace通过，REQ-0006合同无回退。REVIEW-0005保持approved、0 open Blocker/Major，freshness前移至exact`80249cc`。
 - 2026-08-27：substantive freshness confirmation exact `87be5391c40fdaa5b423c921747e7c941f7e2d42`。`f18f410..87be539`未修改RunTask/RuntimeControl reducer、Projection/Snapshot/Replay代码、Schema、golden、retained output reader或effect boundary；仅同步implemented facts和归档work。Recorded replay仍无writer/executor，REQ-0008未实现。REVIEW-0007 F-010只涉及归档Validation格式，不改变REQ-0006批准。REVIEW-0005保持approved、0 open Blocker/Major，freshness前移至exact`87be539`。
 - 2026-08-27：substantive freshness confirmation exact `53338a836f646cdcefb6858ce07b0b0e8e12b11e`。`828f9aa..53338a8`只重组归档Validation历史叙述，对Projection/Snapshot/Replay、Schema、golden、reader和effect boundary零差异；Recorded replay和REQ-0006合同不变。REVIEW-0005保持approved、0 open Blocker/Major，freshness前移至exact`53338a8`。
+- 2026-08-27：substantive freshness confirmation exact `8bb885bda678f5f785706e9eb335f472b5244974`。`53338a8..8bb885b`对Projection/Snapshot/Replay、Schema、golden、reader和effect boundary零差异；`ARCH-0004`继续要求版本化artifact、摘要和provenance，并禁止离线输出直接提交权威状态。Recorded replay与REQ-0006合同不变。REVIEW-0005保持approved、0 open Blocker/Major。
