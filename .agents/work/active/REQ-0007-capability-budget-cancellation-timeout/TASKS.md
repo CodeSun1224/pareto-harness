@@ -1,8 +1,9 @@
 # Requirement Tasks
 
 Current execution: reviewing. Fresh independent implementation review 已在 `1b40e92` 上形成
-REVIEW-0007（0 Blocker、9 Major）；FIX-0001 repair candidate 已完成本地全回归，
-TASK-REQ-0007-08等待同一独立 Reviewer 对新的 exact revision 做 focused re-review。
+REVIEW-0007（0 Blocker、9 Major）；首次 focused re-review 已关闭四项并保留五项 Major。
+FIX-0001 second repair candidate 已完成本地全回归，TASK-REQ-0007-08等待同一独立
+Reviewer 对新的 exact revision 再次 focused re-review。
 
 - [x] TASK-REQ-0007-00: 修订REQ/SPEC/RFC/ADR以闭合REVIEW-0006六个Major，提交仅含设计修订的exact revision，由同一independent reviewer focused re-review并恢复docs/diff门禁。Validation: REVIEW-0006 approved、0 open Blocker/Major、reviewed revision `a4e3478`；Runtime diff明确排除。
 

@@ -4,7 +4,7 @@ title: REQ-0007 Runtime Control 权威边界与回放合同缺口
 status: fixed
 owners: [runtime-kernel]
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, REVIEW-0007]
 ---
 
@@ -59,6 +59,17 @@ producer settlement command 和 JSON-Schema-valid history 仍被赋予了定义�
   cancellation 与 projection provenance identity，并发布新的内容寻址 SchemaSet。
 - 用真实负例、并发、close/reopen、旧 SchemaSet 和 bounded model 测试替换占位测试；
   scope helper 对固定批准 baseline 检查。
+
+首次 focused re-review 关闭 F-001/F-002/F-004/F-006 后，second repair 继续：
+
+- 为未到期 reopen operation 提供只读 lease rebind，拒绝旧 process epoch、墙钟回退、
+  deadline 延长与重复 dispatch；取消恢复确认必须携带 Kernel-sealed recovery fact。
+- 在 reservation 中持久化 exact lifecycle checkpoint、adapter、timeout policy 与初始 epoch，
+  在 settlement/late 中持久化 producer/reservation/lease/current epoch authority。
+- pure fold 按历史 cursor 重建 lifecycle，并重验 grant usage 上界、取消、adapter、timeout、
+  callback 与 late-result authority；Projection/hash 同步保留隔离后的 late audit provenance。
+- 补充 exact not-before/expiry、deadline 边界、restart rebind、early recovery rejection、
+  forged history 和真实 bounded complete/cancel/timeout state-sequence tests。
 
 # Regression proof
 

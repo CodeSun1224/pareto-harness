@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     AgentId, BudgetAccountId, CallbackId, CancellationId, CapabilityId, Digest, EventCursor,
     EventId, EventTypeBinding, IsolationScope, OperationId, ProtocolLimitsRef, ReservationId,
-    RevisionId, SchemaRef, SchemaSetRef, StreamId, TaskId,
+    RevisionId, RunState, SchemaRef, SchemaSetRef, StreamId, TaskId, TaskState,
 };
 
 fn deserialize_present_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -269,6 +269,8 @@ pub struct TrustedOperationContractV1 {
     pub meter_revision: RevisionId,
     /// Exact Kernel enforcement policy revision.
     pub meter_policy_revision: RevisionId,
+    /// Exact Kernel timeout policy revision.
+    pub timeout_policy_revision: RevisionId,
     /// Approved producer revision.
     pub producer_revision: RevisionId,
     /// Exact callback namespace bound at dispatch and callback admission.
@@ -443,6 +445,23 @@ pub struct TimeoutKeyV1 {
 /// Authoritative reservation payload.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct LifecycleAdmissionV1 {
+    /// Exact lifecycle event admitted before reservation.
+    pub cursor: EventCursor,
+    /// Run state observed at the exact cursor.
+    pub run_state: RunState,
+    /// Task state observed at the exact cursor for Task-scoped operations.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub task_state: Option<TaskState>,
+}
+
+/// Authoritative reservation payload.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OperationReservedPayloadV1 {
     /// Operation identity.
     pub operation_id: OperationId,
@@ -473,8 +492,14 @@ pub struct OperationReservedPayloadV1 {
     pub allocations: Vec<BudgetAllocationV1>,
     /// Trusted operation contract.
     pub operation_contract_revision: RevisionId,
+    /// Exact retained adapter admitted by the Kernel.
+    pub adapter_revision: RevisionId,
+    /// Exact lifecycle checkpoint admitted by the Kernel.
+    pub lifecycle_admission: LifecycleAdmissionV1,
     /// Approved producer.
     pub producer_revision: RevisionId,
+    /// Process epoch in which the initial opaque lease was issued.
+    pub initial_process_epoch: String,
     /// Callback namespace.
     pub callback_namespace: String,
     /// Interruptibility class.
@@ -529,6 +554,26 @@ pub struct KernelMeterEvidenceV1 {
     pub snapshot_fingerprint: Digest,
 }
 
+/// Durable callback authority derived from an opaque Kernel lease.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CallbackAuthorityV1 {
+    /// Exact reservation presented by the producer.
+    pub reservation_id: ReservationId,
+    /// Exact approved producer revision.
+    pub producer_revision: RevisionId,
+    /// Process epoch bound to the presented lease.
+    pub process_epoch: String,
+    /// Wall-clock sample from which the lease deadline was derived.
+    pub lease_wall_millis: String,
+    /// Monotonic sample from which the lease deadline was derived.
+    pub lease_monotonic_millis: String,
+    /// Derived monotonic deadline in the same process epoch.
+    pub deadline_monotonic_millis: String,
+    /// Domain-separated fingerprint of the complete presented lease.
+    pub lease_fingerprint: Digest,
+}
+
 /// Authoritative terminal settlement payload.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -551,6 +596,13 @@ pub struct OperationSettledPayloadV1 {
         deserialize_with = "deserialize_present_option"
     )]
     pub callback_fingerprint: Option<Digest>,
+    /// Durable producer and lease authority for callback-driven settlement.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub callback_authority: Option<CallbackAuthorityV1>,
     /// Terminal outcome.
     pub outcome: OperationOutcomeV1,
     /// Usage evidence authority.
@@ -629,6 +681,8 @@ pub struct CancellationRequestedPayloadV1 {
     pub requester: AgentId,
     /// Exact target.
     pub target: CancellationTargetV1,
+    /// Exact lifecycle checkpoint at cancellation admission.
+    pub lifecycle_admission: LifecycleAdmissionV1,
     /// Stable reason.
     pub reason_code: String,
     /// Canonical UTC request time.
@@ -649,6 +703,8 @@ pub struct CancellationAcknowledgedPayloadV1 {
     pub producer_revision: RevisionId,
     /// Closed acknowledgement authority (`producer_lease` or `kernel_recovery`).
     pub authority_kind: String,
+    /// Durable opaque-lease identity presented by the acknowledgement authority.
+    pub lease_authority: CallbackAuthorityV1,
     /// Canonical UTC acknowledgement time.
     pub acknowledged_at_utc: String,
 }
@@ -663,6 +719,8 @@ pub struct LateResultObservedPayloadV1 {
     pub callback_id: CallbackId,
     /// Canonical callback command fingerprint.
     pub callback_fingerprint: Digest,
+    /// Durable producer and lease authority for the late callback.
+    pub callback_authority: CallbackAuthorityV1,
     /// Safe classification.
     pub classification: String,
     /// Digest of redacted source bytes.
@@ -785,6 +843,8 @@ pub struct RuntimeControlProjectionHashViewV1 {
     pub revoked_grants: Vec<CapabilityId>,
     /// Sorted complete cancellation state.
     pub cancellations: Vec<RuntimeControlCancellationProjectionV1>,
+    /// Ordered redacted late-result audits with durable callback authority.
+    pub late_results: Vec<LateResultObservedPayloadV1>,
     /// Cancellation request count.
     pub cancellation_count: String,
     /// Late-result audit count.
@@ -829,6 +889,8 @@ pub struct RuntimeControlProjectionV1 {
     pub revoked_grants: Vec<CapabilityId>,
     /// Sorted complete cancellation state.
     pub cancellations: Vec<RuntimeControlCancellationProjectionV1>,
+    /// Ordered redacted late-result audits with durable callback authority.
+    pub late_results: Vec<LateResultObservedPayloadV1>,
     /// Cancellation request count.
     pub cancellation_count: String,
     /// Late-result audit count.

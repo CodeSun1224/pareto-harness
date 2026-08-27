@@ -301,6 +301,66 @@ async fn reserve(store: &EventStore, fixture: &Fixture, suffix: &str) -> Operati
     }
 }
 
+async fn completed_reservation_template(
+    fixture: &Fixture,
+    suffix: &str,
+) -> (EventStore, OperationReservedPayloadV1) {
+    let store = create_running(fixture).await;
+    let lease = reserve(&store, fixture, suffix).await;
+    let reservation = store
+        .runtime_control_projection(&fixture.registry(), &fixture.target())
+        .await
+        .unwrap()
+        .operations
+        .into_iter()
+        .find(|operation| operation.operation_id == lease.operation_id)
+        .unwrap()
+        .reservation;
+    store
+        .settle_operation(
+            &fixture.registry(),
+            &fixture.target(),
+            &lease,
+            &settlement(fixture, suffix, OperationOutcomeV1::Succeeded, 1),
+        )
+        .await
+        .unwrap();
+    (store, reservation)
+}
+
+fn retarget_reservation(
+    reservation: &mut OperationReservedPayloadV1,
+    suffix: &str,
+    reserved_at_utc: &str,
+) {
+    reservation.operation_id = OperationId::parse(format!("operation_{suffix}")).unwrap();
+    reservation.reservation_id = ReservationId::parse(format!("reservation_{suffix}")).unwrap();
+    reservation.timeout_key.operation_id = reservation.operation_id.clone();
+    reservation.timeout_key.reservation_id = reservation.reservation_id.clone();
+    reservation.reserved_at_utc = reserved_at_utc.to_owned();
+}
+
+async fn append_forged_reservation(
+    store: &EventStore,
+    fixture: &Fixture,
+    event_id: &str,
+    payload: &OperationReservedPayloadV1,
+) {
+    let mut tx = store.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let aggregate = load_control(&mut tx, &fixture.registry(), &fixture.target()).await.unwrap();
+    append_control(
+        tx,
+        &aggregate,
+        &EventId::parse(event_id).unwrap(),
+        &payload.reserved_at_utc,
+        "corr-forged-reservation",
+        "operation-reserved",
+        payload,
+    )
+    .await
+    .unwrap();
+}
+
 fn settlement(fixture: &Fixture, suffix: &str, outcome: OperationOutcomeV1, metered: u64) -> SettlementCommand {
     let contract = retained_operation_contract(fixture.set.reference()).unwrap();
     let mut meter = KernelMeter::new(&contract, "epoch-a").unwrap();
@@ -370,7 +430,27 @@ async fn revocation_and_expiry() {
     let store = create_running(&fixture).await;
     store.revoke_capability(&fixture.registry(), &fixture.target(), &RevokeCapabilityCommand { event_id: EventId::parse("event_revoke-root").unwrap(), occurred_at: "2026-08-26T00:00:07.000Z".to_owned(), correlation_id: "corr-revoke".to_owned(), grant_id: CapabilityId::parse("cap_root").unwrap(), reason_code: "owner-revoked".to_owned() }).await.unwrap();
     let result = store.reserve_protected_operation(&fixture.registry(), &fixture.target(), &fixture.proposal("revoked"), &live_clock()).await.unwrap();
-    assert!(matches!(result, ReserveResult::Denied { .. }));
+    assert!(matches!(result, ReserveResult::Denied { reason_code, .. } if reason_code == "capability_revoked"));
+
+    let time_fixture = Fixture::new("run_capability-time-boundaries");
+    let time_store = create_running(&time_fixture).await;
+    let mut bounded = time_fixture.grant("cap_time-bounded", "agent_owner", "agent_child", None, None, false, 1, 4);
+    bounded.issued_at_utc = "2026-08-26T00:00:06.000Z".to_owned();
+    bounded.constraints.not_before_utc = "2026-08-26T00:00:20.000Z".to_owned();
+    bounded.constraints.expires_at_utc = "2026-08-26T00:00:30.000Z".to_owned();
+    let bounded_issued_at = bounded.issued_at_utc.clone();
+    time_store.issue_capability(&time_fixture.registry(), &time_fixture.target(), &EventId::parse("event_cap-time-bounded").unwrap(), &bounded_issued_at, "corr-time-bounded", bounded).await.unwrap();
+    let before = time_store.reserve_protected_operation(&time_fixture.registry(), &time_fixture.target_as("agent_child"), &time_fixture.proposal("before-not-before"), &live_clock()).await.unwrap();
+    assert!(matches!(before, ReserveResult::Denied { reason_code, .. } if reason_code == "capability_not_yet_valid"));
+    assert!(matches!(time_store.reserve_protected_operation(
+        &time_fixture.registry(), &time_fixture.target_as("agent_child"), &time_fixture.proposal("at-not-before"),
+        &FakeClock::at("2026-08-26T00:00:20.000Z", 2_000, "epoch-a"),
+    ).await.unwrap(), ReserveResult::Reserved { .. }));
+    let expired = time_store.reserve_protected_operation(
+        &time_fixture.registry(), &time_fixture.target_as("agent_child"), &time_fixture.proposal("at-expiry"),
+        &FakeClock::at("2026-08-26T00:00:30.000Z", 3_000, "epoch-a"),
+    ).await.unwrap();
+    assert!(matches!(expired, ReserveResult::Denied { reason_code, .. } if reason_code == "capability_expired"));
 }
 
 #[tokio::test]
@@ -528,7 +608,9 @@ fn cancellation_propagation() {
         reservation_id: ReservationId::parse("reservation_probe").unwrap(),
         subject_actor: AgentId::parse("agent_owner").unwrap(), task_id: Some(TaskId::parse("task_probe").unwrap()), resource: resource(), operation: "invoke".to_owned(), grant_id: CapabilityId::parse("cap_probe").unwrap(),
         authorization_decision: AuthorizationDecisionV1 { outcome: AuthorizationOutcomeV1::Allowed, reason_code: "allowed".to_owned(), grant_id: Some(CapabilityId::parse("cap_probe").unwrap()), request_digest: digest('1') },
-        requested_usage: usage(1), trusted_reservation: usage(1), allocations: Vec::new(), operation_contract_revision: RevisionId::parse("rev_operation").unwrap(), producer_revision: RevisionId::parse("rev_producer").unwrap(), callback_namespace: "probe".to_owned(), interruptibility: OperationInterruptibilityV1::Cooperative, absolute_deadline_utc: "2026-08-26T00:01:00.000Z".to_owned(),
+        requested_usage: usage(1), trusted_reservation: usage(1), allocations: Vec::new(), operation_contract_revision: RevisionId::parse("rev_operation").unwrap(), adapter_revision: RevisionId::parse("rev_adapter").unwrap(),
+        lifecycle_admission: LifecycleAdmissionV1 { cursor: EventCursor { sequence: "5".to_owned(), event_id: EventId::parse("event_task-running").unwrap() }, run_state: RunState::Running, task_state: Some(TaskState::Running) },
+        producer_revision: RevisionId::parse("rev_producer").unwrap(), initial_process_epoch: "epoch-a".to_owned(), callback_namespace: "probe".to_owned(), interruptibility: OperationInterruptibilityV1::Cooperative, absolute_deadline_utc: "2026-08-26T00:01:00.000Z".to_owned(),
         timeout_key: TimeoutKeyV1 { recovery_revision: RevisionId::parse("rev_recovery").unwrap(), scope: IsolationScope { tenant_id: TenantId::parse("tenant_local").unwrap(), user_id: None, workspace_id: WorkspaceId::parse("workspace_repo").unwrap(), run_id: RunId::parse("run_probe").unwrap(), agent_id: AgentId::parse("agent_owner").unwrap() }, control_stream_id: StreamId::parse("stream_runtime-control-probe").unwrap(), operation_id: OperationId::parse("operation_probe").unwrap(), reservation_id: ReservationId::parse("reservation_probe").unwrap(), absolute_deadline_utc: "2026-08-26T00:01:00.000Z".to_owned(), timeout_policy_revision: RevisionId::parse("rev_timeout").unwrap(), clock_revision: RevisionId::parse("rev_clock").unwrap(), source_schema_set_ref: generate_schema_bundle().unwrap().reference, source_protocol_limits_ref: pareto_protocol::ProtocolLimitsRef { profile: "protocol-limits-v1".to_owned(), digest: Digest::parse(ProtocolLimitsV1::DIGEST).unwrap() }, operation_contract_revision: RevisionId::parse("rev_operation").unwrap(), meter_revision: RevisionId::parse("rev_meter").unwrap() },
         warnings: Vec::new(), reserved_at_utc: "2026-08-26T00:00:00.000Z".to_owned(),
     };
@@ -566,7 +648,7 @@ async fn timeout_recovery() {
     let command = store.prepare_timeout_recovery(
         &fixture.registry(), &fixture.target(), timeout_request("operation_timeout", "corr-timeout", None, digest('e')), &at_deadline,
     ).await.unwrap();
-    assert_eq!(command.event_id.as_str(), "event_0c88f3440967d8a095efd6ad7085a7c655fd4c8e0ceb585c689600dbca85be91");
+    assert_eq!(command.event_id.as_str(), "event_5f31f90df9f053e582311dd4ae733cb0d383d1ceaf252dc08411626084c31ffc");
     let first = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     let retry = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     assert_eq!(append_identity(&first), append_identity(&retry));
@@ -578,12 +660,28 @@ async fn timeout_recovery() {
     assert_eq!(append_identity(&retry), append_identity(&later));
 }
 
-#[test]
-fn deadline() {
-    let before = FakeClock::at("2026-08-26T00:00:59.999Z", 49_999, "epoch-a");
-    let at = FakeClock::at("2026-08-26T00:01:00.000Z", 50_000, "epoch-a");
-    assert!(before.sample.wall_millis < at.sample.wall_millis);
-    assert!(before.sample.monotonic_millis < at.sample.monotonic_millis);
+#[tokio::test]
+async fn deadline() {
+    let before_fixture = Fixture::new("run_deadline-before");
+    let before_store = create_running(&before_fixture).await;
+    let before_lease = reserve(&before_store, &before_fixture, "deadline-before").await;
+    let mut before = settlement(&before_fixture, "deadline-before", OperationOutcomeV1::Succeeded, 1);
+    before.decision_clock = FakeClock::at("2026-08-26T00:00:59.999Z", 50_999, "epoch-a").sample();
+    before.meter_snapshot = None;
+    before_store.settle_operation(&before_fixture.registry(), &before_fixture.target(), &before_lease, &before).await.unwrap();
+
+    let at_fixture = Fixture::new("run_deadline-at");
+    let at_store = create_running(&at_fixture).await;
+    let at_lease = reserve(&at_store, &at_fixture, "deadline-at").await;
+    let at_clock = FakeClock::at("2026-08-26T00:01:00.000Z", 51_000, "epoch-a");
+    let mut at = settlement(&at_fixture, "deadline-at", OperationOutcomeV1::Succeeded, 1);
+    at.decision_clock = at_clock.sample();
+    assert_eq!(at_store.settle_operation(&at_fixture.registry(), &at_fixture.target(), &at_lease, &at).await.unwrap_err().kind, RuntimeControlErrorKind::DeadlineExceeded);
+    let timeout = at_store.prepare_timeout_recovery(
+        &at_fixture.registry(), &at_fixture.target(), timeout_request("operation_deadline-at", "corr-deadline-at", None, digest('4')), &at_clock,
+    ).await.unwrap();
+    at_store.recover_timeout(&at_fixture.registry(), &at_fixture.target(), &timeout).await.unwrap();
+    assert_eq!(at_store.runtime_control_projection(&at_fixture.registry(), &at_fixture.target()).await.unwrap().operations[0].outcome, Some(OperationOutcomeV1::TimedOut));
 }
 
 #[tokio::test]
@@ -773,20 +871,64 @@ fn budget_model() {
     assert_eq!(vector_sub(&reserved, &consumed).unwrap()[&BudgetDimensionV1::Tokens], 6);
 }
 
-#[test]
-fn model_sequences() {
-    for reserved in 1..=8 {
-        for consumed in 0..=reserved {
-            for refunded in 0..=consumed {
-                let live_reserved = reserved - consumed;
-                let net_consumed = consumed - refunded;
-                assert!(live_reserved + net_consumed + refunded == reserved);
-            }
-        }
-    }
+#[tokio::test]
+async fn model_sequences() {
     let vector = usage(1);
     assert_eq!(canonical_vector(&vector).unwrap(), vector);
     assert!(vector_map(&[vector[0].clone(), vector[0].clone()]).is_err());
+
+    for terminal in ["complete", "cancel", "timeout"] {
+        let fixture = Fixture::new(&format!("run_bounded-model-{terminal}"));
+        let store = create_running(&fixture).await;
+        let suffix = format!("model-{terminal}");
+        let lease = reserve(&store, &fixture, &suffix).await;
+        match terminal {
+            "complete" => {
+                store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, &suffix, OperationOutcomeV1::Succeeded, 1)).await.unwrap();
+            }
+            "cancel" => {
+                let cancellation_id = CancellationId::parse("cancel_model").unwrap();
+                store.request_cancellation(&fixture.registry(), &fixture.target(), &CancellationCommand {
+                    event_id: EventId::parse("event_cancel-model").unwrap(), occurred_at: "2026-08-26T00:00:11.000Z".to_owned(), correlation_id: "corr-cancel-model".to_owned(), cancellation_id: cancellation_id.clone(),
+                    target: CancellationTargetV1::Operation { operation_id: lease.operation_id.clone() }, reason_code: "model".to_owned(),
+                }).await.unwrap();
+                let ack = CancellationAckCommand::from_producer(
+                    EventId::parse("event_ack-model").unwrap(), "corr-ack-model".to_owned(), cancellation_id,
+                    lease.operation_id.clone(), lease.reservation_id.clone(), lease.producer_revision.clone(),
+                    &FakeClock::at("2026-08-26T00:00:12.000Z", 1_200, "epoch-a"),
+                ).unwrap();
+                store.acknowledge_cancellation(&fixture.registry(), &fixture.target(), &lease, &ack).await.unwrap();
+                store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &settlement(&fixture, &suffix, OperationOutcomeV1::Cancelled, 1)).await.unwrap();
+            }
+            "timeout" => {
+                let timeout = store.prepare_timeout_recovery(
+                    &fixture.registry(), &fixture.target(), timeout_request(lease.operation_id.as_str(), "corr-timeout-model", None, digest('6')),
+                    &FakeClock::at("2026-08-26T00:01:00.000Z", 51_000, "epoch-a"),
+                ).await.unwrap();
+                store.recover_timeout(&fixture.registry(), &fixture.target(), &timeout).await.unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let mut late = settlement(&fixture, &suffix, OperationOutcomeV1::Succeeded, 1);
+        late.event_id = EventId::parse(format!("event_late-{terminal}")).unwrap();
+        late.callback_id = CallbackId::parse(format!("callback_fake-late-{terminal}")).unwrap();
+        late.redacted_payload_digest = digest('7');
+        if terminal == "timeout" {
+            late.decision_clock = FakeClock::at("2026-08-26T00:01:00.000Z", 51_000, "epoch-a").sample();
+        }
+        store.settle_operation(&fixture.registry(), &fixture.target(), &lease, &late).await.unwrap();
+        let projection = store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap();
+        assert_eq!(projection.operations.len(), 1);
+        let settlement = projection.operations[0].settlement.as_ref().unwrap();
+        assert!(vector_map(&settlement.accounted_usage).unwrap().iter().all(|(dimension, accounted)| {
+            let reserved = vector_map(&projection.operations[0].reservation.trusted_reservation).unwrap();
+            let released = vector_map(&settlement.released_usage).unwrap();
+            accounted + released.get(dimension).copied().unwrap_or(0) == reserved.get(dimension).copied().unwrap_or(0)
+        }));
+        assert!(projection.accounts.iter().all(|account| account.reserved.as_u64() == 0));
+        assert_eq!(projection.late_results.len(), 1);
+        assert_eq!(store.replay_runtime_control(&fixture.registry(), &fixture.target()).await.unwrap(), projection);
+    }
 }
 
 #[tokio::test]
@@ -911,17 +1053,57 @@ async fn callback_authority_reopen_rejects_previous_process_epoch_lease() {
     let fixture = Fixture::new("run_reopen-stale-lease");
     let store = create_running(&fixture).await;
     let lease = reserve(&store, &fixture, "reopen-stale").await;
+    let cancellation_id = CancellationId::parse("cancel_reopen-stale").unwrap();
+    store.request_cancellation(&fixture.registry(), &fixture.target(), &CancellationCommand {
+        event_id: EventId::parse("event_cancel-reopen-stale").unwrap(), occurred_at: "2026-08-26T00:00:11.000Z".to_owned(), correlation_id: "corr-cancel-reopen".to_owned(),
+        cancellation_id: cancellation_id.clone(), target: CancellationTargetV1::Operation { operation_id: lease.operation_id.clone() }, reason_code: "restart".to_owned(),
+    }).await.unwrap();
     let store_id = store.store_id.clone();
     drop(store);
     let reopened = EventStore::open_pinned(&fixture.path, &store_id).await.unwrap();
     let mut completion = settlement(&fixture, "reopen-stale", OperationOutcomeV1::Succeeded, 1);
     completion.decision_clock = FakeClock::at("2026-08-26T00:00:20.000Z", 100, "epoch-after-reopen").sample();
     assert_eq!(reopened.settle_operation(&fixture.registry(), &fixture.target(), &lease, &completion).await.unwrap_err().kind, RuntimeControlErrorKind::ProducerUnauthorized);
-    let recovery = reopened.prepare_timeout_recovery(
-        &fixture.registry(), &fixture.target(), timeout_request("operation_reopen-stale", "corr-reopen-new-command", None, digest('a')),
+    assert_eq!(reopened.rebind_operation_lease(
+        &fixture.registry(), &fixture.target(), &OperationId::parse("operation_reopen-stale").unwrap(),
+        &FakeClock::at("2026-08-26T00:00:09.000Z", 90, "epoch-after-reopen"),
+    ).await.unwrap_err().kind, RuntimeControlErrorKind::ClockInvalid);
+    let before_events: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events").fetch_one(&reopened.pool).await.unwrap();
+    let rebound = reopened.rebind_operation_lease(
+        &fixture.registry(), &fixture.target(), &OperationId::parse("operation_reopen-stale").unwrap(),
+        &FakeClock::at("2026-08-26T00:00:20.000Z", 100, "epoch-after-reopen"),
+    ).await.unwrap();
+    assert_eq!(before_events, sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM events").fetch_one(&reopened.pool).await.unwrap());
+    assert!(reopened.cancellation_probe(
+        &fixture.registry(), &fixture.target(), &rebound.lease,
+        &FakeClock::at("2026-08-26T00:00:21.000Z", 101, "epoch-after-reopen"),
+    ).await.unwrap().requested);
+    let recovery_ack = CancellationAckCommand::from_producer(
+        EventId::parse("event_ack-reopen-recovery").unwrap(), "corr-ack-reopen-recovery".to_owned(), cancellation_id,
+        rebound.lease.operation_id.clone(), rebound.lease.reservation_id.clone(), rebound.lease.producer_revision.clone(),
+        &FakeClock::at("2026-08-26T00:00:21.000Z", 101, "epoch-after-reopen"),
+    ).unwrap();
+    reopened.acknowledge_cancellation_recovery(&fixture.registry(), &fixture.target(), &rebound.cancellation_recovery, &recovery_ack).await.unwrap();
+    let mut rebound_completion = settlement(&fixture, "reopen-stale", OperationOutcomeV1::Cancelled, 1);
+    rebound_completion.decision_clock = FakeClock::at("2026-08-26T00:00:22.000Z", 102, "epoch-after-reopen").sample();
+    rebound_completion.meter_snapshot = None;
+    reopened.settle_operation(&fixture.registry(), &fixture.target(), &rebound.lease, &rebound_completion).await.unwrap();
+
+    let expired_fixture = Fixture::new("run_reopen-expired");
+    let expired_store = create_running(&expired_fixture).await;
+    reserve(&expired_store, &expired_fixture, "reopen-expired").await;
+    let expired_store_id = expired_store.store_id.clone();
+    drop(expired_store);
+    let expired_reopened = EventStore::open_pinned(&expired_fixture.path, &expired_store_id).await.unwrap();
+    assert_eq!(expired_reopened.rebind_operation_lease(
+        &expired_fixture.registry(), &expired_fixture.target(), &OperationId::parse("operation_reopen-expired").unwrap(),
+        &FakeClock::at("2026-08-26T00:01:00.000Z", 500, "epoch-after-reopen"),
+    ).await.unwrap_err().kind, RuntimeControlErrorKind::DeadlineExceeded);
+    let recovery = expired_reopened.prepare_timeout_recovery(
+        &expired_fixture.registry(), &expired_fixture.target(), timeout_request("operation_reopen-expired", "corr-reopen-expired", None, digest('a')),
         &FakeClock::at("2026-08-26T00:01:00.000Z", 500, "epoch-after-reopen"),
     ).await.unwrap();
-    reopened.recover_timeout(&fixture.registry(), &fixture.target(), &recovery).await.unwrap();
+    expired_reopened.recover_timeout(&expired_fixture.registry(), &expired_fixture.target(), &recovery).await.unwrap();
 }
 
 #[tokio::test]
@@ -1031,11 +1213,16 @@ async fn cancellation_authority_probe_admission_future_and_recovery_ack() {
         OperationId::parse("operation_probe-current").unwrap(), ReservationId::parse("reservation_probe-current").unwrap(),
         RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(), &FakeClock::at("2026-08-26T00:00:13.000Z", 1_300, "epoch-b"),
     ).unwrap();
-    store.acknowledge_cancellation_recovery(&fixture.registry(), &fixture.target(), &ack).await.unwrap();
+    assert_eq!(store.rebind_operation_lease(&fixture.registry(), &fixture.target(), &OperationId::parse("operation_probe-current").unwrap(), &live_clock()).await.unwrap_err().kind, RuntimeControlErrorKind::ProducerUnauthorized);
+    let rebound = store.rebind_operation_lease(
+        &fixture.registry(), &fixture.target(), &OperationId::parse("operation_probe-current").unwrap(),
+        &FakeClock::at("2026-08-26T00:00:13.000Z", 1_300, "epoch-b"),
+    ).await.unwrap();
+    store.acknowledge_cancellation_recovery(&fixture.registry(), &fixture.target(), &rebound.cancellation_recovery, &ack).await.unwrap();
     let mut ack_mutation = ack.clone();
     ack_mutation.decision_clock.canonical_utc = "2026-08-26T00:00:14.000Z".to_owned();
     ack_mutation.decision_clock.wall_millis += 1_000;
-    assert_eq!(store.acknowledge_cancellation_recovery(&fixture.registry(), &fixture.target(), &ack_mutation).await.unwrap_err().kind, RuntimeControlErrorKind::IdempotencyConflict);
+    assert_eq!(store.acknowledge_cancellation_recovery(&fixture.registry(), &fixture.target(), &rebound.cancellation_recovery, &ack_mutation).await.unwrap_err().kind, RuntimeControlErrorKind::IdempotencyConflict);
 }
 
 #[tokio::test]
@@ -1145,6 +1332,7 @@ async fn compatibility_rejects_schema_valid_illegal_budget_and_cancel_history() 
         reservation_id: ReservationId::parse("reservation_illegal-budget").unwrap(),
         callback_id: Some(CallbackId::parse("callback_fake-illegal-budget").unwrap()),
         callback_fingerprint: Some(digest('7')),
+        callback_authority: None,
         outcome: OperationOutcomeV1::Succeeded,
         evidence_class: UsageEvidenceClassV1::KernelMeterVerified,
         kernel_meter_evidence: None,
@@ -1168,6 +1356,13 @@ async fn compatibility_rejects_schema_valid_illegal_budget_and_cancel_history() 
         reservation_id: ReservationId::parse("reservation_never-reserved").unwrap(),
         producer_revision: RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
         authority_kind: "kernel_recovery".to_owned(),
+        lease_authority: CallbackAuthorityV1 {
+            reservation_id: ReservationId::parse("reservation_never-reserved").unwrap(),
+            producer_revision: RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
+            process_epoch: "epoch-b".to_owned(), lease_wall_millis: "0".to_owned(),
+            lease_monotonic_millis: "0".to_owned(), deadline_monotonic_millis: "1".to_owned(),
+            lease_fingerprint: digest('9'),
+        },
         acknowledged_at_utc: "2026-08-26T00:00:20.000Z".to_owned(),
     };
     let mut tx = cancel_store.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
@@ -1177,6 +1372,92 @@ async fn compatibility_rejects_schema_valid_illegal_budget_and_cancel_history() 
         &ack.acknowledged_at_utc, "corr-illegal-cancel", "cancellation-acknowledged", &ack,
     ).await.unwrap();
     assert_eq!(cancel_store.runtime_control_projection(&cancel_fixture.registry(), &cancel_fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+}
+
+#[tokio::test]
+async fn compatibility_rejects_forged_reservation_authority_cancellation_and_lifecycle() {
+    let cancelled_fixture = Fixture::new("run_forged-reserve-cancelled");
+    let (cancelled_store, mut cancelled) = completed_reservation_template(&cancelled_fixture, "cancel-seed").await;
+    cancelled_store.request_cancellation(&cancelled_fixture.registry(), &cancelled_fixture.target(), &CancellationCommand {
+        event_id: EventId::parse("event_cancel-before-forged-reserve").unwrap(),
+        occurred_at: "2026-08-26T00:00:21.000Z".to_owned(), correlation_id: "corr-cancel-before-forge".to_owned(),
+        cancellation_id: CancellationId::parse("cancel_before-forged-reserve").unwrap(),
+        target: CancellationTargetV1::Task { task_id: cancelled_fixture.task_id.clone() }, reason_code: "stop".to_owned(),
+    }).await.unwrap();
+    retarget_reservation(&mut cancelled, "forged-after-cancel", "2026-08-26T00:00:22.000Z");
+    append_forged_reservation(&cancelled_store, &cancelled_fixture, "event_forged-after-cancel", &cancelled).await;
+    assert_eq!(cancelled_store.runtime_control_projection(&cancelled_fixture.registry(), &cancelled_fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+
+    let usage_fixture = Fixture::new("run_forged-reserve-usage");
+    let (usage_store, mut low_usage) = completed_reservation_template(&usage_fixture, "usage-seed").await;
+    let mut low_grant = usage_fixture.grant("cap_low-usage", "agent_owner", "agent_owner", None, None, false, 1, 1);
+    low_grant.issued_at_utc = "2026-08-26T00:00:21.000Z".to_owned();
+    usage_store.issue_capability(&usage_fixture.registry(), &usage_fixture.target(), &EventId::parse("event_cap-low-usage").unwrap(), &low_grant.issued_at_utc, "corr-cap-low", low_grant.clone()).await.unwrap();
+    retarget_reservation(&mut low_usage, "forged-low-usage", "2026-08-26T00:00:22.000Z");
+    low_usage.grant_id = low_grant.grant_id.clone();
+    low_usage.authorization_decision.grant_id = Some(low_grant.grant_id);
+    append_forged_reservation(&usage_store, &usage_fixture, "event_forged-low-usage", &low_usage).await;
+    assert_eq!(usage_store.runtime_control_projection(&usage_fixture.registry(), &usage_fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+
+    for (suffix, mutation) in [
+        ("adapter", 0_u8),
+        ("cursor", 1_u8),
+        ("deadline", 2_u8),
+        ("timeout-policy", 3_u8),
+    ] {
+        let fixture = Fixture::new(&format!("run_forged-reserve-{suffix}"));
+        let (store, mut forged) = completed_reservation_template(&fixture, &format!("{suffix}-seed")).await;
+        retarget_reservation(&mut forged, &format!("forged-{suffix}"), "2026-08-26T00:00:22.000Z");
+        match mutation {
+            0 => forged.adapter_revision = RevisionId::parse("rev_wrong-adapter").unwrap(),
+            1 => forged.lifecycle_admission.cursor.event_id = EventId::parse("event_run-created").unwrap(),
+            2 => forged.timeout_key.absolute_deadline_utc = "2026-08-26T00:00:59.000Z".to_owned(),
+            3 => forged.timeout_key.timeout_policy_revision = RevisionId::parse("rev_wrong-timeout-policy").unwrap(),
+            _ => unreachable!(),
+        }
+        append_forged_reservation(&store, &fixture, &format!("event_forged-{suffix}"), &forged).await;
+        assert_eq!(store.runtime_control_projection(&fixture.registry(), &fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt, "{suffix}");
+    }
+}
+
+#[tokio::test]
+async fn compatibility_rejects_forged_settlement_and_late_lease_authority() {
+    let settlement_fixture = Fixture::new("run_forged-settlement-authority");
+    let settlement_store = create_running(&settlement_fixture).await;
+    let lease = reserve(&settlement_store, &settlement_fixture, "forged-settlement").await;
+    let reservation = settlement_store.runtime_control_projection(&settlement_fixture.registry(), &settlement_fixture.target()).await.unwrap().operations[0].reservation.clone();
+    let command = settlement(&settlement_fixture, "forged-settlement", OperationOutcomeV1::Succeeded, 1);
+    let mut forged_settlement = settlement_payload(&reservation, &lease, &command).unwrap();
+    forged_settlement.callback_authority.as_mut().unwrap().process_epoch = "epoch-forged".to_owned();
+    let mut tx = settlement_store.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let aggregate = load_control(&mut tx, &settlement_fixture.registry(), &settlement_fixture.target()).await.unwrap();
+    append_control(
+        tx, &aggregate, &EventId::parse("event_forged-settlement-authority").unwrap(),
+        &forged_settlement.settled_at_utc, "corr-forged-settlement-authority", "operation-settled", &forged_settlement,
+    ).await.unwrap();
+    assert_eq!(settlement_store.runtime_control_projection(&settlement_fixture.registry(), &settlement_fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
+
+    let late_fixture = Fixture::new("run_forged-late-authority");
+    let late_store = create_running(&late_fixture).await;
+    let late_lease = reserve(&late_store, &late_fixture, "forged-late").await;
+    late_store.settle_operation(&late_fixture.registry(), &late_fixture.target(), &late_lease, &settlement(&late_fixture, "forged-late", OperationOutcomeV1::Succeeded, 1)).await.unwrap();
+    let mut authority = durable_lease_authority(&late_lease);
+    authority.process_epoch = "epoch-forged".to_owned();
+    let late = LateResultObservedPayloadV1 {
+        operation_id: OperationId::parse("operation_forged-late").unwrap(),
+        callback_id: CallbackId::parse("callback_fake-forged-late-second").unwrap(),
+        callback_fingerprint: digest('8'), callback_authority: authority,
+        classification: "late_after_succeeded".to_owned(), payload_digest: digest('9'),
+        redaction_policy_revision: RevisionId::parse("rev_redaction-v1").unwrap(),
+        received_at_utc: "2026-08-26T00:00:21.000Z".to_owned(),
+    };
+    let mut tx = late_store.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let aggregate = load_control(&mut tx, &late_fixture.registry(), &late_fixture.target()).await.unwrap();
+    append_control(
+        tx, &aggregate, &EventId::parse("event_forged-late-authority").unwrap(),
+        &late.received_at_utc, "corr-forged-late-authority", "late-result-observed", &late,
+    ).await.unwrap();
+    assert_eq!(late_store.runtime_control_projection(&late_fixture.registry(), &late_fixture.target()).await.unwrap_err().kind, RuntimeControlErrorKind::AggregateCorrupt);
 }
 
 #[tokio::test]

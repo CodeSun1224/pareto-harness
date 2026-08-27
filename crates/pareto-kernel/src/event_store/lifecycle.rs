@@ -161,12 +161,20 @@ pub(super) struct LifecycleState {
     pub(super) sequence: i64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct LifecycleCheckpoint {
+    pub(super) event_id: EventId,
+    pub(super) run_state: RunState,
+    pub(super) tasks: BTreeMap<TaskId, TaskState>,
+}
+
 #[derive(Debug)]
 pub(super) struct EstablishedAggregate {
     pub(super) state: LifecycleState,
     pub(super) schema_set: Arc<SchemaSet>,
     pub(super) limits: ProtocolLimitsRef,
     pub(super) stream_id: StreamId,
+    pub(super) checkpoints: BTreeMap<i64, LifecycleCheckpoint>,
 }
 
 impl EventStore {
@@ -605,12 +613,58 @@ pub(super) async fn load_established(
         );
     }
     let state = fold_lifecycle(&schema_set, &events)?;
+    let checkpoints = lifecycle_checkpoints(&schema_set, &events)?;
     Ok(EstablishedAggregate {
         state,
         schema_set,
         limits,
         stream_id,
+        checkpoints,
     })
+}
+
+fn lifecycle_checkpoints(
+    schema_set: &SchemaSet,
+    events: &[ValidatedEvent],
+) -> Result<BTreeMap<i64, LifecycleCheckpoint>, LifecycleError> {
+    let first = events
+        .first()
+        .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateNotFound))?;
+    let created = first
+        .downcast_payload::<RunCreatedPayload>()
+        .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+    let mut state = LifecycleState {
+        manifest: created.manifest.clone(),
+        run_state: RunState::Created,
+        tasks: BTreeMap::new(),
+        sequence: 1,
+    };
+    let mut checkpoints = BTreeMap::from([(
+        1,
+        lifecycle_checkpoint(&state, first.envelope().event_id.clone()),
+    )]);
+    for (index, event) in events.iter().enumerate().skip(1) {
+        let sequence = i64::try_from(index + 1)
+            .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+        apply_lifecycle_event(schema_set, &mut state, event, sequence)?;
+        checkpoints.insert(
+            sequence,
+            lifecycle_checkpoint(&state, event.envelope().event_id.clone()),
+        );
+    }
+    Ok(checkpoints)
+}
+
+fn lifecycle_checkpoint(state: &LifecycleState, event_id: EventId) -> LifecycleCheckpoint {
+    LifecycleCheckpoint {
+        event_id,
+        run_state: state.run_state,
+        tasks: state
+            .tasks
+            .iter()
+            .map(|(task_id, record)| (task_id.clone(), record.state))
+            .collect(),
+    }
 }
 
 async fn aggregate_event_count(

@@ -6,7 +6,7 @@
 - Spec: SPEC-0006 (`approved`)
 - RFC/ADR: RFC-0006 / ADR-0007 (`accepted`)
 - Git revision or diff: exact implementation candidate `9f979f0ccaa6be0431ca794f584fd0c6df83af9c`
-- Environment: Windows PowerShell, 2026-08-26, Asia/Shanghai
+- Environment: Windows PowerShell, 2026-08-27, Asia/Shanghai
 
 ## Results
 
@@ -56,9 +56,24 @@
 | Full regression | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 118 passed/1 ignored；Protocol 9 + 23 passed/1 ignored | Projection golden 随最终 SchemaSet canonical identity 更新后全仓绿色 |
 | Docs freshness before focused re-review | `python scripts/check_docs.py` | expected gate failure | only REVIEW-0001..0005 stale against repaired substantive paths | 原独立 REVIEW-0007 reviewer 必须在 exact repair revision 上复审并实质恢复 freshness |
 
+## REVIEW-0007 second repair candidate
+
+REVIEW-0007 对 `ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684` focused re-review 后关闭
+F-001/F-002/F-004/F-006，保留 F-003/F-005/F-007/F-008/F-009 五个 Major。
+本轮实现者证据只证明候选具备复审条件，finding 仍必须由同一独立 reviewer 关闭。
+
+| Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
+|---|---|---|---|---|
+| Restart lease/recovery authority | `cargo test -p pareto-kernel runtime_control --all-features --offline` | passed | 52 passed | reopen 前 deadline 只读 rebind；旧 epoch/墙钟回退拒绝；recovery ack 必须携带 Kernel-sealed fact；无 re-dispatch/deadline extension |
+| Pure fold and durable provenance | 同一 focused command | passed | forged reservation/cancel/lifecycle/adapter/timeout/settlement/late history fail closed | reservation、lifecycle checkpoint、producer/reservation/lease/process epoch authority 全部持久化并在 reopen/replay 重验 |
+| Time/capability/model matrix | 同一 focused command | passed | exact not-before/expiry、deadline boundary、bounded complete/cancel/timeout sequences | 使用 FakeClock；每序列唯一终态、预算守恒、late audit 唯一且 replay 相等 |
+| Protocol/Schema | `cargo test --workspace --all-targets --all-features --offline`; schema generator twice | passed | Protocol 9 unit + 23 contract；1 ignored observation；`sha256:c3e2fda5…` | 最终内容寻址 set 连续生成稳定；未批准中间 `195669…` 被替换；既有 retained sets 未改写 |
+| Governance/static scope | governance unittest；`check_req0007_scope.py`；fmt；workspace clippy `-D warnings`；`git diff --check` | passed | 21 tests；scope/fmt/clippy/diff green | DB v2、依赖与 real I/O 边界未变 |
+| Full regression | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 120 passed/1 ignored；Protocol 9 + 23 passed/1 ignored | schema publisher drift stderr 是通过中的负例夹具 |
+
 ## Skipped tests
 
-REVIEW-0007 focused independent re-review and post-review full gate rerun remain pending. Real Provider/Tool/network/performance claims are out of scope；ignored tests are observation-only baselines already marked by the repository。
+REVIEW-0007 second focused independent re-review and post-review full gate rerun remain pending. Real Provider/Tool/network/performance claims are out of scope；ignored tests are observation-only baselines already marked by the repository。
 
 ## Remaining limitations
 

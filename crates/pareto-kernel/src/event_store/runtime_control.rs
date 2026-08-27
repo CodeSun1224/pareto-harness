@@ -7,17 +7,18 @@
 use pareto_protocol::{
     AgentId, AuthorizationDecisionV1, AuthorizationOutcomeV1, BudgetAccountId, BudgetAccountV1,
     BudgetAllocationV1, BudgetAmountV1, BudgetDimensionV1, BudgetRefundedPayloadV1, BudgetScopeV1,
-    BudgetVectorEntryV1, CallbackId, CancellationAcknowledgedPayloadV1, CancellationId,
-    CancellationRequestedPayloadV1, CancellationTargetV1, CapabilityGrantV1, CapabilityId,
-    CapabilityIssuedPayloadV1, CapabilityRevokedPayloadV1, ControlMessageRejectedPayloadV1, Digest,
-    EventCursor, EventId, ExecutionMode, IsolationScope, KernelMeterEvidenceV1,
-    LateResultObservedPayloadV1, OperationId, OperationInterruptibilityV1, OperationOutcomeV1,
-    OperationReservedPayloadV1, OperationSettledPayloadV1, ProtectedOperationDeniedPayloadV1,
-    ReservationId, RevisionId, RunState, RuntimeControlAccountProjectionV1,
-    RuntimeControlCancellationProjectionV1, RuntimeControlInitializedPayloadV1,
-    RuntimeControlOperationProjectionV1, RuntimeControlProjectionHashViewV1,
-    RuntimeControlProjectionV1, StreamId, TaskId, TaskState, TimeoutKeyV1,
-    TrustedOperationContractV1, UsageEvidenceClassV1, ValidatedEvent, canonical_json, digest_json,
+    BudgetVectorEntryV1, CallbackAuthorityV1, CallbackId, CancellationAcknowledgedPayloadV1,
+    CancellationId, CancellationRequestedPayloadV1, CancellationTargetV1, CapabilityGrantV1,
+    CapabilityId, CapabilityIssuedPayloadV1, CapabilityRevokedPayloadV1,
+    ControlMessageRejectedPayloadV1, Digest, EventCursor, EventId, ExecutionMode, IsolationScope,
+    KernelMeterEvidenceV1, LateResultObservedPayloadV1, LifecycleAdmissionV1, OperationId,
+    OperationInterruptibilityV1, OperationOutcomeV1, OperationReservedPayloadV1,
+    OperationSettledPayloadV1, ProtectedOperationDeniedPayloadV1, ReservationId, RevisionId,
+    RunState, RuntimeControlAccountProjectionV1, RuntimeControlCancellationProjectionV1,
+    RuntimeControlInitializedPayloadV1, RuntimeControlOperationProjectionV1,
+    RuntimeControlProjectionHashViewV1, RuntimeControlProjectionV1, StreamId, TaskId, TaskState,
+    TimeoutKeyV1, TrustedOperationContractV1, UsageEvidenceClassV1, ValidatedEvent, canonical_json,
+    digest_json,
 };
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
@@ -34,11 +35,12 @@ const FAKE_CONTRACT_REVISION: &str = "rev_fake-operation-v1";
 const FAKE_ADAPTER_REVISION: &str = "rev_fake-adapter-v1";
 const FAKE_METER_REVISION: &str = "rev_kernel-meter-v1";
 const FAKE_METER_POLICY_REVISION: &str = "rev_kernel-meter-policy-v1";
+const FAKE_TIMEOUT_POLICY_REVISION: &str = "rev_timeout-policy";
 const FAKE_PRODUCER_REVISION: &str = "rev_fake-producer-v1";
 const FAKE_CALLBACK_NAMESPACE: &str = "callback_fake-";
 // Updated only when the generated control-capable SchemaSet is deliberately published.
 const RETAINED_CONTROL_SCHEMA_SET_DIGEST: &str =
-    "sha256:19566903f801e66b5a4367ff173b9ff1982232456f9b432fd075db4e4639b1f9";
+    "sha256:c3e2fda5ebfa148029d47131f1394d2a2a2eabc9d4305ccfb14dff31d284bd7e";
 const CONTROL_EVENT_TYPES: [&str; 11] = [
     "budget-refunded",
     "capability-issued",
@@ -174,6 +176,23 @@ pub(super) struct OperationLease {
     reserved_monotonic_millis: u64,
     deadline_monotonic_millis: u64,
     seal: Digest,
+}
+
+/// Process-local proof that a pending operation was reclaimed in a new Kernel epoch.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct CancellationRecoveryFact {
+    scope: IsolationScope,
+    operation_id: OperationId,
+    reservation_id: ReservationId,
+    recovered_wall_millis: u64,
+    lease_authority: CallbackAuthorityV1,
+    seal: Digest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ReboundOperation {
+    pub(super) lease: OperationLease,
+    pub(super) cancellation_recovery: CancellationRecoveryFact,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -485,6 +504,7 @@ struct RuntimeControlState {
     cancellations: BTreeMap<CancellationId, (EventId, CancellationRequestedPayloadV1)>,
     cancellation_acks:
         BTreeMap<(CancellationId, OperationId), (EventId, CancellationAcknowledgedPayloadV1)>,
+    late_results: Vec<LateResultObservedPayloadV1>,
     cancellation_count: u64,
     late_result_count: u64,
     rejected_message_count: u64,
@@ -821,6 +841,7 @@ impl EventStore {
             &proposal.operation,
         )?;
         if proposal.adapter_revision != contract.adapter_revision
+            || proposal.timeout_policy_revision != contract.timeout_policy_revision
             || proposal.callback_namespace != contract.callback_namespace
         {
             return Err(RuntimeControlError::new(
@@ -879,7 +900,7 @@ impl EventStore {
             operation_id: proposal.operation_id.clone(),
             reservation_id: proposal.reservation_id.clone(),
             absolute_deadline_utc: proposal.absolute_deadline_utc.clone(),
-            timeout_policy_revision: proposal.timeout_policy_revision.clone(),
+            timeout_policy_revision: contract.timeout_policy_revision.clone(),
             clock_revision: aggregate
                 .state
                 .initialized
@@ -907,6 +928,22 @@ impl EventStore {
             grant_id: Some(grant.grant_id.clone()),
             request_digest,
         };
+        let lifecycle_checkpoint = aggregate
+            .lifecycle
+            .checkpoints
+            .get(&aggregate.lifecycle.state.sequence)
+            .ok_or_else(corrupt_error)?;
+        let lifecycle_admission = LifecycleAdmissionV1 {
+            cursor: EventCursor {
+                sequence: aggregate.lifecycle.state.sequence.to_string(),
+                event_id: lifecycle_checkpoint.event_id.clone(),
+            },
+            run_state: lifecycle_checkpoint.run_state,
+            task_state: proposal
+                .task_id
+                .as_ref()
+                .and_then(|task_id| lifecycle_checkpoint.tasks.get(task_id).copied()),
+        };
         let payload = OperationReservedPayloadV1 {
             operation_id: proposal.operation_id.clone(),
             reservation_id: proposal.reservation_id.clone(),
@@ -920,7 +957,10 @@ impl EventStore {
             trusted_reservation: canonical_vector(&contract.resource_envelope)?,
             allocations,
             operation_contract_revision: contract.contract_revision.clone(),
+            adapter_revision: contract.adapter_revision.clone(),
+            lifecycle_admission,
             producer_revision: contract.producer_revision.clone(),
+            initial_process_epoch: sample.process_epoch.clone(),
             callback_namespace: contract.callback_namespace.clone(),
             interruptibility: proposal.interruptibility,
             absolute_deadline_utc: proposal.absolute_deadline_utc.clone(),
@@ -945,6 +985,58 @@ impl EventStore {
             sequence,
             lease: Box::new(lease),
             warnings,
+        })
+    }
+
+    /// Rebinds a pending reservation to a new process-local monotonic epoch without appending,
+    /// extending the absolute deadline, or dispatching the operation again.
+    pub(super) async fn rebind_operation_lease<C: RuntimeClock>(
+        &self,
+        registry: &SchemaRegistry,
+        target: &RuntimeControlTarget,
+        operation_id: &OperationId,
+        clock: &C,
+    ) -> Result<ReboundOperation, RuntimeControlError> {
+        let sample = clock.sample();
+        validate_clock_sample(&sample)?;
+        let mut connection = self.pool.acquire().await?;
+        let aggregate = load_control(&mut connection, registry, target).await?;
+        let record = aggregate
+            .state
+            .operations
+            .get(operation_id)
+            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+        if record.settlement.is_some()
+            || record.reservation.subject_actor != target.principal
+            || sample.process_epoch == record.reservation.initial_process_epoch
+        {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::ProducerUnauthorized,
+            ));
+        }
+        if sample.wall_millis < parse_utc_millis(&record.reservation.reserved_at_utc)? {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::ClockInvalid,
+            ));
+        }
+        if sample.wall_millis >= parse_utc_millis(&record.reservation.absolute_deadline_utc)? {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::DeadlineExceeded,
+            ));
+        }
+        let lease = make_lease(target, &record.reservation, &sample)?;
+        let mut fact = CancellationRecoveryFact {
+            scope: target.scope.clone(),
+            operation_id: record.reservation.operation_id.clone(),
+            reservation_id: record.reservation.reservation_id.clone(),
+            recovered_wall_millis: sample.wall_millis,
+            lease_authority: durable_lease_authority(&lease),
+            seal: Digest::parse(format!("sha256:{}", "0".repeat(64))).expect("constant digest"),
+        };
+        fact.seal = cancellation_recovery_seal(&fact)?;
+        Ok(ReboundOperation {
+            lease,
+            cancellation_recovery: fact,
         })
     }
 
@@ -999,7 +1091,7 @@ impl EventStore {
                 RuntimeControlErrorKind::ProducerUnauthorized,
             ));
         }
-        let payload = settlement_payload(&record.reservation, command)?;
+        let payload = settlement_payload(&record.reservation, lease, command)?;
         if event_sequence(&mut tx, &command.event_id).await?.is_some() {
             return append_control(
                 tx,
@@ -1035,6 +1127,7 @@ impl EventStore {
                 operation_id: command.operation_id.clone(),
                 callback_id: command.callback_id.clone(),
                 callback_fingerprint: callback_fingerprint.clone(),
+                callback_authority: durable_lease_authority(lease),
                 classification: format!("late_after_{:?}", settlement.outcome).to_ascii_lowercase(),
                 payload_digest: command.redacted_payload_digest.clone(),
                 redaction_policy_revision: find_contract(
@@ -1098,29 +1191,18 @@ impl EventStore {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let aggregate = load_control(&mut tx, registry, target).await?;
         validate_cancel_authority(&aggregate.state, target, &command.target)?;
-        let payload = CancellationRequestedPayloadV1 {
-            cancellation_id: command.cancellation_id.clone(),
-            requester: target.principal.clone(),
-            target: command.target.clone(),
-            reason_code: command.reason_code.clone(),
-            requested_at_utc: command.occurred_at.clone(),
-        };
-        if event_sequence(&mut tx, &command.event_id).await?.is_some() {
-            return append_control(
-                tx,
-                &aggregate,
-                &command.event_id,
-                &command.occurred_at,
-                &command.correlation_id,
-                "cancellation-requested",
-                &payload,
-            )
-            .await;
-        }
         if let Some((existing_event_id, existing)) =
             aggregate.state.cancellations.get(&command.cancellation_id)
         {
-            if existing != &payload {
+            let retry = CancellationRequestedPayloadV1 {
+                cancellation_id: command.cancellation_id.clone(),
+                requester: target.principal.clone(),
+                target: command.target.clone(),
+                lifecycle_admission: existing.lifecycle_admission.clone(),
+                reason_code: command.reason_code.clone(),
+                requested_at_utc: command.occurred_at.clone(),
+            };
+            if existing != &retry {
                 return Err(RuntimeControlError::new(
                     RuntimeControlErrorKind::IdempotencyConflict,
                 ));
@@ -1135,8 +1217,8 @@ impl EventStore {
             });
         }
         ensure_management_state(&aggregate.lifecycle)?;
-        match &command.target {
-            CancellationTargetV1::Run => {}
+        let admission_task = match &command.target {
+            CancellationTargetV1::Run => None,
             CancellationTargetV1::Task { task_id } => {
                 if aggregate
                     .lifecycle
@@ -1154,20 +1236,35 @@ impl EventStore {
                         RuntimeControlErrorKind::LifecycleStateDenied,
                     ));
                 }
+                Some(task_id.clone())
             }
             CancellationTargetV1::Operation { operation_id } => {
-                if aggregate
+                let record = aggregate
                     .state
                     .operations
                     .get(operation_id)
-                    .is_none_or(|record| record.settlement.is_some())
-                {
+                    .ok_or_else(|| {
+                        RuntimeControlError::new(RuntimeControlErrorKind::TerminalConflict)
+                    })?;
+                if record.settlement.is_some() {
                     return Err(RuntimeControlError::new(
                         RuntimeControlErrorKind::TerminalConflict,
                     ));
                 }
+                record.reservation.task_id.clone()
             }
-        }
+        };
+        let payload = CancellationRequestedPayloadV1 {
+            cancellation_id: command.cancellation_id.clone(),
+            requester: target.principal.clone(),
+            target: command.target.clone(),
+            lifecycle_admission: current_lifecycle_admission(
+                &aggregate.lifecycle,
+                admission_task.as_ref(),
+            )?,
+            reason_code: command.reason_code.clone(),
+            requested_at_utc: command.occurred_at.clone(),
+        };
         append_control(
             tx,
             &aggregate,
@@ -1250,6 +1347,7 @@ impl EventStore {
             reservation_id: command.reservation_id.clone(),
             producer_revision: command.producer_revision.clone(),
             authority_kind: "producer_lease".to_owned(),
+            lease_authority: durable_lease_authority(lease),
             acknowledged_at_utc: sample.canonical_utc.clone(),
         };
         if event_sequence(&mut tx, &command.event_id).await?.is_some() {
@@ -1337,6 +1435,7 @@ impl EventStore {
         &self,
         registry: &SchemaRegistry,
         target: &RuntimeControlTarget,
+        recovery: &CancellationRecoveryFact,
         command: &CancellationAckCommand,
     ) -> Result<AppendResult, RuntimeControlError> {
         if target.principal != target.scope.agent_id {
@@ -1358,7 +1457,27 @@ impl EventStore {
             .operations
             .get(&command.operation_id)
             .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
-        if record.settlement.is_some()
+        if recovery.seal != cancellation_recovery_seal(recovery)?
+            || recovery.scope != target.scope
+            || recovery.operation_id != command.operation_id
+            || recovery.reservation_id != command.reservation_id
+            || recovery.recovered_wall_millis
+                != recovery
+                    .lease_authority
+                    .lease_wall_millis
+                    .parse::<u64>()
+                    .map_err(|_| corrupt_error())?
+            || recovery.lease_authority.process_epoch == record.reservation.initial_process_epoch
+            || sample.process_epoch != recovery.lease_authority.process_epoch
+            || sample.wall_millis < recovery.recovered_wall_millis
+            || validate_callback_authority(
+                &target.scope,
+                &command.operation_id,
+                &record.reservation,
+                &recovery.lease_authority,
+            )
+            .is_err()
+            || record.settlement.is_some()
             || !cancel_target_matches(&request.target, &record.reservation)
             || command.reservation_id != record.reservation.reservation_id
             || command.producer_revision != record.reservation.producer_revision
@@ -1373,6 +1492,7 @@ impl EventStore {
             reservation_id: command.reservation_id.clone(),
             producer_revision: command.producer_revision.clone(),
             authority_kind: "kernel_recovery".to_owned(),
+            lease_authority: recovery.lease_authority.clone(),
             acknowledged_at_utc: sample.canonical_utc.clone(),
         };
         if let Some((existing_event_id, existing_payload)) =
@@ -1457,6 +1577,7 @@ impl EventStore {
             operation_id: command.operation_id.clone(),
             callback_id: command.callback_id.clone(),
             callback_fingerprint: safe_digest("late-callback-command", command)?,
+            callback_authority: durable_lease_authority(lease),
             classification: "late_after_terminal".to_owned(),
             payload_digest: command.redacted_payload_digest.clone(),
             redaction_policy_revision: contract.redaction_policy_revision.clone(),
@@ -1695,6 +1816,7 @@ impl EventStore {
             reservation_id: record.reservation.reservation_id.clone(),
             callback_id: None,
             callback_fingerprint: None,
+            callback_authority: None,
             outcome: OperationOutcomeV1::TimedOut,
             evidence_class,
             kernel_meter_evidence: meter_evidence,
@@ -2052,6 +2174,7 @@ fn fold_control(
         denials: BTreeMap::new(),
         cancellations: BTreeMap::new(),
         cancellation_acks: BTreeMap::new(),
+        late_results: Vec::new(),
         cancellation_count: 0,
         late_result_count: 0,
         rejected_message_count: 0,
@@ -2074,7 +2197,7 @@ fn fold_control(
                 RuntimeControlErrorKind::AggregateCorrupt,
             ));
         }
-        apply_control_event(&mut state, &lifecycle.state, event)?;
+        apply_control_event(&mut state, &lifecycle.state, &lifecycle.checkpoints, event)?;
         state.sequence = sequence;
         state.last_event_id = envelope.event_id.clone();
     }
@@ -2084,6 +2207,7 @@ fn fold_control(
 fn apply_control_event(
     state: &mut RuntimeControlState,
     lifecycle: &super::lifecycle::LifecycleState,
+    lifecycle_checkpoints: &BTreeMap<i64, super::lifecycle::LifecycleCheckpoint>,
     event: &ValidatedEvent,
 ) -> Result<(), RuntimeControlError> {
     match event.envelope().event_type.as_str() {
@@ -2128,18 +2252,31 @@ fn apply_control_event(
             let contract = find_contract(state, &payload.resource.kind, &payload.operation)?;
             let grant = active_grant(state, &payload.grant_id, &payload.reserved_at_utc)
                 .map_err(|_| corrupt_error())?;
-            let expected_allocations = reserve_allocations(
+            let lifecycle_sequence = payload
+                .lifecycle_admission
+                .cursor
+                .sequence
+                .parse::<i64>()
+                .map_err(|_| corrupt_error())?;
+            let lifecycle_checkpoint = lifecycle_checkpoints
+                .get(&lifecycle_sequence)
+                .ok_or_else(corrupt_error)?;
+            let expected_task_state = payload
+                .task_id
+                .as_ref()
+                .and_then(|task_id| lifecycle_checkpoint.tasks.get(task_id).copied());
+            let (expected_allocations, expected_warnings) = reserve_allocations(
                 state,
                 payload.task_id.as_ref(),
                 &payload.subject_actor,
                 &contract.resource_envelope,
                 &payload.resource.kind,
                 &payload.operation,
-            )?
-            .0;
+            )?;
             if state.operations.contains_key(&payload.operation_id)
                 || state.denials.contains_key(&payload.operation_id)
                 || payload.authorization_decision.outcome != AuthorizationOutcomeV1::Allowed
+                || payload.authorization_decision.reason_code != "capability_allowed"
                 || payload.authorization_decision.grant_id.as_ref() != Some(&payload.grant_id)
                 || grant.subject_actor != payload.subject_actor
                 || grant
@@ -2154,16 +2291,44 @@ fn apply_control_event(
                     .as_ref()
                     .is_some_and(|id| payload.resource.id.as_ref() != Some(id))
                 || grant.operations.binary_search(&payload.operation).is_err()
+                || !vector_lte(
+                    &vector_map(&contract.resource_envelope)?,
+                    &vector_map(&grant.constraints.max_operation_usage)?,
+                )
+                || cancellation_applies(state, payload.task_id.as_ref(), &payload.operation_id)
+                || canonical_vector(&payload.requested_usage)? != payload.requested_usage
                 || payload.trusted_reservation != contract.resource_envelope
                 || payload.allocations != expected_allocations
+                || payload.warnings != expected_warnings
                 || payload.operation_contract_revision != contract.contract_revision
+                || payload.adapter_revision != contract.adapter_revision
+                || payload.lifecycle_admission.cursor.event_id != lifecycle_checkpoint.event_id
+                || payload.lifecycle_admission.run_state != lifecycle_checkpoint.run_state
+                || payload.lifecycle_admission.task_state != expected_task_state
+                || payload.lifecycle_admission.run_state != RunState::Running
+                || payload.task_id.is_some() && expected_task_state != Some(TaskState::Running)
                 || payload.producer_revision != contract.producer_revision
+                || payload.initial_process_epoch.is_empty()
                 || payload.callback_namespace != contract.callback_namespace
                 || payload.timeout_key.scope != lifecycle.manifest.scope
+                || payload.timeout_key.control_stream_id
+                    != runtime_control_stream_id(&lifecycle.manifest.scope)?
                 || payload.timeout_key.operation_id != payload.operation_id
                 || payload.timeout_key.reservation_id != payload.reservation_id
+                || payload.timeout_key.absolute_deadline_utc != payload.absolute_deadline_utc
+                || payload.timeout_key.clock_revision
+                    != state.initialized.clock_contract.clock_revision
+                || payload.timeout_key.recovery_revision
+                    != state.initialized.clock_contract.recovery_revision
+                || payload.timeout_key.source_schema_set_ref
+                    != state.initialized.source_contract.schema_set_ref
+                || payload.timeout_key.source_protocol_limits_ref
+                    != state.initialized.source_contract.protocol_limits_ref
+                || payload.timeout_key.timeout_policy_revision != contract.timeout_policy_revision
                 || payload.timeout_key.operation_contract_revision != contract.contract_revision
                 || payload.timeout_key.meter_revision != contract.meter_revision
+                || parse_utc_millis(&payload.reserved_at_utc)?
+                    >= parse_utc_millis(&payload.absolute_deadline_utc)?
                 || payload.reserved_at_utc != event.envelope().occurred_at
             {
                 return corrupt();
@@ -2223,11 +2388,25 @@ fn apply_control_event(
                 || (payload.outcome == OperationOutcomeV1::TimedOut
                     && (payload.callback_id.is_some()
                         || payload.callback_fingerprint.is_some()
+                        || payload.callback_authority.is_some()
                         || payload.timeout_command_fingerprint.is_none()))
                 || (payload.outcome != OperationOutcomeV1::TimedOut
                     && (payload.callback_id.is_none()
                         || payload.callback_fingerprint.is_none()
+                        || payload.callback_authority.is_none()
                         || payload.timeout_command_fingerprint.is_some()))
+                || payload
+                    .callback_authority
+                    .as_ref()
+                    .is_some_and(|authority| {
+                        validate_callback_authority(
+                            &lifecycle.manifest.scope,
+                            &payload.operation_id,
+                            &record.reservation,
+                            authority,
+                        )
+                        .is_err()
+                    })
                 || payload.settled_at_utc != event.envelope().occurred_at
             {
                 return corrupt();
@@ -2319,11 +2498,37 @@ fn apply_control_event(
         }
         "cancellation-requested" => {
             let payload = downcast::<CancellationRequestedPayloadV1>(event)?.clone();
+            let admission_sequence = payload
+                .lifecycle_admission
+                .cursor
+                .sequence
+                .parse::<i64>()
+                .map_err(|_| corrupt_error())?;
+            let checkpoint = lifecycle_checkpoints
+                .get(&admission_sequence)
+                .ok_or_else(corrupt_error)?;
+            let admission_task = match &payload.target {
+                CancellationTargetV1::Run => None,
+                CancellationTargetV1::Task { task_id } => Some(task_id.clone()),
+                CancellationTargetV1::Operation { operation_id } => state
+                    .operations
+                    .get(operation_id)
+                    .and_then(|operation| operation.reservation.task_id.clone()),
+            };
+            let expected_task_state = admission_task
+                .as_ref()
+                .and_then(|task_id| checkpoint.tasks.get(task_id).copied());
             let authorized = match &payload.target {
                 CancellationTargetV1::Run => payload.requester == lifecycle.manifest.scope.agent_id,
                 CancellationTargetV1::Task { task_id } => {
                     payload.requester == lifecycle.manifest.scope.agent_id
-                        && lifecycle.tasks.contains_key(task_id)
+                        && expected_task_state.is_some_and(|state| {
+                            !matches!(
+                                state,
+                                TaskState::Succeeded | TaskState::Failed | TaskState::Cancelled
+                            )
+                        })
+                        && admission_task.as_ref() == Some(task_id)
                 }
                 CancellationTargetV1::Operation { operation_id } => {
                     state.operations.get(operation_id).is_some_and(|operation| {
@@ -2333,7 +2538,16 @@ fn apply_control_event(
                     })
                 }
             };
-            if !authorized || payload.requested_at_utc != event.envelope().occurred_at {
+            if !authorized
+                || payload.lifecycle_admission.cursor.event_id != checkpoint.event_id
+                || payload.lifecycle_admission.run_state != checkpoint.run_state
+                || payload.lifecycle_admission.task_state != expected_task_state
+                || !matches!(
+                    checkpoint.run_state,
+                    RunState::Created | RunState::Running | RunState::Paused
+                )
+                || payload.requested_at_utc != event.envelope().occurred_at
+            {
                 return corrupt();
             }
             if state
@@ -2361,8 +2575,24 @@ fn apply_control_event(
             if operation.settlement.is_some()
                 || payload.reservation_id != operation.reservation.reservation_id
                 || !cancel_target_matches(&request.target, &operation.reservation)
+                || validate_callback_authority(
+                    &lifecycle.manifest.scope,
+                    &payload.operation_id,
+                    &operation.reservation,
+                    &payload.lease_authority,
+                )
+                .is_err()
                 || (payload.authority_kind == "producer_lease"
                     && payload.producer_revision != operation.reservation.producer_revision)
+                || (payload.authority_kind == "kernel_recovery"
+                    && payload.lease_authority.process_epoch
+                        == operation.reservation.initial_process_epoch)
+                || parse_utc_millis(&payload.acknowledged_at_utc)?
+                    < payload
+                        .lease_authority
+                        .lease_wall_millis
+                        .parse::<u64>()
+                        .map_err(|_| corrupt_error())?
                 || !matches!(
                     payload.authority_kind.as_str(),
                     "producer_lease" | "kernel_recovery"
@@ -2385,13 +2615,37 @@ fn apply_control_event(
             }
         }
         "late-result-observed" => {
-            let payload = downcast::<LateResultObservedPayloadV1>(event)?;
+            let payload = downcast::<LateResultObservedPayloadV1>(event)?.clone();
             let fingerprint = payload.callback_fingerprint.clone();
+            let expected_redaction = {
+                let reservation = &state
+                    .operations
+                    .get(&payload.operation_id)
+                    .ok_or_else(corrupt_error)?
+                    .reservation;
+                find_contract(state, &reservation.resource.kind, &reservation.operation)?
+                    .redaction_policy_revision
+                    .clone()
+            };
             let record = state
                 .operations
                 .get_mut(&payload.operation_id)
                 .ok_or_else(corrupt_error)?;
             if record.settlement.is_none()
+                || validate_callback_authority(
+                    &lifecycle.manifest.scope,
+                    &payload.operation_id,
+                    &record.reservation,
+                    &payload.callback_authority,
+                )
+                .is_err()
+                || !payload
+                    .callback_id
+                    .as_str()
+                    .starts_with(&record.reservation.callback_namespace)
+                || payload.redaction_policy_revision != expected_redaction
+                || payload.classification.is_empty()
+                || payload.received_at_utc != event.envelope().occurred_at
                 || record
                     .callbacks
                     .insert(
@@ -2402,6 +2656,7 @@ fn apply_control_event(
             {
                 return corrupt();
             }
+            state.late_results.push(payload);
             state.late_result_count += 1;
         }
         "control-message-rejected" => {
@@ -2574,6 +2829,8 @@ fn retained_operation_contract(
         meter_revision: RevisionId::parse(FAKE_METER_REVISION).map_err(|_| corrupt_error())?,
         meter_policy_revision: RevisionId::parse(FAKE_METER_POLICY_REVISION)
             .map_err(|_| corrupt_error())?,
+        timeout_policy_revision: RevisionId::parse(FAKE_TIMEOUT_POLICY_REVISION)
+            .map_err(|_| corrupt_error())?,
         producer_revision: RevisionId::parse(FAKE_PRODUCER_REVISION)
             .map_err(|_| corrupt_error())?,
         callback_namespace: FAKE_CALLBACK_NAMESPACE.to_owned(),
@@ -2629,6 +2886,24 @@ fn ensure_management_state(lifecycle: &EstablishedAggregate) -> Result<(), Runti
             RuntimeControlErrorKind::LifecycleStateDenied,
         ))
     }
+}
+
+fn current_lifecycle_admission(
+    lifecycle: &EstablishedAggregate,
+    task_id: Option<&TaskId>,
+) -> Result<LifecycleAdmissionV1, RuntimeControlError> {
+    let checkpoint = lifecycle
+        .checkpoints
+        .get(&lifecycle.state.sequence)
+        .ok_or_else(corrupt_error)?;
+    Ok(LifecycleAdmissionV1 {
+        cursor: EventCursor {
+            sequence: lifecycle.state.sequence.to_string(),
+            event_id: checkpoint.event_id.clone(),
+        },
+        run_state: checkpoint.run_state,
+        task_state: task_id.and_then(|task| checkpoint.tasks.get(task).copied()),
+    })
 }
 
 fn ensure_reserve_lifecycle(
@@ -3034,6 +3309,7 @@ fn cancel_target_matches(
 
 fn settlement_payload(
     reservation: &OperationReservedPayloadV1,
+    lease: &OperationLease,
     command: &SettlementCommand,
 ) -> Result<OperationSettledPayloadV1, RuntimeControlError> {
     let reserved = vector_map(&reservation.trusted_reservation)?;
@@ -3079,6 +3355,7 @@ fn settlement_payload(
         reservation_id: command.reservation_id.clone(),
         callback_id: Some(command.callback_id.clone()),
         callback_fingerprint: Some(safe_digest("callback-command", command)?),
+        callback_authority: Some(durable_lease_authority(lease)),
         outcome,
         evidence_class,
         kernel_meter_evidence: meter_evidence,
@@ -3153,6 +3430,79 @@ fn make_lease(
     };
     lease.seal = lease_seal(&lease)?;
     Ok(lease)
+}
+
+fn durable_lease_authority(lease: &OperationLease) -> CallbackAuthorityV1 {
+    CallbackAuthorityV1 {
+        reservation_id: lease.reservation_id.clone(),
+        producer_revision: lease.producer_revision.clone(),
+        process_epoch: lease.process_epoch.clone(),
+        lease_wall_millis: lease.reserved_wall_millis.to_string(),
+        lease_monotonic_millis: lease.reserved_monotonic_millis.to_string(),
+        deadline_monotonic_millis: lease.deadline_monotonic_millis.to_string(),
+        lease_fingerprint: lease.seal.clone(),
+    }
+}
+
+fn validate_callback_authority(
+    scope: &IsolationScope,
+    operation_id: &OperationId,
+    reservation: &OperationReservedPayloadV1,
+    authority: &CallbackAuthorityV1,
+) -> Result<(), RuntimeControlError> {
+    let lease = OperationLease {
+        scope: scope.clone(),
+        operation_id: operation_id.clone(),
+        reservation_id: authority.reservation_id.clone(),
+        producer_revision: authority.producer_revision.clone(),
+        process_epoch: authority.process_epoch.clone(),
+        reserved_wall_millis: authority
+            .lease_wall_millis
+            .parse()
+            .map_err(|_| corrupt_error())?,
+        reserved_monotonic_millis: authority
+            .lease_monotonic_millis
+            .parse()
+            .map_err(|_| corrupt_error())?,
+        deadline_monotonic_millis: authority
+            .deadline_monotonic_millis
+            .parse()
+            .map_err(|_| corrupt_error())?,
+        seal: authority.lease_fingerprint.clone(),
+    };
+    if authority.reservation_id != reservation.reservation_id
+        || authority.producer_revision != reservation.producer_revision
+        || authority.process_epoch.is_empty()
+        || lease.seal != lease_seal(&lease)?
+        || lease.reserved_wall_millis < parse_utc_millis(&reservation.reserved_at_utc)?
+        || lease.reserved_wall_millis >= parse_utc_millis(&reservation.absolute_deadline_utc)?
+    {
+        return corrupt();
+    }
+    Ok(())
+}
+
+fn cancellation_recovery_seal(
+    fact: &CancellationRecoveryFact,
+) -> Result<Digest, RuntimeControlError> {
+    #[derive(Serialize)]
+    struct RecoveryView<'a> {
+        scope: &'a IsolationScope,
+        operation_id: &'a OperationId,
+        reservation_id: &'a ReservationId,
+        recovered_wall_millis: u64,
+        lease_authority: &'a CallbackAuthorityV1,
+    }
+    safe_digest(
+        "cancellation-recovery-fact",
+        &RecoveryView {
+            scope: &fact.scope,
+            operation_id: &fact.operation_id,
+            reservation_id: &fact.reservation_id,
+            recovered_wall_millis: fact.recovered_wall_millis,
+            lease_authority: &fact.lease_authority,
+        },
+    )
 }
 
 fn verify_lease(
@@ -3411,6 +3761,7 @@ fn project_control(
         active_grants: active_grants.clone(),
         revoked_grants: revoked_grants.clone(),
         cancellations: cancellations.clone(),
+        late_results: aggregate.state.late_results.clone(),
         cancellation_count: aggregate.state.cancellation_count.to_string(),
         late_result_count: aggregate.state.late_result_count.to_string(),
         rejected_message_count: aggregate.state.rejected_message_count.to_string(),
@@ -3441,6 +3792,7 @@ fn project_control(
         active_grants,
         revoked_grants,
         cancellations,
+        late_results: aggregate.state.late_results.clone(),
         cancellation_count: aggregate.state.cancellation_count.to_string(),
         late_result_count: aggregate.state.late_result_count.to_string(),
         rejected_message_count: aggregate.state.rejected_message_count.to_string(),
