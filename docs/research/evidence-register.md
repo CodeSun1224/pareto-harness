@@ -30,14 +30,17 @@ links: [RES-0001, RFC-0007]
 | E-014 | [Meta-Harness](https://openreview.net/pdf?id=WxCOyYbmbT) | 2026-08-19 | A | 论文/研究实现 | 从完整轨迹搜索 Harness，并维护多目标候选前沿。 |
 | E-015 | [Continual Harness](https://github.com/sethkarten/continual-harness) | 2026-08-19 | B | 新近研究实现 | 探索固定模型上的 Harness 在线适应；收益具有模型能力依赖。 |
 | E-016 | [Model Context Protocol](https://modelcontextprotocol.io/specification/) | 2026-08-20 | A | 标准/生态 | MCP 标准化 Host、Client、Server 之间的上下文与工具连接，不规定完整 Agent 内核。 |
-| E-017 | [OpenAI Codex Rust implementation](https://github.com/openai/codex/blob/main/codex-rs/README.md) | 2026-08-27 | A | 开源产品实现 | 官方仓库说明维护中的 Codex CLI 是 Rust 实现、以独立二进制交付，core/承载业务逻辑，CLI/TUI/exec 为独立 crate。 |
-| E-018 | [OpenAI Codex TypeScript SDK](https://github.com/openai/codex/blob/main/sdk/typescript/README.md) | 2026-08-27 | A | 开源产品 SDK | TypeScript SDK 启动 `@openai/codex` CLI，并通过 stdin/stdout JSONL 事件交互；它是原生核心的包装层而非第二套 Agent 内核。 |
-| E-019 | [OpenAI Codex core sandbox support](https://github.com/openai/codex/blob/main/codex-rs/core/README.md) | 2026-08-27 | A | 开源产品实现 | Rust core 管理 SandboxPolicy，但实际文件/网络强制依赖 macOS Seatbelt、Linux Landlock/bubblewrap 和 Windows 执行边界，说明 policy owner 与 enforcement mechanism 可分离。 |
-| E-020 | [Claude Code advanced setup](https://code.claude.com/docs/en/setup) | 2026-08-27 | A | 产品能力 | 推荐安装和 npm 包交付同一平台原生二进制；公开资料不足以据此断言内部核心实现语言。 |
-| E-021 | [Claude Code Hooks reference](https://code.claude.com/docs/en/hooks) | 2026-08-27 | A | 产品扩展能力 | Hook handler 可为 shell command、HTTP、MCP、prompt 或 agent；生命周期扩展面不要求与主程序同语言。 |
-| E-022 | [Claude Code Plugins](https://code.claude.com/docs/en/plugins) | 2026-08-27 | A | 产品扩展能力 | Plugin 可打包 Skills、Agents、Hooks、MCP/LSP server、monitor 和可执行文件，形成多种进程与语言边界。 |
-| E-023 | [Claude Code Memory](https://code.claude.com/docs/en/memory) | 2026-08-27 | A | 产品能力 | 项目指令与 auto memory 使用可审计 Markdown 文件并按项目隔离；这证明 Memory 表示/策略可以与核心 Runtime 语言解耦，但不证明其权威准入模型。 |
-| E-024 | [Claude Code Sandboxing](https://code.claude.com/docs/en/sandboxing) | 2026-08-27 | A | 产品安全能力 | 权限在工具执行前判定，Bash 子进程再由 Seatbelt/bubblewrap 与网络代理做 OS 级限制；官方同时公开平台和网络过滤限制。 |
+| E-017 | [OpenAI Codex Rust workspace](https://github.com/openai/codex/blob/main/codex-rs/Cargo.toml) | 2026-08-27 | A | 开源产品实现 | 官方 Cargo workspace 列出 `core`、`cli`、`exec`、`tui` 等 Rust crate；该来源只证明 workspace 成员及其 Rust 构建身份。 |
+| E-018 | [OpenAI Codex core](https://github.com/openai/codex/blob/main/codex-rs/core/README.md) | 2026-08-27 | A | 开源产品实现 | `codex-core` README 明确称其实现 Codex 的业务逻辑，并供以 Rust 实现的 UI 使用。 |
+| E-019 | [OpenAI Codex repository](https://github.com/openai/codex) | 2026-08-27 | A | 开源产品交付 | 官方仓库为支持的平台发布独立 Codex CLI 二进制；该事实不单独证明内部信任边界。 |
+| E-020 | [OpenAI Codex TypeScript SDK](https://github.com/openai/codex/blob/main/sdk/typescript/README.md) | 2026-08-27 | A | 开源产品 SDK | TypeScript SDK 启动 `@openai/codex` CLI，并通过 stdin/stdout JSONL 事件交互。 |
+| E-021 | [OpenAI Codex Python SDK packaging](https://github.com/openai/codex/blob/main/sdk/python/pyproject.toml) | 2026-08-27 | A | 开源产品 SDK | Python SDK 声明对固定版本 `openai-codex-cli-bin` Runtime 包的依赖；该来源不证明 SDK 与 CLI 之间的安全边界。 |
+| E-022 | [OpenAI Codex core sandbox support](https://github.com/openai/codex/blob/main/codex-rs/core/README.md) | 2026-08-27 | A | 开源产品实现 | `codex-core` README 描述 `SandboxPolicy`，并列出 macOS Seatbelt 与 Linux Landlock/bubblewrap 等平台 enforcement 机制。 |
+| E-023 | [Claude Code advanced setup](https://code.claude.com/docs/en/setup) | 2026-08-27 | A | 产品能力 | 推荐安装和 npm 包交付同一平台原生二进制；公开资料不足以据此断言内部核心实现语言。 |
+| E-024 | [Claude Code Hooks reference](https://code.claude.com/docs/en/hooks) | 2026-08-27 | A | 产品扩展能力 | Hook handler 可为 shell command、HTTP、MCP、prompt 或 agent；生命周期扩展面不要求与主程序同语言。 |
+| E-025 | [Claude Code Plugins](https://code.claude.com/docs/en/plugins) | 2026-08-27 | A | 产品扩展能力 | Plugin 可打包 Skills、Agents、Hooks、MCP/LSP server、monitor 和可执行文件，形成多种进程与语言边界。 |
+| E-026 | [Claude Code Memory](https://code.claude.com/docs/en/memory) | 2026-08-27 | A | 产品能力 | 项目指令与 auto memory 使用可审计 Markdown 文件并按项目隔离。由此推断 Memory 表示/策略可以与核心 Runtime 语言解耦；来源不证明其权威准入模型。 |
+| E-027 | [Claude Code Sandboxing](https://code.claude.com/docs/en/sandboxing) | 2026-08-27 | A | 产品安全能力 | 权限在工具执行前判定，Bash 子进程再由 Seatbelt/bubblewrap 与网络代理做 OS 级限制；官方同时公开平台和网络过滤限制。 |
 
 ## 证据缺口
 

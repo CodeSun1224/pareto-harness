@@ -18,7 +18,7 @@ G2 至 G5 不以“所有产品代码继续使用 Rust”为目标，而以“�
 
 REQ-0001 要求架构明确可信内核、Runtime、版本化策略和扩展边界。ADR-0001/0002 已决定可信内核使用 Rust 模块化单体起步，但“Rust 可信内核”不应被扩大解释为“G2 至 G5 的 CLI、Provider、Tool、Hook、Memory、Sandbox、Agent Worker、评测与插件都必须用 Rust”。这种扩大解释会把安全责任与语言偏好混为一谈，增加生态适配、研究原型和插件开发成本，也不能替代 OS Sandbox 或协议准入。
 
-经核验的公开事实支持“原生核心 + 多语言边界”而非单语言全栈：OpenAI Codex 的维护中 CLI/core 以 Rust 为主，TypeScript SDK 通过启动 CLI 和 JSONL 事件接入，Python SDK 也打包原生 CLI；Claude Code 当前交付签名原生二进制，同时把 Hook、MCP、Plugin、LSP、Memory 和 OS Sandbox 暴露为语言无关或外部执行边界。该比较是架构机制证据，不是性能排名，也不证明任何具体传输天然安全。
+经核验事实：OpenAI Codex 的 Cargo workspace 列出 `core`、`cli`、`exec`、`tui` 等 Rust crate，`codex-core` README 将业务逻辑归于 core，官方仓库发布独立 CLI 二进制；TypeScript SDK 启动 CLI 并交换 JSONL，Python SDK 依赖固定版本的 CLI Runtime 包。Claude Code 当前交付平台原生二进制，并公开 Hook、MCP、Plugin、LSP、Memory 与 OS Sandbox 等外部边界，但公开资料不足以断言其核心实现语言。项目推论：这些事实说明原生产品表面与多语言边界可以共存，却不证明竞品采用本 RFC 的 authority 模型，也不证明任何具体传输天然安全。
 
 ## 讨论前提
 

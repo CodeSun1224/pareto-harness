@@ -35,9 +35,9 @@ Pareto Harness 因此采用窄腰：策略和适配器可插件化，事件完�
 
 ### 关于“Rust 内核”与“全 Rust 产品”
 
-已核验的官方实现表明，原生可信核心和多语言扩展面可以分离。OpenAI Codex 的维护中 CLI/core 以 Rust workspace 和独立二进制为中心，而 TypeScript SDK 通过启动 CLI 与 JSONL 事件接入；Codex 的 Sandbox policy 在 core 中管理，实际 enforcement 仍调用操作系统隔离原语。Claude Code 当前交付平台原生二进制，但其公开资料不足以断言核心实现语言；可以确认的是 Hooks、MCP、Plugins、LSP、可执行文件、Markdown Memory 与 OS Sandbox 构成多种语言无关边界。
+已核验事实：OpenAI Codex 的官方 Cargo workspace 列出 `core`、`cli`、`exec`、`tui` 等 Rust crate，`codex-core` README 将业务逻辑归于 core，官方仓库发布独立 CLI 二进制；TypeScript SDK 启动 CLI 并交换 JSONL 事件，Python SDK 依赖固定版本的 CLI Runtime 包；Codex core 的 Sandbox policy 会调用平台隔离机制。Claude Code 当前交付平台原生二进制，但其公开资料不足以断言核心实现语言；可以确认的是 Hooks、MCP、Plugins、LSP、可执行文件、Markdown Memory 与 OS Sandbox 构成多种外部执行或数据边界。
 
-上述是产品架构事实，不是质量、成本或延迟排名，也不证明 JSONL、MCP、Hook 或原生二进制天然安全。对 Pareto Harness 的推论是：Rust 应拥有 Event、identity、state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 与 Promotion 等权威裁决；Provider、Tool、Hook handler、Agent Worker、Memory 检索/排序、评测和候选生成可以多语言，但必须通过版本化、最小授权、可取消、可核算和可审计的窄腰接入。具体 transport 和 Runtime 仍需由真实 Requirement 证明，不能从竞品机制直接照搬。
+项目推论：这些事实说明“Rust 产品表面 + 语言特定 SDK/外部扩展边界”在现有产品中可行，但不证明这些产品采用 Pareto Harness 的信任模型，也不构成质量、成本或延迟排名，更不证明 JSONL、MCP、Hook 或原生二进制天然安全。Pareto Harness 因此仍需独立决定：Rust 拥有 Event、identity、state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 与 Promotion 等权威裁决；Provider、Tool、Hook handler、Agent Worker、Memory 检索/排序、评测和候选生成可以多语言，但必须通过版本化、最小授权、可取消、可核算和可审计的窄腰接入。具体 transport 和 Runtime 仍需由真实 Requirement 证明，不能从竞品机制直接照搬。
 
 ## 研究簇与洞察
 
