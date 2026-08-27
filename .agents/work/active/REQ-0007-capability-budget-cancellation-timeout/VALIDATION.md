@@ -77,7 +77,8 @@ finding 仍必须由同一独立 reviewer 关闭。
 
 第二次 focused independent re-review 在 exact `26b63ca2abb99bf3d6216d395994d006c1b3e2b5`
 关闭 F-003/F-008，保留 F-005/F-007/F-009 三个 Major。本节仍是实现者证据，不能自行
-关闭 finding。
+关闭 finding。third repair implementation revision 固定为
+`693299cb1dbe5fa5c75729445bcd8f1054389731`。
 
 | Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
 |---|---|---|---|---|
