@@ -3,7 +3,8 @@
 当前阶段：reviewing。REVIEW-0007 已完成三次 focused re-review；F-005/F-009等八项
 closed，仅F-007仍为open Major。FIX-0001 fourth repair candidate 在补齐decision/lease/meter
 epoch pure admission后进入完整门禁；下一步固定exact revision并交由同一independent reviewer
-第四次focused re-review。
+第四次focused re-review。implementation revision固定为
+`cda43cd4f6c4c5a918259bb51e4739cc42e243a1`；本handoff/evidence提交是其直接后继。
 Blocker/Major只能由 reviewer 关闭，未关闭前不得 verified/done。
 
 候选修订边界：单Run derived control stream；Manifest必须先exact固定control-capable SchemaSet，first event固定initial grants/budget/clock/source contract且所有row不漂移；control Event envelope signer恒为Manifest owner；Capability默认拒绝且child逐项收窄；lifecycle全状态准入及pending-operation transition guard；trusted operation contract产生并由Kernel meter强制resource envelope；Run/Task/Actor/operation预算同事务reserve；opaque lease绑定callback/ack producer，provider report非权威，unknown仅由authorized producer触发；Run/Task owner-only与operation owner/subject cancellation authority；TimeoutKey+Clock sample+冻结evidence确定性派生recovery event ID/fingerprint，not_due不消费、exact response-loss retry、same-ID mutation优先、different-ID terminal no-op；显式Kernel timeout recovery；live monotonic、persisted absolute UTC、restart新lease；terminal唯一；late只对authorized producer写redacted digest audit；Projection派生；Recorded replay无Operation executor/recovery writer。

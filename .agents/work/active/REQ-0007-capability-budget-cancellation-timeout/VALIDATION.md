@@ -92,7 +92,8 @@ finding 仍必须由同一独立 reviewer 关闭。
 
 第三次 focused independent re-review 在 exact `97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb`
 关闭 F-005/F-009，仅保留 F-007 一个 Major。第四轮把 callback/ack decision monotonic
-时间纳入durable authority，并补齐live/pure一致性；finding仍须由同一reviewer关闭。
+时间纳入durable authority，并补齐live/pure一致性；implementation revision固定为
+`cda43cd4f6c4c5a918259bb51e4739cc42e243a1`，finding仍须由同一reviewer关闭。
 
 | Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
 |---|---|---|---|---|
