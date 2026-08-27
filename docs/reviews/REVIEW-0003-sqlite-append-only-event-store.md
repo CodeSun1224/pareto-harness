@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: 26b63ca2abb99bf3d6216d395994d006c1b3e2b5
+reviewed_revision: 97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb
 open_blockers: 0
 open_majors: 0
 ---
@@ -79,3 +79,4 @@ open_majors: 0
 - 2026-08-26：exact implementation candidate `1b40e92be11e73a497ec821118b7cb4e0c1af1ce` substantive freshness re-review。`event_store.rs`仅新增private runtime-control module；DB v2、DDL/index/trigger、migration ledger、writer epoch、Event Store authority/reader/cursor实现对比`6de3598`未改。Runtime复用events表和transaction-local private helpers，没有raw-SQL/public transaction escape hatch或第二权威表。Reviewer独立复跑全workspace，含Event Store migration/append/authority/isolation/concurrency/recovery回归全部通过。REQ-0007新语义由REVIEW-0007保持changes-requested，不改变REQ-0004已批准存储事实。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`1b40e92`。
 - 2026-08-26：exact remediation candidate `ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684` substantive freshness re-review。独立逐项检查`1b40e92..ab2fbc6`：仍只复用v2 `events`与同一`BEGIN IMMEDIATE` writer；`user_version`、ledger checksum、writer epoch、table/index/trigger、Snapshot DDL和raw SQL可见性没有变化，也未增加第二权威状态表。workspace 118 passed/1 ignored，Event Store authority/isolation/migration/reopen回归全部通过。REQ-0007 pure-fold残留由REVIEW-0007 F-007阻塞，但不放宽REQ-0004既有row validation、append-only、transaction与DB兼容合同。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`ab2fbc6`。
 - 2026-08-27：exact second-repair candidate `26b63ca2abb99bf3d6216d395994d006c1b3e2b5` substantive freshness re-review。`ab2fbc6..26b63ca`继续只复用v2 `events`/single writer；DB version、ledger、writer epoch、table/index/trigger、Snapshot DDL和raw SQL authority无变化，无第二状态表或依赖增长。lifecycle checkpoints由validated Event pure fold派生而非持久表。workspace Kernel 120/1 ignored及Event Store migration/authority/isolation/reopen回归通过；REQ-0007 settlement fold残留单独由REVIEW-0007阻塞。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`26b63ca`。
+- 2026-08-27：exact third-repair candidate `97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb` substantive freshness re-review。`26b63ca..97bca8b`只修改private Runtime Control reducer/commands/tests及文档；DB v2、ledger、writer epoch、table/index/trigger、Snapshot DDL、raw SQL authority和single `BEGIN IMMEDIATE` writer不变，无第二状态表、migration或依赖增长。两组真实SQLite writer race、Event Store authority/isolation/migration/reopen及workspace Kernel 121/1 ignored全部通过。REQ-0007 pure settlement authority残留由REVIEW-0007 F-007阻塞，不放宽REQ-0004 append-only、事务、row validation或恢复合同。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`97bca8b`。

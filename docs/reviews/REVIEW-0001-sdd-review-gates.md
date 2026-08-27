@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-25
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 26b63ca2abb99bf3d6216d395994d006c1b3e2b5
+reviewed_revision: 97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb
 open_blockers: 0
 open_majors: 0
 ---
@@ -72,3 +72,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact implementation candidate `1b40e92be11e73a497ec821118b7cb4e0c1af1ce` substantive freshness re-review：独立检查`a4e3478..1b40e92`及20个governance tests。新增两个REQ-0007 helper和其tests，未修改`check_docs.py`、AGENTS/skills/agents/templates、CI或REQ-0002/SPEC-0001的lifecycle、independence、finding/open-count与freshness规则。正式REVIEW-0007如实记录9个open Major并给出`changes-requested`，REQ-0007保持reviewing，没有把未通过的产品伪装成verified/done。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `1b40e92`。
 - exact remediation candidate `ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684` substantive freshness re-review：独立检查完整`1b40e92..ab2fbc6`；变更只修复REQ-0007产品/Schema/测试、记录FIX-0001及交付证据，未修改`AGENTS.md`、skills/agents/templates、CI或`check_docs.py`的lifecycle、独立性、finding/open-count与freshness规则。21个治理/Python tests通过；REVIEW-0007仍如实保留5个open Major和`changes-requested`，没有绕过完成判定。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `ab2fbc6`。
 - exact second-repair candidate `26b63ca2abb99bf3d6216d395994d006c1b3e2b5` substantive freshness re-review：完整`ab2fbc6..26b63ca`仅修复REQ-0007产品/Schema/测试、FIX和handoff，不修改`AGENTS.md`、skills/agents/templates、CI或`check_docs.py`的independence、finding/open-count、freshness与完成判定。21个治理tests通过；REVIEW-0007如实保留3个open Major和`changes-requested`，未把绿测试伪装成批准。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `26b63ca`。
+- exact third-repair candidate `97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb` substantive freshness re-review：完整`26b63ca..97bca8b`只修复REQ-0007 Runtime/测试与FIX/work证据；`AGENTS.md`、skills/agents/templates、CI、`check_docs.py`及REQ-0002/SPEC-0001 lifecycle、independence、finding/open-count、freshness和完成判定均未修改。21个治理tests通过；REVIEW-0007如实保留F-007 open Major和`changes-requested`，未因53个focused绿灯绕过批准门禁。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `97bca8b`。
