@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb
+reviewed_revision: 80249cc5c73575a3f92027f843cc657536905b9e
 open_blockers: 0
 open_majors: 0
 ---
@@ -93,3 +93,4 @@ Remaining Notes/limitations:
 - Exact remediation candidate `ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684` substantive freshness re-review: `1b40e92..ab2fbc6`补全未发布REQ-0007 control source/operation/meter/projection identities并产生最终内容地址set `sha256-19566903…`；四个既有retained set仍完整且由exact reader读取，protocol不依赖Kernel/SQLite，Cargo依赖未变。Reviewer独立复跑Protocol 9 unit + 23 contract、retained completeness、old writer reader和生成一致性，全部通过（1 observation ignored）。REVIEW-0007仍阻塞新settlement/late authority合同，但REQ-0003既有canonical JSON、closed Schema、limits、isolation和retained-reader合同未回退。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `ab2fbc6`。
 - Exact second-repair candidate `26b63ca2abb99bf3d6216d395994d006c1b3e2b5` substantive freshness re-review: 未发布中间REQ-0007 set `195669…`由补全lifecycle/callback authority的final set `c3e2fda5…`替换；此前五个published retained sets完整且exact old-reader测试通过，protocol仍不依赖Kernel/SQLite，Cargo依赖不变。Reviewer独立复跑Protocol 9 unit + 23 contract、content addressing、generation和old writer tests；新REQ-0007 semantic fold仍由REVIEW-0007阻塞，但REQ-0003 canonical JSON、closed Schema、limits/isolation与retained-reader合同未回退。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `26b63ca`。
 - Exact third-repair candidate `97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb` substantive freshness re-review: `26b63ca..97bca8b`未修改`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public protocol API或任何retained set；final control set仍为`c3e2fda5…`。Reviewer独立复跑Protocol 9 unit + 23 contract、content addressing、old writer reader及Schema generator，生成后tracked Schema byte-identical。REVIEW-0007的F-007仅涉及Kernel pure semantic admission，不放宽REQ-0003 canonical JSON、closed Schema、limits/isolation、dependency direction或retained-reader合同。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `97bca8b`。
+- Exact fourth-repair candidate `80249cc5c73575a3f92027f843cc657536905b9e` substantive freshness re-review: `CallbackAuthorityV1`新增closed必填`decision_monotonic_millis`，未发布`c3e2fda5…`由content-addressed final set `a95c824d…`替换；五个此前published retained sets `68535…/7adfe…/dae028…/4ce387…/a1f960…`未改写。Protocol 9 unit + 23 contract、old writer exact reader、retained completeness/content addressing和generator byte identity通过；protocol仍不依赖Kernel/SQLite且Cargo依赖未变。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `80249cc`。
