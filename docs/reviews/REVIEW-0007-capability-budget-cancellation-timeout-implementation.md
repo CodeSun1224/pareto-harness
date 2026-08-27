@@ -1,21 +1,22 @@
 ---
 id: REVIEW-0007
 title: REQ-0007 Capability、预算、取消与超时独立实现评审
-status: approved
+status: changes-requested
 owners: [independent-reviewer]
 created: 2026-08-26
 updated: 2026-08-27
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: 80249cc5c73575a3f92027f843cc657536905b9e
+reviewed_revision: 87be5391c40fdaa5b423c921747e7c941f7e2d42
 open_blockers: 0
-open_majors: 0
+open_majors: 1
 ---
 
 # Verdict
 
-`approved`。本记录由未参与实现、也未参与 REVIEW-0006 设计评审的 fresh independent Reviewer
-维护。第四次 focused re-review 固定 exact candidate
+`changes-requested` for final closure exact `87be5391c40fdaa5b423c921747e7c941f7e2d42`。
+实现候选 `80249cc5c73575a3f92027f843cc657536905b9e` 的独立实现批准仍成立：本记录由未参与实现、
+也未参与 REVIEW-0006 设计评审的 fresh independent Reviewer 维护；第四次 focused re-review 固定
 `80249cc5c73575a3f92027f843cc657536905b9e`；实质 Runtime/Protocol/Schema repair 为
 `cda43cd4f6c4c5a918259bb51e4739cc42e243a1`，其后仅有 Handoff/Validation 交接修订。Reviewer
 独立检查完整 `97bca8b..80249cc` diff、批准合同、FIX-0001、协议/Schema、Runtime、Projection、
@@ -27,6 +28,12 @@ callback/ack/late path 都从实际 Clock decision sample 构造 durable authori
 verified meter evidence process epoch 必须等于 callback authority epoch。两类 validly re-sealed
 `lease-after-settlement` 与 `meter-epoch-mismatch` 历史在 Projection、Recorded replay 和 close/reopen
 三条入口均 fail closed。F-001 至 F-009 无回退；最终 0 open Blocker、0 open Major。
+
+freshness-only closure 复核确认 `f18f410..87be539` 没有 Runtime、Schema、API、DB、权限、Cargo、
+治理脚本或测试变化；active 仅 `.gitkeep`，REQ-0008 未提前实现，README/index/Epic/Requirement 的
+implemented facts 与已批准范围一致。但归档后的 `VALIDATION.md` 在最终 Results 中保留三条历史
+`failed` 结果，导致 `python scripts/check_docs.py` 以 `contains failed validation results` 实质失败。F-010 因此阻塞
+`done / archived` closure；这不推翻 F-001 至 F-009 的产品批准，但 completion gate 恢复前不能批准最终归档。
 
 # Findings
 
@@ -41,6 +48,7 @@ verified meter evidence process epoch 必须等于 callback authority epoch。�
 | F-007 | Major | `runtime_control.rs:2349-2370,3387-3453`; protocol `runtime_control.rs:560-576`; tests `1866-1963` | `CallbackAuthorityV1`新增必填`decision_monotonic_millis`；live settlement/ack/late durable authority均写入实际decision sample。pure `validate_callback_authority`现重验decision wall/monotonic not-before；非-timeout settlement要求decision monotonic严格早于deadline；meter evidence要求process epoch等于callback authority epoch。validly re-sealed `lease-after-settlement`和`meter-epoch-mismatch` fixtures穿透Schema与seal后，Projection、Recorded replay和close/reopen都返回`AggregateCorrupt`。 | Reviewer独立检查diff与三入口helper，运行53个focused、121个Event Store impacted及workspace full全部通过。 | closed |
 | F-008 | Major | `pareto-protocol/src/runtime_control.rs:554-631,719-742,843-910`; `runtime_control.rs:1120-1149,1554-1594,2359-2479,2615-2660,3731-3823` | `CallbackAuthorityV1`持久保存reservation、producer、process epoch、lease wall/monotonic/deadline、decision monotonic和完整lease fingerprint；settlement/ack/late payload、Projection/hash view携带该identity。final content-addressed set为`a95c824d…`；未发布`c3e2fda5…`被替换，既有五个published retained set仍完整。 | 已满足；后续Provider/Tool不得获得lease constructor或改写authority。 | closed |
 | F-009 | Major | tests `1043-1319,1861-1963`; `scripts/check_req0007_scope.py` | `model_sequences`枚举23组request/ack/complete/cancel/timeout duplicate、order与triple command graph，并执行complete-vs-timeout及cancelled-callback-vs-timeout两组真实SQLite concurrent writer race；每步检查terminal不可改写、winner合法、reserved归零及预算方程，再检查late exact retry零新增Event和Recorded replay等价。第四轮另加入F-007两类validly re-sealed三入口负例；Reviewer独立运行53个focused与全workspace，未见重复audit/核算或模型回退。 | 已满足。 | closed |
+| F-010 | Major | archived `VALIDATION.md:19-23`; `scripts/check_docs.py:213-225` | final closure 把 active work 归档后，最终 Results 表仍包含三条历史 `failed` 行（初轮设计拒绝、设计期docs freshness失败、F-004组合门禁失败）。这些历史事实本身准确，但checker规定archived Requirement的最终Validation不能含failed result，因此报`contains failed validation results`；closure声称docs/full completion gate passed与可复算事实不一致。 | 在不改写历史失败含义的前提下，将实施期失败记录移出最终Results门禁表或采用仓库认可的历史证据结构，使最终Results只表示closure gate；固定新exact closure revision后，独立复跑Python governance、`check_docs.py`、diff/status，并确认仍只有状态/事实/归档变化。 | open |
 
 # Acceptance trace
 
@@ -109,10 +117,11 @@ Reviewer在Windows/PowerShell、offline、2026-08-27独立执行 exact `80249cc5
 
 # Re-review conditions
 
-独立实现评审门禁已满足：0 open Blocker、0 open Major。REQ-0007仍须由维护者按Plan执行最终
-implemented-facts同步、freshness/全门禁复跑及`reviewing → verified → done`生命周期收尾；本Review不自行
-改变Requirement状态，也不授权提前实现REQ-0008。后续若改变callback authority、meter evidence epoch、
-deadline winner或retained SchemaSet解释，必须以新Requirement/Schema和独立评审处理，不能原位放宽pure fold。
+实现候选的独立门禁仍满足0 open Blocker/Major；final closure 因F-010有1 open Major而保持
+`changes-requested`。下一候选只应规范归档Validation Result字段并更新closure证据，不得修改产品或重写
+历史结果。focused freshness re-review必须固定新exact revision，复跑Python governance、docs、diff/status，
+并确认active仍无Runtime Requirement、REQ-0008未实现。后续若改变callback authority、meter evidence epoch、
+deadline winner或retained SchemaSet解释，必须以新Requirement/Schema和独立评审处理。
 
 # Re-review history
 
@@ -132,3 +141,9 @@ deadline winner或retained SchemaSet解释，必须以新Requirement/Schema和�
   `cda43cd4f6c4c5a918259bb51e4739cc42e243a1`，完整检查`97bca8b..80249cc`。F-007由durable
   decision monotonic、pure not-before/deadline和meter/callback epoch binding及两类三入口validly re-sealed
   负例关闭；F-001..F-009无回退。最终0 Blocker、0 Major，`approved`。
+- 2026-08-27：freshness-only closure review exact
+  `87be5391c40fdaa5b423c921747e7c941f7e2d42` against review-record baseline `f18f410`。diff仅含
+  REQ-0007 done/archive、README/index/Epic/Requirement implemented facts和归档证据；产品/Schema/API/DB/
+  权限零变化，active仅`.gitkeep`，REQ-0008未实现。Python governance 21 passed、diff check通过；
+  `check_docs.py`因归档Validation仍含三条历史failed结果而实质失败，记录F-010 open Major。结论0 Blocker、1 Major，
+  final closure `changes-requested`；`80249cc` implementation approval不回退。

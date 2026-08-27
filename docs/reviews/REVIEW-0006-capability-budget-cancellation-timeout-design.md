@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-25
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REQ-0003, REQ-0004, REQ-0005, REQ-0006, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: a4e34785908207e622365250ae1466b85b4baecb
+reviewed_revision: 87be5391c40fdaa5b423c921747e7c941f7e2d42
 open_blockers: 0
 open_majors: 0
 ---
@@ -137,3 +137,10 @@ preimage或冲突优先级。实现仍需fresh independent code review和新的R
   `not_due`不消费identity、response-loss exact retry、same-ID mutation、different-ID terminal no-op、reopen新ID和
   verified/unknown零重复核算，并确认F-001/F-002/F-003/F-005/F-006无回退。F-004 closed；无新finding。
   结论0 Blocker、0 Major、1 accepted Minor、1 accepted Note，设计approved；实现与测试证据留给后续独立代码评审。
+- 2026-08-27：substantive design freshness confirmation exact
+  `87be5391c40fdaa5b423c921747e7c941f7e2d42`。独立实现REVIEW-0007已在exact `80249cc`逐项验证
+  lifecycle、cancel/callback/recovery authority、trusted envelope、Manifest-pinned SchemaSet和timeout identity，
+  F-001至F-009全部closed；`f18f410..87be539`随后仅同步REQ-0007 done/archive、README/index/Epic/Requirement
+  implemented facts和归档work，对REQ/SPEC/RFC/ADR及Runtime/Schema/API/DB/权限零差异。closure因归档
+  Validation仍含历史failed结果而由REVIEW-0007 F-010阻塞，但该治理证据结构问题不推翻已批准设计合同。
+  REVIEW-0006保持approved、0 open Blocker/Major，freshness前移至exact `87be539`。

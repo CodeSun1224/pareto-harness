@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-25
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 80249cc5c73575a3f92027f843cc657536905b9e
+reviewed_revision: 87be5391c40fdaa5b423c921747e7c941f7e2d42
 open_blockers: 0
 open_majors: 0
 ---
@@ -74,3 +74,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact second-repair candidate `26b63ca2abb99bf3d6216d395994d006c1b3e2b5` substantive freshness re-review：完整`ab2fbc6..26b63ca`仅修复REQ-0007产品/Schema/测试、FIX和handoff，不修改`AGENTS.md`、skills/agents/templates、CI或`check_docs.py`的independence、finding/open-count、freshness与完成判定。21个治理tests通过；REVIEW-0007如实保留3个open Major和`changes-requested`，未把绿测试伪装成批准。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `26b63ca`。
 - exact third-repair candidate `97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb` substantive freshness re-review：完整`26b63ca..97bca8b`只修复REQ-0007 Runtime/测试与FIX/work证据；`AGENTS.md`、skills/agents/templates、CI、`check_docs.py`及REQ-0002/SPEC-0001 lifecycle、independence、finding/open-count、freshness和完成判定均未修改。21个治理tests通过；REVIEW-0007如实保留F-007 open Major和`changes-requested`，未因53个focused绿灯绕过批准门禁。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `97bca8b`。
 - exact fourth-repair candidate `80249cc5c73575a3f92027f843cc657536905b9e` substantive freshness re-review：`97bca8b..80249cc`只修复REQ-0007 callback durable authority、pure fold、Schema/测试及交付证据；`AGENTS.md`、skills/agents/templates、CI、`check_docs.py`和REQ-0002/SPEC-0001治理规则未改。21个治理tests通过；REVIEW-0007仅在fresh independent reviewer独立关闭最后F-007后批准，finding/open-count/freshness门禁未绕过。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `80249cc`。
+- exact closure candidate `87be5391c40fdaa5b423c921747e7c941f7e2d42` substantive freshness re-review：`f18f410..87be539`未修改`AGENTS.md`、skills/agents/templates、CI、checker或REQ-0002/SPEC-0001规则，只同步REQ-0007 done/archive事实。21个治理tests通过；`check_docs.py`准确拒绝归档Validation仍含三条历史failed结果，REVIEW-0007记录F-010 open Major并撤回closure批准，没有用done metadata绕过completion gate。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `87be539`。

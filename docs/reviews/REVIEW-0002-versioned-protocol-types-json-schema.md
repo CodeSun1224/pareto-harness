@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 80249cc5c73575a3f92027f843cc657536905b9e
+reviewed_revision: 87be5391c40fdaa5b423c921747e7c941f7e2d42
 open_blockers: 0
 open_majors: 0
 ---
@@ -94,3 +94,4 @@ Remaining Notes/limitations:
 - Exact second-repair candidate `26b63ca2abb99bf3d6216d395994d006c1b3e2b5` substantive freshness re-review: 未发布中间REQ-0007 set `195669…`由补全lifecycle/callback authority的final set `c3e2fda5…`替换；此前五个published retained sets完整且exact old-reader测试通过，protocol仍不依赖Kernel/SQLite，Cargo依赖不变。Reviewer独立复跑Protocol 9 unit + 23 contract、content addressing、generation和old writer tests；新REQ-0007 semantic fold仍由REVIEW-0007阻塞，但REQ-0003 canonical JSON、closed Schema、limits/isolation与retained-reader合同未回退。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `26b63ca`。
 - Exact third-repair candidate `97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb` substantive freshness re-review: `26b63ca..97bca8b`未修改`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public protocol API或任何retained set；final control set仍为`c3e2fda5…`。Reviewer独立复跑Protocol 9 unit + 23 contract、content addressing、old writer reader及Schema generator，生成后tracked Schema byte-identical。REVIEW-0007的F-007仅涉及Kernel pure semantic admission，不放宽REQ-0003 canonical JSON、closed Schema、limits/isolation、dependency direction或retained-reader合同。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `97bca8b`。
 - Exact fourth-repair candidate `80249cc5c73575a3f92027f843cc657536905b9e` substantive freshness re-review: `CallbackAuthorityV1`新增closed必填`decision_monotonic_millis`，未发布`c3e2fda5…`由content-addressed final set `a95c824d…`替换；五个此前published retained sets `68535…/7adfe…/dae028…/4ce387…/a1f960…`未改写。Protocol 9 unit + 23 contract、old writer exact reader、retained completeness/content addressing和generator byte identity通过；protocol仍不依赖Kernel/SQLite且Cargo依赖未变。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `80249cc`。
+- Exact closure candidate `87be5391c40fdaa5b423c921747e7c941f7e2d42` substantive freshness re-review: `f18f410..87be539`对`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API和全部retained sets零差异；文档继续准确固定final source set `a95c824d…`和五个既有published sets。closure仅因归档Validation格式由REVIEW-0007 F-010阻塞，不改变REQ-0003 canonical JSON、closed Schema、limits/isolation、dependency direction或retained-reader批准。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `87be539`。

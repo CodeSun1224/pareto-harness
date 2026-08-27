@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: 80249cc5c73575a3f92027f843cc657536905b9e
+reviewed_revision: 87be5391c40fdaa5b423c921747e7c941f7e2d42
 open_blockers: 0
 open_majors: 0
 ---
@@ -81,3 +81,4 @@ open_majors: 0
 - 2026-08-27：exact second-repair candidate `26b63ca2abb99bf3d6216d395994d006c1b3e2b5` substantive freshness re-review。`ab2fbc6..26b63ca`继续只复用v2 `events`/single writer；DB version、ledger、writer epoch、table/index/trigger、Snapshot DDL和raw SQL authority无变化，无第二状态表或依赖增长。lifecycle checkpoints由validated Event pure fold派生而非持久表。workspace Kernel 120/1 ignored及Event Store migration/authority/isolation/reopen回归通过；REQ-0007 settlement fold残留单独由REVIEW-0007阻塞。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`26b63ca`。
 - 2026-08-27：exact third-repair candidate `97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb` substantive freshness re-review。`26b63ca..97bca8b`只修改private Runtime Control reducer/commands/tests及文档；DB v2、ledger、writer epoch、table/index/trigger、Snapshot DDL、raw SQL authority和single `BEGIN IMMEDIATE` writer不变，无第二状态表、migration或依赖增长。两组真实SQLite writer race、Event Store authority/isolation/migration/reopen及workspace Kernel 121/1 ignored全部通过。REQ-0007 pure settlement authority残留由REVIEW-0007 F-007阻塞，不放宽REQ-0004 append-only、事务、row validation或恢复合同。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`97bca8b`。
 - 2026-08-27：exact fourth-repair candidate `80249cc5c73575a3f92027f843cc657536905b9e` substantive freshness re-review。`97bca8b..80249cc`只收紧private Runtime Control durable callback authority/pure fold并更新Schema/测试；DB v2、ledger、writer epoch、table/index/trigger、Snapshot DDL、raw SQL authority和single writer未改，无第二状态表、migration或依赖增长。Event Store 121 passed/1 ignored、full workspace及close/reopen非法历史负例通过，不放宽REQ-0004合同。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`80249cc`。
+- 2026-08-27：exact closure candidate `87be5391c40fdaa5b423c921747e7c941f7e2d42` substantive freshness re-review。`f18f410..87be539`对`crates/`、SQLite、Schema、Cargo、API和权限实现零差异，仅同步REQ-0007 done/archive事实；DB v2、ledger、writer epoch、DDL/trigger、single writer及append-only authority完全未触及。REVIEW-0007 F-010只阻塞归档Validation格式，不放宽REQ-0004合同。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`87be539`。
