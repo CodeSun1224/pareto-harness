@@ -60,7 +60,9 @@
 
 REVIEW-0007 对 `ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684` focused re-review 后关闭
 F-001/F-002/F-004/F-006，保留 F-003/F-005/F-007/F-008/F-009 五个 Major。
-本轮实现者证据只证明候选具备复审条件，finding 仍必须由同一独立 reviewer 关闭。
+second repair implementation revision 固定为
+`ea751c83d26d45ed91aa3cfbc1b2cd2c316e334e`。本轮实现者证据只证明候选具备复审条件，
+finding 仍必须由同一独立 reviewer 关闭。
 
 | Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
 |---|---|---|---|---|
