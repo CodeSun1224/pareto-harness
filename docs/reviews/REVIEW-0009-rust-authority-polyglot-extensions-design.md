@@ -1,39 +1,39 @@
 ---
 id: REVIEW-0009
 title: Rust 权威控制面与多语言扩展边界独立架构评审
-status: changes-requested
+status: approved
 owners: [independent-reviewer]
 created: 2026-08-27
 updated: 2026-08-27
 links: [REQ-0001, SPEC-0001, RFC-0007, RFC-0001, ADR-0001, ADR-0002, ARCH-0001, ARCH-0002, ARCH-0004, ROADMAP-0001, BACKLOG-0001, RES-0001, RES-0002]
 independence: independent
-reviewed_revision: c4e23ee546ebf6bc4c4decbd9d1a18de99949ad1
+reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
 open_blockers: 0
-open_majors: 1
+open_majors: 0
 ---
 
 # Findings
 
 | ID | Severity | Location | Finding and impact | Required proof | Status |
 |---|---|---|---|---|---|
-| F-001 | Major | `docs/research/evidence-register.md:33-34`; `docs/research/landscape.md:38`; `docs/rfcs/RFC-0007-rust-authority-polyglot-extensions.md:21,151` | RFC 的设计验收要求官方来源全部进入 RES-0002，并把事实与项目推论分开，但 E-017 的唯一链接 `codex-rs/README.md` 当前只有 3 行：标题与 Codex CLI 文档链接。它不能证明该行声称的 Rust 实现、独立二进制、`core` 业务逻辑或 CLI/TUI/exec crate 分解。RFC 又声称 Python SDK 打包原生 CLI，却没有对应证据行；E-018 的“不是第二套 Agent 内核”也把由“SDK 启动 CLI”推导出的解释写成来源直接支持的事实。该复合证据随后被 RES-0001 与 RFC-0007 用作“原生核心 + 多语言边界”的已核验事实，因此 REQ-0001 的直接来源门禁和 RFC-0007 自身的 evidence acceptance 尚未满足。架构推论可能合理，但当前证据账本不能复算其所声明的支持范围。 | 将复合声明拆成原子事实；为 Rust/二进制、`codex-core` 职责、workspace/crate 结构和 Python SDK 分别引用能直接支持该项的当前官方文档或源码，并记录核验日期、等级、成熟度。把“包装层而非第二内核”及跨产品架构结论显式标为 inference，或只保留来源可直接证明的事实。同步修正 RES-0001/RFC-0007 中受影响的复合措辞后，对新的 exact commit 做独立 focused re-review。 | open |
+| F-001 | Major | `docs/research/evidence-register.md:33-43`; `docs/research/landscape.md:38-40`; `docs/rfcs/RFC-0007-rust-authority-polyglot-extensions.md:21` | 初审发现 Codex E-017 的三行 README 无法支持复合声明，Python SDK 缺证据，且事实与 inference 混写。`1748f69` 将 E-017..E-022 拆成 Cargo workspace、core README、release binary、TypeScript SDK、Python packaging 与 sandbox 六个原子官方来源，并把 SDK/authority、binary/internal trust 等不支持范围显式排除；E-023..E-027 的 Claude delivery、Hook、Plugin、Memory 与 Sandbox 声明也逐项保持在官方页面范围内。RES-0001/RFC-0007 现以“已核验事实”和“项目推论”分段，明确竞品事实不证明本RFC authority模型、具体transport安全或Q/C/L收益。 | Fresh Reviewer 逐项打开 E-017..E-027：Cargo workspace确列`core/cli/exec/tui`；core README明确business logic/Rust UI及SandboxPolicy/平台enforcement；repo release明确平台binary；TS README明确spawn CLI+JSONL；Python pyproject固定`openai-codex-cli-bin`依赖；Claude官方页分别支持native binary、五类Hook、Plugin组件/`bin/`、Markdown per-repo Memory、permission-before-tool与OS/proxy sandbox。完整`6892a8f..1748f69`只修复证据与fact/inference措辞，七项设计前提无变化。 | closed |
 
 # Verdict
 
-`changes-requested` for exact proposed-design commit
-`c4e23ee546ebf6bc4c4decbd9d1a18de99949ad1`（parent
-`2441826337e7bf76aa946ea40ac5b40ae6aadd4b`）。本评审由未参与设计修订的 fresh independent
-Reviewer 执行；不依赖其他 Reviewer 的结论。最终 0 open Blocker、1 open Major。
+`approved` for exact proposed-design remediation
+`1748f69d01044a936727b3b5b7659882981b9129`（parent
+`6892a8faae25db9b1f1471f12847bf76c5359b82`）。本评审由未参与设计修订的 fresh independent
+Reviewer 执行；不依赖实现者或其他 Reviewer 的结论。F-001 required proof 已由原子官方来源、明确的
+fact/inference 分界及受影响综合措辞关闭；最终 0 open Blocker、0 open Major。
 
 设计的权威边界本身未发现 Blocker/Major：Rust 用于缩小 authority surface 而非追求 Rust LOC；
 reference implementation 不构成语言强制；非 Rust 组件只能 propose、observe、compute 或执行已授权的
 bounded operation；Sandbox policy/admission 与 OS/container/WASI enforcement 分离；Memory
 provenance/admission 与 retrieval/rerank/compression 分离；transport 留给具体 Requirement；新增 Runtime
-需要以可复现收益覆盖协议、部署、冷启动和调试复杂度。F-001 阻塞的是该设计自定的证据准入与可复算性，
-不是对上述推论作反向结论。
+需要以可复现收益覆盖协议、部署、冷启动和调试复杂度。
 
-按照独立评审门禁，本 Reviewer 未修改 RFC、ARCH、Roadmap、Backlog 或 Research；整改与接受决定属于后续
-实施者/维护者任务。REVIEW-0001..0008 也未在存在 open Major 时前移 freshness。
+本 Reviewer 未修改 RFC、ARCH、Roadmap、Backlog 或 Research；只关闭自身 finding 并在实质核对后维护
+REVIEW-0001..0008 freshness。RFC 仍为 proposed；接受、建立 ADR 及同步 accepted architecture/Roadmap 属于维护者后续任务。
 
 # Acceptance trace
 
@@ -46,7 +46,7 @@ provenance/admission 与 retrieval/rerank/compression 分离；transport 留给�
 | Memory 事实与策略分离 | passed | provenance、scope、revision、expiry/invalidation 和 authoritative reference admission 属于可信面；embedding/retrieval/rerank/compression/summarization 属于可演化计算面。 |
 | Transport 未被提前冻结 | passed | RFC 明确不接受 JSONL/JSON-RPC/MCP/queue/gRPC/FFI/container/remote service，首个真实调用 Requirement 才能冻结 wire contract；MCP/WASI 仅作为待选择边界示例。 |
 | 多语言收益覆盖复杂度 | passed at design level | RFC 要求对应 Requirement 提供直接依赖、威胁模型、quality/cost/latency 证据和 rollback；没有证据时保持进程内 Rust reference path。本提交未声称已测得收益。 |
-| 官方 Codex/Claude 证据准确且范围充分 | failed | Claude 条目谨慎区分原生交付与未知内部语言；Codex E-017、Python SDK 与 E-018 inference 的 source-to-claim 对应不足，形成 F-001。 |
+| 官方 Codex/Claude 证据准确且范围充分 | passed | E-017..E-027 均由当前官方源码/文档支持其原子事实；Python SDK packaging已有固定依赖证据；不受支持的trust/security结论被排除或标为项目推论。 |
 
 # Compatibility, permission, and isolation review
 
@@ -69,36 +69,36 @@ provenance/admission 与 retrieval/rerank/compression 分离；transport 留给�
 
 # Regression and test review
 
-本提交是 proposed RFC、研究证据与导航的文档变更，没有 Runtime、Cargo、Schema、DB、API、依赖或测试实现。
-设计评审所需回归是 governance、document、whitespace 与 exact diff 检查。Reviewer 在本 Review 落盘后执行：
+候选及整改只有 proposed RFC、研究证据、综合判断、导航和 Review 文档，没有 Runtime、Cargo、Schema、DB、
+API、依赖或测试实现。Focused re-review 完成 E-017..E-027 source-to-claim 检查并确认七项前提无回退。更新
+REVIEW-0001..0009 后，Reviewer 独立执行：
 
 - `python -m unittest discover -s scripts/tests -p "test_*.py"`：21 passed。
+- `python scripts/check_docs.py`：passed，175 Markdown files / 54 formal IDs。
 - `git diff --check`：passed。
-- `git status --short`：只有未跟踪的 reviewer-owned `REVIEW-0009`。
-- `python scripts/check_docs.py`：failed only because REVIEW-0001..0007 仍固定 `8bb885b`，并正确报告本候选的
-  `docs/index.md`、RES-0001、RES-0002 与 RFC-0007 为 substantive stale paths；没有报告 REVIEW-0009
-  metadata、finding count、link 或格式错误。
-
-docs gate 应保持失败，直到 F-001 整改经新的 exact-commit re-review，且既有 approved REVIEW-0001..0008 对
-substantive RFC/research 增量完成 freshness disposition。该失败不能通过本轮前移旧 Review 或把不充分来源改写为
-已批准来规避。
+- `git status --short`：只有九份 reviewer-owned `docs/reviews/REVIEW-0001..0009` 修改。
 
 # Scope and unrelated changes
 
-精确 diff `2441826337e7bf76aa946ea40ac5b40ae6aadd4b..c4e23ee546ebf6bc4c4decbd9d1a18de99949ad1`
-只修改 `docs/index.md`、RES-0001、RES-0002 并新增 RFC-0007，共 178 insertions、4 deletions。没有
-Runtime、Schema、数据库、Cargo、CI、治理规则或依赖变化；未发现无关产品实现。
+初始精确 diff `2441826337e7bf76aa946ea40ac5b40ae6aadd4b..c4e23ee546ebf6bc4c4decbd9d1a18de99949ad1`
+只修改 `docs/index.md`、RES-0001、RES-0002 并新增 RFC-0007。Focused remediation
+`6892a8faae25db9b1f1471f12847bf76c5359b82..1748f69d01044a936727b3b5b7659882981b9129`
+只修改 RES-0001、RES-0002 与 RFC-0007 的证据/措辞，共14 insertions、11 deletions。没有 Runtime、Schema、
+数据库、Cargo、CI、治理规则或依赖变化；未发现无关产品实现。
 
 # Re-review conditions
 
-F-001 必须由实现者/维护者在新提交中整改。Focused re-review 应逐项打开每个新增官方来源，核对来源实际内容
-与原子声明、事实/inference 分类、核验日期和传播到 RES-0001/RFC-0007 的措辞；然后重新检查七项讨论前提、
-G2–G5 非授权边界、REQ-0008..0033 影响、permissions/isolation/effect/budget/cancel/late/replay/evidence/
-promotion、alternatives、failure/rollback 与 quality/cost/latency。只有 0 open Blocker/Major 后才能批准 RFC、
-建立 ADR 或同步 accepted architecture/Roadmap。
+设计评审门禁已满足。维护者可以另行接受 RFC、建立 ADR 并同步 accepted architecture/Roadmap；本 Review 不代替
+这些状态变更。未来若来源变化、事实/推论重新混写、提前冻结transport或授权外部Runtime，必须在对应 exact commit
+重新评审 permissions/isolation/effect/budget/cancel/late/replay/evidence/promotion、rollback 与quality/cost/latency。
 
 # Re-review history
 
 - 2026-08-27：fresh independent architecture/design review of exact
   `c4e23ee546ebf6bc4c4decbd9d1a18de99949ad1` against parent
   `2441826337e7bf76aa946ea40ac5b40ae6aadd4b`；0 Blocker、1 Major，`changes-requested`。
+- 2026-08-27：focused independent re-review of exact
+  `1748f69d01044a936727b3b5b7659882981b9129` against reviewer commit
+  `6892a8faae25db9b1f1471f12847bf76c5359b82`。逐项打开E-017..E-027当前官方来源，确认Codex workspace/core/
+  binary/TS/Python/sandbox和Claude delivery/Hook/Plugin/Memory/Sandbox原子声明、限制与fact/inference传播；七项前提、
+  G2–G5非授权边界及REQ-0008..0033 authority合同无回退。F-001 closed；0 Blocker、0 Major，`approved`。

@@ -7,7 +7,7 @@ created: 2026-08-26
 updated: 2026-08-27
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: 8bb885bda678f5f785706e9eb335f472b5244974
+reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
 open_blockers: 0
 open_majors: 0
 ---
@@ -158,3 +158,8 @@ REQ-0008未实现。后续若改变callback authority、meter evidence epoch、d
   reviewer-owned closure，随后只澄清`ARCH-0004`分阶段语言边界；Runtime、Protocol、Schema、DB、权限、
   预算、取消、deadline、late result、Replay及依赖零差异。新边界禁止未来Python/WASI直接写权威状态、
   自授Capability或重复Effect，REQ-0007批准实现无回退。REVIEW-0007保持approved、0 open Blocker/Major。
+- 2026-08-27：focused polyglot design freshness re-review exact
+  `1748f69d01044a936727b3b5b7659882981b9129`。`8bb885b..1748f69`对Runtime、Protocol、Schema、DB、Cargo、
+  Capability、Budget、Cancellation、deadline、callback/late authority与Recorded replay实现零差异；RFC-0007
+  明确未来Provider/Tool/Worker不得构造opaque authority、自报usage evidence或重复Effect。REQ-0007批准实现无回退，
+  REVIEW-0007保持approved、0 open Blocker/Major。

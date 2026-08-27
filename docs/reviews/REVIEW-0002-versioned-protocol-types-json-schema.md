@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 8bb885bda678f5f785706e9eb335f472b5244974
+reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
 open_blockers: 0
 open_majors: 0
 ---
@@ -97,3 +97,4 @@ Remaining Notes/limitations:
 - Exact closure candidate `87be5391c40fdaa5b423c921747e7c941f7e2d42` substantive freshness re-review: `f18f410..87be539`对`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API和全部retained sets零差异；文档继续准确固定final source set `a95c824d…`和五个既有published sets。closure仅因归档Validation格式由REVIEW-0007 F-010阻塞，不改变REQ-0003 canonical JSON、closed Schema、limits/isolation、dependency direction或retained-reader批准。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `87be539`。
 - Exact F-010 remediation `53338a836f646cdcefb6858ce07b0b0e8e12b11e` substantive freshness re-review: `828f9aa..53338a8`只重组归档Validation历史失败叙述，对protocol、schemas、Cargo、API和retained sets零差异；历史设计拒绝与最终批准均保留。F-010关闭不改变REQ-0003批准合同。REVIEW-0002保持approved、0 open Blocker/Major，freshness前移至exact `53338a8`。
 - Exact architecture clarification `8bb885bda678f5f785706e9eb335f472b5244974` substantive freshness re-review: `53338a8..8bb885b`对protocol、schemas、Cargo、API和retained sets零差异；`ARCH-0004`只要求未来离线工具依赖版本化公共协议或artifact，并明确不冻结Worker transport。REQ-0003 canonical JSON、closed Schema、dependency direction与retained-reader合同不变。REVIEW-0002保持approved、0 open Blocker/Major。
+- Exact polyglot design remediation `1748f69d01044a936727b3b5b7659882981b9129` substantive freshness re-review: `8bb885b..1748f69`对`crates/pareto-protocol/`、`schemas/`、Cargo manifests/lock、public API、canonicalization、limits及retained readers零差异。RFC-0007仍禁止首个真实跨语言Requirement之前发布wire Schema或暴露Rust ABI/SQLite layout，并要求unknown/old version fail closed。REVIEW-0002保持approved、0 open Blocker/Major。

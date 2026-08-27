@@ -7,7 +7,7 @@ created: 2026-08-27
 updated: 2026-08-27
 links: [REQ-0001, SPEC-0001, RFC-0001, ADR-0001, ADR-0002, ARCH-0002, ARCH-0004, ROADMAP-0001]
 independence: independent
-reviewed_revision: 8bb885bda678f5f785706e9eb335f472b5244974
+reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
 open_blockers: 0
 open_majors: 0
 ---
@@ -71,3 +71,8 @@ REVIEW-0001..0007 的 freshness 记录。
 
 - 2026-08-27：fresh independent architecture review exact
   `8bb885bda678f5f785706e9eb335f472b5244974`；0 Blocker、0 Major，`approved`。
+- 2026-08-27：focused substantive freshness re-review exact
+  `1748f69d01044a936727b3b5b7659882981b9129`。新增proposed RFC-0007没有修改accepted ARCH-0004；它与本Review
+  批准的G4 artifact-only、G5 WASI、v0.2 Worker门禁一致，并进一步要求每个真实跨语言边界由具体Requirement
+  冻结transport、authority、failure、rollback和quality/cost/latency证据。E-017..E-027经官方来源原子化复核，
+  fact/inference边界明确。REVIEW-0008保持approved、0 open Blocker/Major。

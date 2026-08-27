@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: 8bb885bda678f5f785706e9eb335f472b5244974
+reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
 open_blockers: 0
 open_majors: 0
 ---
@@ -84,3 +84,4 @@ open_majors: 0
 - 2026-08-27：exact closure candidate `87be5391c40fdaa5b423c921747e7c941f7e2d42` substantive freshness re-review。`f18f410..87be539`对`crates/`、SQLite、Schema、Cargo、API和权限实现零差异，仅同步REQ-0007 done/archive事实；DB v2、ledger、writer epoch、DDL/trigger、single writer及append-only authority完全未触及。REVIEW-0007 F-010只阻塞归档Validation格式，不放宽REQ-0004合同。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`87be539`。
 - 2026-08-27：exact F-010 remediation `53338a836f646cdcefb6858ce07b0b0e8e12b11e` substantive freshness re-review。`828f9aa..53338a8`只有归档Validation历史证据结构变化，对Event Store/SQLite/Schema/Cargo/API/权限零差异；DB v2和append-only合同不变。REVIEW-0003保持approved、0 open Blocker/Major，freshness前移至exact`53338a8`。
 - 2026-08-27：exact architecture clarification `8bb885bda678f5f785706e9eb335f472b5244974` substantive freshness re-review。`53338a8..8bb885b`对Event Store、SQLite、Schema、Cargo、API和权限实现零差异；新文档边界明确离线Python不得直接访问权威数据库，未来Worker同样不得依赖内核数据库布局。REQ-0004 append-only与事务authority不变。REVIEW-0003保持approved、0 open Blocker/Major。
+- 2026-08-27：exact polyglot design remediation `1748f69d01044a936727b3b5b7659882981b9129` substantive freshness re-review。`8bb885b..1748f69`对Event Store、SQLite v2、DDL/trigger、writer epoch、Schema、Cargo、API和权限实现零差异；RFC-0007明确扩展不得共享权威数据库、直接append Event或取得transaction authority。REQ-0004 append-only、isolation与single-writer合同不变，REVIEW-0003保持approved、0 open Blocker/Major。

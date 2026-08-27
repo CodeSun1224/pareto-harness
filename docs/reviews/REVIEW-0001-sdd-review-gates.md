@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-25
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 8bb885bda678f5f785706e9eb335f472b5244974
+reviewed_revision: 1748f69d01044a936727b3b5b7659882981b9129
 open_blockers: 0
 open_majors: 0
 ---
@@ -77,3 +77,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact closure candidate `87be5391c40fdaa5b423c921747e7c941f7e2d42` substantive freshness re-review：`f18f410..87be539`未修改`AGENTS.md`、skills/agents/templates、CI、checker或REQ-0002/SPEC-0001规则，只同步REQ-0007 done/archive事实。21个治理tests通过；`check_docs.py`准确拒绝归档Validation仍含三条历史failed结果，REVIEW-0007记录F-010 open Major并撤回closure批准，没有用done metadata绕过completion gate。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `87be539`。
 - exact F-010 remediation `53338a836f646cdcefb6858ce07b0b0e8e12b11e` substantive freshness re-review：`828f9aa..53338a8`只把三条历史failed从归档Validation最终Results表迁入明确历史叙述，完整保留changes-requested/freshness失败与最终独立批准事实；未修改checker或治理规则。21个治理tests和更新freshness后的docs gate通过，F-010由独立Reviewer关闭。REVIEW-0001保持approved、0 open Blocker/Major，freshness前移至exact `53338a8`。
 - exact architecture clarification `8bb885bda678f5f785706e9eb335f472b5244974` substantive freshness re-review：`53338a8..8bb885b`先完成REQ-0007 reviewer-owned closure，再仅澄清`ARCH-0004`分阶段语言边界；`AGENTS.md`、skills/agents/templates、CI、checker及REQ-0002/SPEC-0001治理规则零差异。REVIEW-0008由fresh independent Reviewer批准exact candidate，finding/open-count/freshness门禁未绕过。REVIEW-0001保持approved、0 open Blocker/Major。
+- exact polyglot design remediation `1748f69d01044a936727b3b5b7659882981b9129` substantive freshness re-review：完整`8bb885b..1748f69`只新增proposed RFC-0007、研究证据/综合判断、导航、REVIEW-0009及其evidence-only整改；`AGENTS.md`、skills/agents/templates、CI、checker与REQ-0002/SPEC-0001治理规则零差异。REVIEW-0009首轮如实保持1 open Major，只有fresh Reviewer逐项打开E-017..E-027官方来源并确认原子声明及fact/inference边界后才关闭F-001；finding/open-count/freshness门禁未被绕过。REVIEW-0001保持approved、0 open Blocker/Major。
