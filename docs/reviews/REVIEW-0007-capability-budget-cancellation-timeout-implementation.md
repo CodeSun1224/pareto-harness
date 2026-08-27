@@ -1,21 +1,21 @@
 ---
 id: REVIEW-0007
 title: REQ-0007 Capability、预算、取消与超时独立实现评审
-status: changes-requested
+status: approved
 owners: [independent-reviewer]
 created: 2026-08-26
 updated: 2026-08-27
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: 87be5391c40fdaa5b423c921747e7c941f7e2d42
+reviewed_revision: 53338a836f646cdcefb6858ce07b0b0e8e12b11e
 open_blockers: 0
-open_majors: 1
+open_majors: 0
 ---
 
 # Verdict
 
-`changes-requested` for final closure exact `87be5391c40fdaa5b423c921747e7c941f7e2d42`。
-实现候选 `80249cc5c73575a3f92027f843cc657536905b9e` 的独立实现批准仍成立：本记录由未参与实现、
+`approved` for final closure exact `53338a836f646cdcefb6858ce07b0b0e8e12b11e`。
+实现候选 `80249cc5c73575a3f92027f843cc657536905b9e` 的独立实现批准继续成立：本记录由未参与实现、
 也未参与 REVIEW-0006 设计评审的 fresh independent Reviewer 维护；第四次 focused re-review 固定
 `80249cc5c73575a3f92027f843cc657536905b9e`；实质 Runtime/Protocol/Schema repair 为
 `cda43cd4f6c4c5a918259bb51e4739cc42e243a1`，其后仅有 Handoff/Validation 交接修订。Reviewer
@@ -32,8 +32,10 @@ verified meter evidence process epoch 必须等于 callback authority epoch。�
 freshness-only closure 复核确认 `f18f410..87be539` 没有 Runtime、Schema、API、DB、权限、Cargo、
 治理脚本或测试变化；active 仅 `.gitkeep`，REQ-0008 未提前实现，README/index/Epic/Requirement 的
 implemented facts 与已批准范围一致。但归档后的 `VALIDATION.md` 在最终 Results 中保留三条历史
-`failed` 结果，导致 `python scripts/check_docs.py` 以 `contains failed validation results` 实质失败。F-010 因此阻塞
-`done / archived` closure；这不推翻 F-001 至 F-009 的产品批准，但 completion gate 恢复前不能批准最终归档。
+`failed` 结果，导致 `python scripts/check_docs.py` 以 `contains failed validation results` 实质失败。F-010曾因此阻塞
+`done / archived` closure。focused remediation `828f9aa..53338a8` 仅把三条历史失败从最终Results表移到
+`Historical design remediation`叙述，完整保留changes-requested/freshness失败事实，并以最终独立设计批准行为作为
+可复算门禁；没有把失败改写为成功。独立governance/docs/diff/status复跑通过，F-010 closed。
 
 # Findings
 
@@ -48,7 +50,7 @@ implemented facts 与已批准范围一致。但归档后的 `VALIDATION.md` 在
 | F-007 | Major | `runtime_control.rs:2349-2370,3387-3453`; protocol `runtime_control.rs:560-576`; tests `1866-1963` | `CallbackAuthorityV1`新增必填`decision_monotonic_millis`；live settlement/ack/late durable authority均写入实际decision sample。pure `validate_callback_authority`现重验decision wall/monotonic not-before；非-timeout settlement要求decision monotonic严格早于deadline；meter evidence要求process epoch等于callback authority epoch。validly re-sealed `lease-after-settlement`和`meter-epoch-mismatch` fixtures穿透Schema与seal后，Projection、Recorded replay和close/reopen都返回`AggregateCorrupt`。 | Reviewer独立检查diff与三入口helper，运行53个focused、121个Event Store impacted及workspace full全部通过。 | closed |
 | F-008 | Major | `pareto-protocol/src/runtime_control.rs:554-631,719-742,843-910`; `runtime_control.rs:1120-1149,1554-1594,2359-2479,2615-2660,3731-3823` | `CallbackAuthorityV1`持久保存reservation、producer、process epoch、lease wall/monotonic/deadline、decision monotonic和完整lease fingerprint；settlement/ack/late payload、Projection/hash view携带该identity。final content-addressed set为`a95c824d…`；未发布`c3e2fda5…`被替换，既有五个published retained set仍完整。 | 已满足；后续Provider/Tool不得获得lease constructor或改写authority。 | closed |
 | F-009 | Major | tests `1043-1319,1861-1963`; `scripts/check_req0007_scope.py` | `model_sequences`枚举23组request/ack/complete/cancel/timeout duplicate、order与triple command graph，并执行complete-vs-timeout及cancelled-callback-vs-timeout两组真实SQLite concurrent writer race；每步检查terminal不可改写、winner合法、reserved归零及预算方程，再检查late exact retry零新增Event和Recorded replay等价。第四轮另加入F-007两类validly re-sealed三入口负例；Reviewer独立运行53个focused与全workspace，未见重复audit/核算或模型回退。 | 已满足。 | closed |
-| F-010 | Major | archived `VALIDATION.md:19-23`; `scripts/check_docs.py:213-225` | final closure 把 active work 归档后，最终 Results 表仍包含三条历史 `failed` 行（初轮设计拒绝、设计期docs freshness失败、F-004组合门禁失败）。这些历史事实本身准确，但checker规定archived Requirement的最终Validation不能含failed result，因此报`contains failed validation results`；closure声称docs/full completion gate passed与可复算事实不一致。 | 在不改写历史失败含义的前提下，将实施期失败记录移出最终Results门禁表或采用仓库认可的历史证据结构，使最终Results只表示closure gate；固定新exact closure revision后，独立复跑Python governance、`check_docs.py`、diff/status，并确认仍只有状态/事实/归档变化。 | open |
+| F-010 | Major | archived `VALIDATION.md:19-31`; `scripts/check_docs.py:213-225` | `53338a8`删除最终Results表中的三条历史failed行，并在紧邻的`Historical design remediation`叙述逐项保留首轮设计`changes-requested`、设计期docs freshness失败、F-004组合门禁失败及后续exact `a4e3478`独立关闭全部Major/docs-diff通过事实。diff只有该Validation结构调整，没有产品、Schema、API、DB、权限或其他closure事实变化。21个governance tests通过；Reviewer更新freshness后`check_docs.py`通过，历史失败未被改写为成功。 | 已满足。 | closed |
 
 # Acceptance trace
 
@@ -117,11 +119,9 @@ Reviewer在Windows/PowerShell、offline、2026-08-27独立执行 exact `80249cc5
 
 # Re-review conditions
 
-实现候选的独立门禁仍满足0 open Blocker/Major；final closure 因F-010有1 open Major而保持
-`changes-requested`。下一候选只应规范归档Validation Result字段并更新closure证据，不得修改产品或重写
-历史结果。focused freshness re-review必须固定新exact revision，复跑Python governance、docs、diff/status，
-并确认active仍无Runtime Requirement、REQ-0008未实现。后续若改变callback authority、meter evidence epoch、
-deadline winner或retained SchemaSet解释，必须以新Requirement/Schema和独立评审处理。
+实现候选与final closure均满足0 open Blocker/Major；REQ-0007 `done / archived`批准。active只有`.gitkeep`，
+REQ-0008未实现。后续若改变callback authority、meter evidence epoch、deadline winner或retained SchemaSet解释，
+必须以新Requirement/Schema和独立评审处理；不得利用归档证据结构重释历史失败或产品合同。
 
 # Re-review history
 
@@ -147,3 +147,9 @@ deadline winner或retained SchemaSet解释，必须以新Requirement/Schema和�
   权限零变化，active仅`.gitkeep`，REQ-0008未实现。Python governance 21 passed、diff check通过；
   `check_docs.py`因归档Validation仍含三条历史failed结果而实质失败，记录F-010 open Major。结论0 Blocker、1 Major，
   final closure `changes-requested`；`80249cc` implementation approval不回退。
+- 2026-08-27：focused freshness re-review exact
+  `53338a836f646cdcefb6858ce07b0b0e8e12b11e` against reviewer baseline `828f9aa`。唯一产品外diff为归档
+  Validation结构调整：三条历史failed从最终Results门禁表迁入明确的Historical design remediation叙述，
+  changes-requested/freshness失败和最终`a4e3478`独立批准均完整保留。Python governance 21 passed；更新
+  REVIEW-0001..0007 freshness后docs、diff、status通过；active仅`.gitkeep`，REQ-0008未实现。F-010 closed，
+  最终0 Blocker、0 Major，closure `approved`。
