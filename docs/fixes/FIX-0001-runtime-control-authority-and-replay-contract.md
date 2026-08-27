@@ -71,6 +71,19 @@ producer settlement command 和 JSON-Schema-valid history 仍被赋予了定义�
 - 补充 exact not-before/expiry、deadline 边界、restart rebind、early recovery rejection、
   forged history 和真实 bounded complete/cancel/timeout state-sequence tests。
 
+第二次 focused re-review 关闭 F-003/F-008 后，third repair 继续：
+
+- 删除仅凭process epoch rebind形成`kernel_recovery` cancellation ack的API与fact；rebind只换发
+  process-local monotonic lease且零append，uninterruptible边界只能由executor return或deadline
+  timeout settlement证明终止。
+- settlement pure fold复用live的callback namespace、effective cancellation、deadline equality和
+  lease wall/monotonic方程；Schema-valid且重新封印的非法winner历史在Projection、reopen和Recorded
+  replay均fail closed。
+- 用23组有界command序列和2组SQLite并发writer race覆盖request/ack/complete/cancel/timeout、
+  duplicate与late；逐步验证唯一合法terminal、预算守恒和replay不重复核算。
+- bounded model额外发现并修复late callback exact event-ID retry误按settlement payload比较的
+  幂等缺陷，确保相同late command返回原提交且不重复audit。
+
 # Regression proof
 
 每项 F-001 至 F-009 必须至少有一个在首个候选上失败、修复后通过的命名测试；

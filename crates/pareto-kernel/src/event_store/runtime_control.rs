@@ -178,21 +178,9 @@ pub(super) struct OperationLease {
     seal: Digest,
 }
 
-/// Process-local proof that a pending operation was reclaimed in a new Kernel epoch.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct CancellationRecoveryFact {
-    scope: IsolationScope,
-    operation_id: OperationId,
-    reservation_id: ReservationId,
-    recovered_wall_millis: u64,
-    lease_authority: CallbackAuthorityV1,
-    seal: Digest,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ReboundOperation {
     pub(super) lease: OperationLease,
-    pub(super) cancellation_recovery: CancellationRecoveryFact,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -1024,19 +1012,8 @@ impl EventStore {
                 RuntimeControlErrorKind::DeadlineExceeded,
             ));
         }
-        let lease = make_lease(target, &record.reservation, &sample)?;
-        let mut fact = CancellationRecoveryFact {
-            scope: target.scope.clone(),
-            operation_id: record.reservation.operation_id.clone(),
-            reservation_id: record.reservation.reservation_id.clone(),
-            recovered_wall_millis: sample.wall_millis,
-            lease_authority: durable_lease_authority(&lease),
-            seal: Digest::parse(format!("sha256:{}", "0".repeat(64))).expect("constant digest"),
-        };
-        fact.seal = cancellation_recovery_seal(&fact)?;
         Ok(ReboundOperation {
-            lease,
-            cancellation_recovery: fact,
+            lease: make_lease(target, &record.reservation, &sample)?,
         })
     }
 
@@ -1092,7 +1069,39 @@ impl EventStore {
             ));
         }
         let payload = settlement_payload(&record.reservation, lease, command)?;
+        let callback_fingerprint = safe_digest("callback-command", command)?;
         if event_sequence(&mut tx, &command.event_id).await?.is_some() {
+            if let Some((terminal_event_id, settlement)) = &record.settlement
+                && terminal_event_id != &command.event_id
+            {
+                let late_payload = LateResultObservedPayloadV1 {
+                    operation_id: command.operation_id.clone(),
+                    callback_id: command.callback_id.clone(),
+                    callback_fingerprint: callback_fingerprint.clone(),
+                    callback_authority: durable_lease_authority(lease),
+                    classification: format!("late_after_{:?}", settlement.outcome)
+                        .to_ascii_lowercase(),
+                    payload_digest: command.redacted_payload_digest.clone(),
+                    redaction_policy_revision: find_contract(
+                        &aggregate.state,
+                        &record.reservation.resource.kind,
+                        &record.reservation.operation,
+                    )?
+                    .redaction_policy_revision
+                    .clone(),
+                    received_at_utc: sample.canonical_utc.clone(),
+                };
+                return append_control(
+                    tx,
+                    &aggregate,
+                    &command.event_id,
+                    &sample.canonical_utc,
+                    &command.correlation_id,
+                    "late-result-observed",
+                    &late_payload,
+                )
+                .await;
+            }
             return append_control(
                 tx,
                 &aggregate,
@@ -1104,7 +1113,6 @@ impl EventStore {
             )
             .await;
         }
-        let callback_fingerprint = safe_digest("callback-command", command)?;
         if let Some((existing_event_id, existing_fingerprint)) =
             record.callbacks.get(&command.callback_id)
         {
@@ -1429,102 +1437,6 @@ impl EventStore {
             interruptibility: record.reservation.interruptibility,
             cancellation_ids,
         })
-    }
-
-    pub(super) async fn acknowledge_cancellation_recovery(
-        &self,
-        registry: &SchemaRegistry,
-        target: &RuntimeControlTarget,
-        recovery: &CancellationRecoveryFact,
-        command: &CancellationAckCommand,
-    ) -> Result<AppendResult, RuntimeControlError> {
-        if target.principal != target.scope.agent_id {
-            return Err(RuntimeControlError::new(
-                RuntimeControlErrorKind::Unauthorized,
-            ));
-        }
-        let sample = command.decision_clock.clone();
-        validate_clock_sample(&sample)?;
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let aggregate = load_control(&mut tx, registry, target).await?;
-        let (_, request) = aggregate
-            .state
-            .cancellations
-            .get(&command.cancellation_id)
-            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
-        let record = aggregate
-            .state
-            .operations
-            .get(&command.operation_id)
-            .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
-        if recovery.seal != cancellation_recovery_seal(recovery)?
-            || recovery.scope != target.scope
-            || recovery.operation_id != command.operation_id
-            || recovery.reservation_id != command.reservation_id
-            || recovery.recovered_wall_millis
-                != recovery
-                    .lease_authority
-                    .lease_wall_millis
-                    .parse::<u64>()
-                    .map_err(|_| corrupt_error())?
-            || recovery.lease_authority.process_epoch == record.reservation.initial_process_epoch
-            || sample.process_epoch != recovery.lease_authority.process_epoch
-            || sample.wall_millis < recovery.recovered_wall_millis
-            || validate_callback_authority(
-                &target.scope,
-                &command.operation_id,
-                &record.reservation,
-                &recovery.lease_authority,
-            )
-            .is_err()
-            || record.settlement.is_some()
-            || !cancel_target_matches(&request.target, &record.reservation)
-            || command.reservation_id != record.reservation.reservation_id
-            || command.producer_revision != record.reservation.producer_revision
-        {
-            return Err(RuntimeControlError::new(
-                RuntimeControlErrorKind::TerminalConflict,
-            ));
-        }
-        let payload = CancellationAcknowledgedPayloadV1 {
-            cancellation_id: command.cancellation_id.clone(),
-            operation_id: command.operation_id.clone(),
-            reservation_id: command.reservation_id.clone(),
-            producer_revision: command.producer_revision.clone(),
-            authority_kind: "kernel_recovery".to_owned(),
-            lease_authority: recovery.lease_authority.clone(),
-            acknowledged_at_utc: sample.canonical_utc.clone(),
-        };
-        if let Some((existing_event_id, existing_payload)) =
-            aggregate.state.cancellation_acks.get(&(
-                command.cancellation_id.clone(),
-                command.operation_id.clone(),
-            ))
-        {
-            if existing_payload != &payload {
-                return Err(RuntimeControlError::new(
-                    RuntimeControlErrorKind::IdempotencyConflict,
-                ));
-            }
-            let sequence = event_sequence(&mut tx, existing_event_id)
-                .await?
-                .ok_or_else(corrupt_error)?;
-            tx.commit().await?;
-            return Ok(AppendResult::AlreadyCommitted {
-                event_id: existing_event_id.clone(),
-                sequence,
-            });
-        }
-        append_control(
-            tx,
-            &aggregate,
-            &command.event_id,
-            &sample.canonical_utc,
-            &command.correlation_id,
-            "cancellation-acknowledged",
-            &payload,
-        )
-        .await
     }
 
     pub(super) async fn observe_late_result<C: RuntimeClock>(
@@ -2355,6 +2267,17 @@ fn apply_control_event(
         }
         "operation-settled" => {
             let payload = downcast::<OperationSettledPayloadV1>(event)?.clone();
+            let reservation = state
+                .operations
+                .get(&payload.operation_id)
+                .ok_or_else(corrupt_error)?
+                .reservation
+                .clone();
+            let cancelled = cancellation_applies(
+                state,
+                reservation.task_id.as_ref(),
+                &reservation.operation_id,
+            );
             let record = state
                 .operations
                 .get_mut(&payload.operation_id)
@@ -2380,8 +2303,32 @@ fn apply_control_event(
                     (UsageEvidenceClassV1::Unknown, None) => accounted == reserved,
                     (UsageEvidenceClassV1::KernelMeterVerified, None) => false,
                 };
+            let settled_wall = parse_utc_millis(&payload.settled_at_utc)?;
+            let deadline_wall = parse_utc_millis(&record.reservation.absolute_deadline_utc)?;
+            let callback_semantics_valid = match payload.outcome {
+                OperationOutcomeV1::TimedOut => settled_wall >= deadline_wall,
+                OperationOutcomeV1::Cancelled => {
+                    cancelled
+                        && settled_wall < deadline_wall
+                        && payload.callback_id.as_ref().is_some_and(|callback| {
+                            callback
+                                .as_str()
+                                .starts_with(&record.reservation.callback_namespace)
+                        })
+                }
+                OperationOutcomeV1::Succeeded | OperationOutcomeV1::Failed => {
+                    !cancelled
+                        && settled_wall < deadline_wall
+                        && payload.callback_id.as_ref().is_some_and(|callback| {
+                            callback
+                                .as_str()
+                                .starts_with(&record.reservation.callback_namespace)
+                        })
+                }
+            };
             if !vector_lte(&accounted, &reserved)
                 || !meter_evidence_valid
+                || !callback_semantics_valid
                 || released != vector_sub(&reserved, &accounted)?
                 || (payload.evidence_class == UsageEvidenceClassV1::Unknown
                     && accounted != reserved)
@@ -2582,21 +2529,14 @@ fn apply_control_event(
                     &payload.lease_authority,
                 )
                 .is_err()
-                || (payload.authority_kind == "producer_lease"
-                    && payload.producer_revision != operation.reservation.producer_revision)
-                || (payload.authority_kind == "kernel_recovery"
-                    && payload.lease_authority.process_epoch
-                        == operation.reservation.initial_process_epoch)
+                || payload.producer_revision != operation.reservation.producer_revision
                 || parse_utc_millis(&payload.acknowledged_at_utc)?
                     < payload
                         .lease_authority
                         .lease_wall_millis
                         .parse::<u64>()
                         .map_err(|_| corrupt_error())?
-                || !matches!(
-                    payload.authority_kind.as_str(),
-                    "producer_lease" | "kernel_recovery"
-                )
+                || payload.authority_kind != "producer_lease"
             {
                 return corrupt();
             }
@@ -3470,39 +3410,25 @@ fn validate_callback_authority(
             .map_err(|_| corrupt_error())?,
         seal: authority.lease_fingerprint.clone(),
     };
+    let deadline_wall = parse_utc_millis(&reservation.absolute_deadline_utc)?;
+    let remaining = deadline_wall
+        .checked_sub(lease.reserved_wall_millis)
+        .ok_or_else(corrupt_error)?;
+    let expected_monotonic_deadline = lease
+        .reserved_monotonic_millis
+        .checked_add(remaining)
+        .ok_or_else(corrupt_error)?;
     if authority.reservation_id != reservation.reservation_id
         || authority.producer_revision != reservation.producer_revision
         || authority.process_epoch.is_empty()
         || lease.seal != lease_seal(&lease)?
         || lease.reserved_wall_millis < parse_utc_millis(&reservation.reserved_at_utc)?
-        || lease.reserved_wall_millis >= parse_utc_millis(&reservation.absolute_deadline_utc)?
+        || lease.reserved_wall_millis >= deadline_wall
+        || lease.deadline_monotonic_millis != expected_monotonic_deadline
     {
         return corrupt();
     }
     Ok(())
-}
-
-fn cancellation_recovery_seal(
-    fact: &CancellationRecoveryFact,
-) -> Result<Digest, RuntimeControlError> {
-    #[derive(Serialize)]
-    struct RecoveryView<'a> {
-        scope: &'a IsolationScope,
-        operation_id: &'a OperationId,
-        reservation_id: &'a ReservationId,
-        recovered_wall_millis: u64,
-        lease_authority: &'a CallbackAuthorityV1,
-    }
-    safe_digest(
-        "cancellation-recovery-fact",
-        &RecoveryView {
-            scope: &fact.scope,
-            operation_id: &fact.operation_id,
-            reservation_id: &fact.reservation_id,
-            recovered_wall_millis: fact.recovered_wall_millis,
-            lease_authority: &fact.lease_authority,
-        },
-    )
 }
 
 fn verify_lease(

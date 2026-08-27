@@ -73,9 +73,23 @@ finding 仍必须由同一独立 reviewer 关闭。
 | Governance/static scope | governance unittest；`check_req0007_scope.py`；fmt；workspace clippy `-D warnings`；`git diff --check` | passed | 21 tests；scope/fmt/clippy/diff green | DB v2、依赖与 real I/O 边界未变 |
 | Full regression | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 120 passed/1 ignored；Protocol 9 + 23 passed/1 ignored | schema publisher drift stderr 是通过中的负例夹具 |
 
+## REVIEW-0007 third repair candidate
+
+第二次 focused independent re-review 在 exact `26b63ca2abb99bf3d6216d395994d006c1b3e2b5`
+关闭 F-003/F-008，保留 F-005/F-007/F-009 三个 Major。本节仍是实现者证据，不能自行
+关闭 finding。
+
+| Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
+|---|---|---|---|---|
+| Stop/recovery boundary | `cargo test -p pareto-kernel runtime_control --all-features --offline` | passed | 53 passed；`interruptibility`、reopen/rebind tests | 删除仅凭epoch rebind形成`kernel_recovery` ack的通道；rebind只读且不写ack；uninterruptible保持pending直到executor return或deadline timeout terminal |
+| Settlement pure admission | 同一 focused command | passed | `compatibility_rejects_schema_valid_illegal_terminal_winner_history` | validly resealed wrong namespace、cancelled-without-request、success-after-cancel、success-at-deadline、timeout-before-deadline、wrong monotonic equation在Projection/Recorded replay/reopen均fail closed |
+| Bounded command/concurrency model | 同一 focused command | passed | `model_sequences` | 23组duplicate/双向冲突/三步request-ack-terminal序列 + 2组真实SQLite concurrent writer race；逐步唯一terminal、合法outcome、预算守恒，final late exact retry和Recorded replay相等 |
+| Late exact idempotency regression | 同一 focused command | passed | bounded model每个case exact retry | 修复terminal后late callback同event ID重试误按`operation-settled`比较而产生`idempotency_conflict`的问题；不重复audit/effect/accounting |
+| Governance/static/full | governance unittest；scope；fmt；clippy；workspace test；schema generator；diff check | passed | Python 21；Kernel 121 passed/1 ignored；Protocol 9+23 passed/1 ignored | final SchemaSet仍为`sha256:c3e2fda5…`且generator无diff；DB v2/依赖/real I/O未变 |
+
 ## Skipped tests
 
-REVIEW-0007 second focused independent re-review and post-review full gate rerun remain pending. Real Provider/Tool/network/performance claims are out of scope；ignored tests are observation-only baselines already marked by the repository。
+REVIEW-0007 third focused independent re-review and post-review full gate rerun remain pending. Real Provider/Tool/network/performance claims are out of scope；ignored tests are observation-only baselines already marked by the repository。
 
 ## Remaining limitations
 
