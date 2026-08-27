@@ -5,7 +5,7 @@ status: active
 owners: [maintainers]
 created: 2026-08-20
 updated: 2026-08-27
-links: [RES-0001, RFC-0007]
+links: [RES-0001, RFC-0007, ADR-0008, REVIEW-0009]
 ---
 
 # 研究证据账本

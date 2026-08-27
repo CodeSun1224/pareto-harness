@@ -1,11 +1,11 @@
 ---
 id: RFC-0007
 title: Rust 权威控制面与多语言扩展边界
-status: proposed
+status: accepted
 owners: [maintainers]
 created: 2026-08-27
 updated: 2026-08-27
-links: [REQ-0001, RFC-0001, ADR-0001, ADR-0002, ARCH-0001, ARCH-0002, ARCH-0004, ROADMAP-0001, BACKLOG-0001, RES-0001, RES-0002]
+links: [REQ-0001, RFC-0001, ADR-0001, ADR-0002, ADR-0008, ARCH-0001, ARCH-0002, ARCH-0004, ROADMAP-0001, BACKLOG-0001, RES-0001, RES-0002, REVIEW-0009]
 ---
 
 # Summary

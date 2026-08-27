@@ -45,6 +45,7 @@
 - [RFC-0006：Capability、预算、取消与超时可信内核合同](rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md)
 - [ADR-0007：采用事件溯源 Runtime Control 可信内核合同](adrs/ADR-0007-event-sourced-runtime-control.md)
 - [RFC-0007：Rust 权威控制面与多语言扩展边界](rfcs/RFC-0007-rust-authority-polyglot-extensions.md)
+- [ADR-0008：采用 Rust 权威控制面与多语言扩展边界](adrs/ADR-0008-rust-authority-polyglot-extension-boundary.md)
 
 ## 交付
 
@@ -57,6 +58,7 @@
 - [REQ-0006 独立代码评审](reviews/REVIEW-0005-projection-snapshot-replay.md)
 - [REQ-0007 独立设计评审](reviews/REVIEW-0006-capability-budget-cancellation-timeout-design.md)
 - [REQ-0007 独立实现评审](reviews/REVIEW-0007-capability-budget-cancellation-timeout-implementation.md)
+- [Rust 权威控制面与多语言扩展边界独立设计评审](reviews/REVIEW-0009-rust-authority-polyglot-extensions-design.md)
 - [REQ-0007 Runtime Control 修复记录](fixes/FIX-0001-runtime-control-authority-and-replay-contract.md)
 
 ## 记录类型

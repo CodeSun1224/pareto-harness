@@ -4,8 +4,8 @@ title: Pareto Harness Evidence-gated 实施路线图
 status: active
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-20
-links: [PRD-0001, REQ-0001, BENCH-0001]
+updated: 2026-08-27
+links: [PRD-0001, REQ-0001, RFC-0007, ADR-0008, ARCH-0004, BACKLOG-0001, BENCH-0001]
 ---
 
 # Evidence-gated 实施路线图
@@ -33,11 +33,15 @@ links: [PRD-0001, REQ-0001, BENCH-0001]
 
 交付：REQ-0010 至 REQ-0017，包括 OpenAI 兼容 Provider、Coding Tools、Workspace/Sandbox、单 Agent Loop、Memory 基线、Evidence Gate 和 CLI。
 
+语言边界：Rust 保持 lifecycle、Capability/Budget/Cancellation、Effect/Evidence、Workspace/Sandbox policy 与完成准入；Provider、Tool、Hook 或 Memory 计算默认可先用 Rust reference path，也可由具体 Requirement 在版本、隔离和收益证据成立后批准外部实现。
+
 退出条件：能在真实仓库完成缺陷修复和小型功能；失败可恢复；必需证据缺失不能成功；权限、隔离和费用可审计。
 
 ## G3：受控 Multi-Agent
 
 交付：REQ-0018 至 REQ-0022，包括基础 Task DAG、Agent Lease、结构化消息、Worktree 合并和单/多 Agent Router。
+
+语言边界：Rust 保持 DAG、Lease、去重、取消/预算传播、Workspace ownership、合并和最终验证；Agent Worker 可多语言或来自不同产品，但不得共享权威数据库、共享可写 Workspace 或自行判定完成。
 
 退出条件：Agent 不共享可写工作区、不重复提交效果；崩溃可重领；无收益任务默认单 Agent。
 
@@ -45,18 +49,22 @@ links: [PRD-0001, REQ-0001, BENCH-0001]
 
 交付：REQ-0023 至 REQ-0027，包括自适应 Task DAG、Context DAG、Context Cache/GC、完整 Evidence Graph 和成本感知 Router。
 
+语言边界：Rust 保持 Context/Evidence provenance、Router admission、版本和质量底线；Python 可承担离线分析，经 accepted Requirement 和可复现收益证明后也可成为受控 retrieval/evaluation Worker，外部索引和自报指标不具权威性。
+
 退出条件：每项优化分别完成消融；只在质量底线成立且至少改善一个目标维度时进入默认 Behavior。
 
 ## G5：受控演化
 
 交付：REQ-0028 至 REQ-0033，包括 Behavior 谱系、Evolution Proposal、历史/隐藏评测、MVCC、Canary/Promote/Rollback 和 WASM 隔离。
 
+语言边界：Rust 保持 Proposal/MVCC/Canary/Promote/Rollback；Python 可用于研究与评测，多语言 Guest 可经 WASI 隔离运行，但不能自授权、自报晋升或绕过 Evidence gate。
+
 退出条件：越权和资源超限被拒绝；Canary 触发停止后恢复到指定 Behavior；历史 Run 仍可由原版本解释；发布首份可复现实验报告。
 
 ## v0.2 以后
 
 - TypeScript SDK 和 Web 控制台。
-- Python 研究/评测 Worker。
+- 更多经独立 Requirement 批准的 Python/TypeScript/其他语言 Worker 与 SDK。
 - MCP 和更多模型 Provider 适配。
 - PostgreSQL、多节点执行和远程 Sandbox。
 - 团队权限、签名策略、数据保留和合规能力。

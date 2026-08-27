@@ -5,7 +5,7 @@ status: active
 owners: [maintainers]
 created: 2026-08-20
 updated: 2026-08-27
-links: [PRD-0001, RFC-0001, RFC-0007]
+links: [PRD-0001, RFC-0001, RFC-0007, ADR-0008, REVIEW-0009]
 ---
 
 # 竞品与前沿研究洞察

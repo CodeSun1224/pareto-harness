@@ -4,8 +4,8 @@ title: Pareto Harness 总体架构
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-20
-links: [PRD-0001, RFC-0001, ADR-0001, ADR-0002]
+updated: 2026-08-27
+links: [PRD-0001, RFC-0001, RFC-0007, ADR-0001, ADR-0002, ADR-0008]
 ---
 
 # 总体架构
@@ -35,7 +35,7 @@ links: [PRD-0001, RFC-0001, ADR-0001, ADR-0002]
 └──────────────────────────────────────────────────────┘
 ```
 
-第三方工具、MCP、模型适配器和生成候选位于边界外，只能通过 capability 接口交互。
+第三方工具、MCP、模型适配器和生成候选位于边界外，只能通过 capability 接口交互。图中的层是责任与信任边界，不是语言或进程边界：Rust 可信控制面提交权威裁决；经具体 Requirement 批准的外部或多语言组件只能提出请求、执行已授权操作或返回非权威结果。
 
 ## 运行数据流
 
@@ -68,7 +68,7 @@ links: [PRD-0001, RFC-0001, ADR-0001, ADR-0002]
 - `control-plane`：实验、评测、Canary 和版本管理。
 - `cli`：首个操作入口，不承载业务规则。
 
-这些是未来代码模块，不在设计基线阶段创建空目录。
+这些是逻辑模块，不要求全部使用 Rust 或处于同一进程。Event、identity、state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 和 Promotion 保持在 Rust 权威控制面；Provider、Tool、Hook handler、Agent Worker、Memory 检索、评测、SDK 和受限 Guest 可按 Requirement 使用其他语言，但不得取得权威数据库或内核私有对象。设计基线阶段不创建空目录。
 
 ## 一致性原则
 

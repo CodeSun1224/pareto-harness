@@ -4,13 +4,15 @@ title: Pareto Harness Requirement Backlog
 status: active
 owners: [maintainers]
 created: 2026-08-22
-updated: 2026-08-22
-links: [EPIC-0001, EPIC-0002, EPIC-0003, EPIC-0004, EPIC-0005, EPIC-0006]
+updated: 2026-08-27
+links: [EPIC-0001, EPIC-0002, EPIC-0003, EPIC-0004, EPIC-0005, EPIC-0006, RFC-0007, ADR-0008, ARCH-0004]
 ---
 
 # Requirement Backlog
 
 Planned ID 表示编号已保留但尚未进入 SDD 实施窗口。进入窗口时必须创建正式 Requirement、影响分析和 Spec，不能直接按本表编码。
+
+语言不是 Requirement 的默认信任边界。REQ-0008 至 REQ-0033 可在其 outcome 需要时批准多语言 handler、adapter、Worker 或 Guest，但必须保留 Rust 对 Event、identity、state、Capability、Budget、Cancellation、Effect/Evidence、Replay、Lease/MVCC 与 Promotion 的 authority，并在各自 Spec 中冻结协议、隔离、失败、兼容和回滚合同。RFC-0007/ADR-0008 不单独授权任何外部 Runtime，也不改变下列顺序或 prerequisite。
 
 | Order | ID | Epic | Requirement outcome | Risk | Prerequisites | Planned evidence |
 |---:|---|---|---|---|---|---|
