@@ -7,7 +7,7 @@ created: 2026-08-24
 updated: 2026-08-25
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684
+reviewed_revision: 26b63ca2abb99bf3d6216d395994d006c1b3e2b5
 open_blockers: 0
 open_majors: 0
 ---
@@ -104,3 +104,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-25：exact candidate `a4e34785908207e622365250ae1466b85b4baecb` substantive freshness re-review。`cfa7a06..a4e3478`未修改lifecycle Runtime、Manifest/Event Schema、状态/parent guard、旧Run command或上一轮已关闭的transition/reserve guard，只为未来pending operation timeout recovery补充确定性identity与terminal优先级；不重释REQ-0005 lifecycle或operation cancellation。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`a4e3478`。
 - 2026-08-26：exact implementation candidate `1b40e92be11e73a497ec821118b7cb4e0c1af1ce` substantive freshness re-review。lifecycle变化只在Run/Task pause/terminal transition的原writer transaction中调用private pending-operation guard；no-control/old-set Run的derived control stream为空时直接保留REQ-0005原语义，状态边、parent/child guard、Manifest sequence-1、owner authority和四个lifecycle wire event未改。Reviewer独立复跑18个lifecycle tests及全workspace，全部通过。REVIEW-0007对新control race证据保持open Major，但未发现REQ-0005已批准Run/Task状态机回退。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`1b40e92`。
 - 2026-08-26：exact remediation candidate `ab2fbc6d2e979ef12bcffd5df1cfe76b975a9684` substantive freshness re-review。`1b40e92..ab2fbc6`没有修改Run/Task状态边、parent/child guard、Manifest sequence-1、owner authority或四类lifecycle wire Event；只增强private Runtime Control reducer/guard与测试。two-writer lifecycle/reserve和paused/terminal Task/Run矩阵通过，全workspace lifecycle回归绿色。REVIEW-0007仍因restart lease、recovery ack与control fold残留保持changes-requested，但REQ-0005既有状态机语义未被重释。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`ab2fbc6`。
+- 2026-08-27：exact second-repair candidate `26b63ca2abb99bf3d6216d395994d006c1b3e2b5` substantive freshness re-review。lifecycle新增checkpoint map只是对同一validated四类Event逐cursor复用既有`apply_lifecycle_event`，没有修改状态边、parent/child guard、Manifest admission、owner authority或wire Event；Runtime Control将exact checkpoint作为reserve/cancel审计身份。全部lifecycle、two-writer guard和workspace回归通过。REVIEW-0007的cancel ack/settlement fold finding不重释REQ-0005状态机。REVIEW-0004保持approved、0 open Blocker/Major，freshness前移至exact`26b63ca`。
