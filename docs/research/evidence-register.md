@@ -4,8 +4,8 @@ title: 研究证据账本
 status: active
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-20
-links: [RES-0001]
+updated: 2026-08-27
+links: [RES-0001, RFC-0007]
 ---
 
 # 研究证据账本
@@ -30,12 +30,21 @@ links: [RES-0001]
 | E-014 | [Meta-Harness](https://openreview.net/pdf?id=WxCOyYbmbT) | 2026-08-19 | A | 论文/研究实现 | 从完整轨迹搜索 Harness，并维护多目标候选前沿。 |
 | E-015 | [Continual Harness](https://github.com/sethkarten/continual-harness) | 2026-08-19 | B | 新近研究实现 | 探索固定模型上的 Harness 在线适应；收益具有模型能力依赖。 |
 | E-016 | [Model Context Protocol](https://modelcontextprotocol.io/specification/) | 2026-08-20 | A | 标准/生态 | MCP 标准化 Host、Client、Server 之间的上下文与工具连接，不规定完整 Agent 内核。 |
+| E-017 | [OpenAI Codex Rust implementation](https://github.com/openai/codex/blob/main/codex-rs/README.md) | 2026-08-27 | A | 开源产品实现 | 官方仓库说明维护中的 Codex CLI 是 Rust 实现、以独立二进制交付，core/承载业务逻辑，CLI/TUI/exec 为独立 crate。 |
+| E-018 | [OpenAI Codex TypeScript SDK](https://github.com/openai/codex/blob/main/sdk/typescript/README.md) | 2026-08-27 | A | 开源产品 SDK | TypeScript SDK 启动 `@openai/codex` CLI，并通过 stdin/stdout JSONL 事件交互；它是原生核心的包装层而非第二套 Agent 内核。 |
+| E-019 | [OpenAI Codex core sandbox support](https://github.com/openai/codex/blob/main/codex-rs/core/README.md) | 2026-08-27 | A | 开源产品实现 | Rust core 管理 SandboxPolicy，但实际文件/网络强制依赖 macOS Seatbelt、Linux Landlock/bubblewrap 和 Windows 执行边界，说明 policy owner 与 enforcement mechanism 可分离。 |
+| E-020 | [Claude Code advanced setup](https://code.claude.com/docs/en/setup) | 2026-08-27 | A | 产品能力 | 推荐安装和 npm 包交付同一平台原生二进制；公开资料不足以据此断言内部核心实现语言。 |
+| E-021 | [Claude Code Hooks reference](https://code.claude.com/docs/en/hooks) | 2026-08-27 | A | 产品扩展能力 | Hook handler 可为 shell command、HTTP、MCP、prompt 或 agent；生命周期扩展面不要求与主程序同语言。 |
+| E-022 | [Claude Code Plugins](https://code.claude.com/docs/en/plugins) | 2026-08-27 | A | 产品扩展能力 | Plugin 可打包 Skills、Agents、Hooks、MCP/LSP server、monitor 和可执行文件，形成多种进程与语言边界。 |
+| E-023 | [Claude Code Memory](https://code.claude.com/docs/en/memory) | 2026-08-27 | A | 产品能力 | 项目指令与 auto memory 使用可审计 Markdown 文件并按项目隔离；这证明 Memory 表示/策略可以与核心 Runtime 语言解耦，但不证明其权威准入模型。 |
+| E-024 | [Claude Code Sandboxing](https://code.claude.com/docs/en/sandboxing) | 2026-08-27 | A | 产品安全能力 | 权限在工具执行前判定，Bash 子进程再由 Seatbelt/bubblewrap 与网络代理做 OS 级限制；官方同时公开平台和网络过滤限制。 |
 
 ## 证据缺口
 
 - 对 CMV、VeriGraph、EviGraph、GEPA 和 Context DAG 相关实现进行逐论文复核并补充代码可用性。
 - 以相同版本的 Codex、Claude Code、DeepSeek Harness、OpenHands 和 LangGraph 执行统一任务集；当前产品比较属于架构能力比较，不是性能排名。
 - 核验 Pareto Harness 名称在代码托管、包管理、域名和商标层面的可用性。
+- 对 Codex/Claude Code 的公开比较只支持“原生核心与多语言扩展面可分离”的架构事实；Claude Code 未公开完整核心源码，不能从安装载体推断其内部语言或与 Pareto Harness 的事件权威模型等价。
 
 ## 维护规则
 

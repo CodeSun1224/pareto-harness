@@ -44,6 +44,7 @@
 - [ADR-0006：采用版本化 Projection、同库 Snapshot 与只读 Recorded Replay](adrs/ADR-0006-versioned-projection-snapshot-recorded-replay.md)
 - [RFC-0006：Capability、预算、取消与超时可信内核合同](rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md)
 - [ADR-0007：采用事件溯源 Runtime Control 可信内核合同](adrs/ADR-0007-event-sourced-runtime-control.md)
+- [RFC-0007：Rust 权威控制面与多语言扩展边界](rfcs/RFC-0007-rust-authority-polyglot-extensions.md)
 
 ## 交付
 
