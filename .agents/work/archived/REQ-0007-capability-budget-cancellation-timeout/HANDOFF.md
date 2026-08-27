@@ -1,0 +1,9 @@
+# REQ-0007 Handoff
+
+最终状态：done / archived。REVIEW-0006 由独立设计 Reviewer 固定 `a4e3478` 并批准，0 open Blocker/Major。fresh independent implementation Reviewer 固定最终候选 `80249cc5c73575a3f92027f843cc657536905b9e`，独立检查批准合同、FIX-0001、Runtime/Protocol/Schema/Test diff 与原始门禁，关闭 REVIEW-0007 F-001 至 F-009；最终 `approved`，0 open Blocker、0 open Major。实现者没有自行关闭 finding。
+
+已交付的最小切片：Manifest exact 固定 control-capable SchemaSet；单 Run derived control stream 与 versioned pure fold；默认拒绝 Capability、owner root issuance、delegation 逐项收窄、撤销/到期和全隔离域判定；可信 resource envelope 与 Kernel meter；Run/Task/Actor/operation 多作用域预算在同一 `BEGIN IMMEDIATE` 原子 reserve，并按 verified/unknown 规则 consume/release/refund；Run/Task/operation cancellation request/probe/ack；FakeClock wall/monotonic deadline；确定性 TimeoutKey/recovery identity；唯一 terminal winner；终态后的 authorized late result 只追加脱敏审计；Projection/reopen 恢复；Recorded replay 零执行、零 append、零重复核算。
+
+最终 source SchemaSet 为 `sha256-a95c824d3a47dbc891f884921811859dc2d132e1e39f6f781e833ea9b306a217`。所有既有 published SchemaSet、SQLite v2 DDL/trigger、REQ-0003 至 REQ-0006 durable contracts 均保持兼容；未增加第三方依赖、真实 sleep、network/process、Provider、Tool 或外部 Effect。Runtime focused 为 53/53；最终独立门禁为 Python governance 21/21、Protocol 9 unit + 23 contract（1 observation ignored）、workspace Kernel 121 passed（1 observation ignored），fmt、clippy `-D warnings`、scope、Schema byte identity、docs 与 diff checks 全部通过。
+
+后续 REQ-0008 只能消费版本化 Kernel-private request/admission 接口。Hook、Effect Intent/Receipt、真实 Provider/Tool、Sandbox、Agent Loop、Memory、Task DAG、WASM/WASI、background timeout scanner、Control Snapshot 和真实外部副作用均未提前实现。若后续需要 public authority/raw SQL、alternate Event actor、DB v3、mutable balance/state table、caller-selected reader/reducer/operation contract、自动 crash release/reexecute 或扩大 cancellation/settlement authority，必须重新进入 impact/SPEC/RFC 与独立设计批准流程。

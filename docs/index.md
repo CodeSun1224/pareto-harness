@@ -1,6 +1,6 @@
 # 文档导航
 
-本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-25。
+本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-27。
 
 ## 产品
 
@@ -17,6 +17,8 @@
 - [SPEC-0004：Run/Task 状态机与 Run Manifest 规范](specs/SPEC-0004-run-task-state-machine-run-manifest.md)
 - [REQ-0006：Projection、Snapshot 与 Replay](requirements/REQ-0006-projection-snapshot-replay.md)
 - [SPEC-0005：Projection、Snapshot 与 Replay 规范](specs/SPEC-0005-projection-snapshot-replay.md)
+- [REQ-0007：Capability、预算、取消与超时](requirements/REQ-0007-capability-budget-cancellation-timeout.md)
+- [SPEC-0006：Capability、预算、取消与超时规范](specs/SPEC-0006-capability-budget-cancellation-timeout.md)
 
 ## 研究
 
@@ -40,6 +42,8 @@
 - [ADR-0005：采用事件溯源 Run/Task 生命周期](adrs/ADR-0005-event-sourced-run-task-lifecycle.md)
 - [RFC-0005：Projection、Snapshot 与本地确定性 Replay 合同](rfcs/RFC-0005-projection-snapshot-replay-contract.md)
 - [ADR-0006：采用版本化 Projection、同库 Snapshot 与只读 Recorded Replay](adrs/ADR-0006-versioned-projection-snapshot-recorded-replay.md)
+- [RFC-0006：Capability、预算、取消与超时可信内核合同](rfcs/RFC-0006-runtime-control-capability-budget-cancellation.md)
+- [ADR-0007：采用事件溯源 Runtime Control 可信内核合同](adrs/ADR-0007-event-sourced-runtime-control.md)
 
 ## 交付
 
@@ -50,6 +54,9 @@
 - [可信内核 Epic](epics/EPIC-0002-trusted-kernel.md)
 - [REQ-0005 独立评审](reviews/REVIEW-0004-run-task-state-machine-run-manifest.md)
 - [REQ-0006 独立代码评审](reviews/REVIEW-0005-projection-snapshot-replay.md)
+- [REQ-0007 独立设计评审](reviews/REVIEW-0006-capability-budget-cancellation-timeout-design.md)
+- [REQ-0007 独立实现评审](reviews/REVIEW-0007-capability-budget-cancellation-timeout-implementation.md)
+- [REQ-0007 Runtime Control 修复记录](fixes/FIX-0001-runtime-control-authority-and-replay-contract.md)
 
 ## 记录类型
 

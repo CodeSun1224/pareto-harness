@@ -1,9 +1,9 @@
 ---
 title: REQ-0007 Capability、预算、取消与超时交付计划
-status: active
+status: completed
 owner: maintainers
-updated: 2026-08-26
-links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006]
+updated: 2026-08-27
+links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, REVIEW-0007, FIX-0001]
 ---
 
 # Goal and acceptance
@@ -12,7 +12,7 @@ links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006]
 
 # Current state
 
-REQ-0003至REQ-0006均done，REQ-0005前置满足；启动时Git工作区clean，`.agents/work/active`只有`.gitkeep`，无其他Runtime Requirement。REQ-0007 high-risk影响分析已完成。REVIEW-0006对`05dd7ca`首轮提出6个Major，经两轮修订已独立批准`a4e3478`，0 open Blocker/Major；docs门禁170 Markdown/49 formal IDs和diff check通过。Runtime现从TASK-REQ-0007-01开始，只按批准合同实施。现有基线：18 governance passed，workspace Kernel 68 passed/1 ignored、Protocol 9 unit + 21 contract/1 ignored。
+REQ-0003至REQ-0007均done。REVIEW-0006独立批准设计固定提交 `a4e3478`；fresh independent REVIEW-0007独立批准实现固定候选 `80249cc5c73575a3f92027f843cc657536905b9e`，F-001至F-009全部关闭，0 open Blocker/Major。Capability/Budget/Cancellation/Timeout、late-result隔离、Projection恢复和Recorded replay最小纵向切片已实现，完整completion gates通过，工作证据归档；REQ-0008未提前实现。
 
 # Plan
 

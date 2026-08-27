@@ -1,13 +1,13 @@
 ---
 id: REQ-0007
 title: Capability、预算、取消与超时
-status: reviewing
+status: done
 owners: [maintainers]
 created: 2026-08-25
-updated: 2026-08-26
-links: [EPIC-0002, REQ-0003, REQ-0004, REQ-0005, REQ-0006, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006]
+updated: 2026-08-27
+links: [EPIC-0002, REQ-0003, REQ-0004, REQ-0005, REQ-0006, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, REVIEW-0007, FIX-0001]
 risk: high
-work: .agents/work/active/REQ-0007-capability-budget-cancellation-timeout
+work: .agents/work/archived/REQ-0007-capability-budget-cancellation-timeout
 ---
 
 # Context and user
@@ -61,4 +61,4 @@ work: .agents/work/active/REQ-0007-capability-budget-cancellation-timeout
 
 # Risks and open questions
 
-授权链与 confused-deputy、预算原子预留和退款、取消/完成/timeout 竞态、monotonic 与 wall-clock 持久化边界、迟到结果审计、控制事件版本和 replay 零执行会被多个后续 Requirement 依赖，属于跨模块且难以回退的高风险合同。REVIEW-0006 首轮对`05dd7ca`提出6个Major；经两轮修订，同一fresh independent reviewer已对固定提交`a4e3478`关闭全部Major并批准设计，0 open Blocker/Major。Runtime现仅按该合同实施最小纵向切片；完成后仍需新的fresh independent code review。
+授权链与 confused-deputy、预算原子预留和退款、取消/完成/timeout 竞态、monotonic 与 wall-clock 持久化边界、迟到结果审计、控制事件版本和 replay 零执行会被多个后续 Requirement 依赖，属于跨模块且难以回退的高风险合同。REVIEW-0006 对固定提交 `a4e3478` 独立批准设计；REVIEW-0007 对固定实现候选 `80249cc5c73575a3f92027f843cc657536905b9e` 独立批准实现并关闭 F-001 至 F-009，最终 0 open Blocker、0 open Major。完整门禁和归档证据保存在关联 work 目录；REQ-0008 及后续消费者仍须通过版本化 Kernel-private 接口接入，不得绕过本合同。

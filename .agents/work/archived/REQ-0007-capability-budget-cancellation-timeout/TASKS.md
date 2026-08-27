@@ -1,9 +1,10 @@
 # Requirement Tasks
 
-Current execution: reviewing. Fresh independent implementation review 已在 `1b40e92` 上形成
-REVIEW-0007（0 Blocker、9 Major）；三次 focused re-review 后仅F-007一个Major仍open。
-FIX-0001 fourth repair candidate 正在完成全门禁，TASK-REQ-0007-08等待同一独立 Reviewer
-对新的 exact revision 第四次 focused re-review。
+Current execution: done / archived。REVIEW-0006独立批准设计；fresh independent REVIEW-0007
+固定 exact `80249cc5c73575a3f92027f843cc657536905b9e`，F-001至F-009全部closed，
+最终0 Blocker / 0 Major。最终SchemaSet为
+`sha256-a95c824d3a47dbc891f884921811859dc2d132e1e39f6f781e833ea9b306a217`；
+完整门禁、事实同步和归档已完成，REQ-0008未提前实现。
 
 - [x] TASK-REQ-0007-00: 修订REQ/SPEC/RFC/ADR以闭合REVIEW-0006六个Major，提交仅含设计修订的exact revision，由同一independent reviewer focused re-review并恢复docs/diff门禁。Validation: REVIEW-0006 approved、0 open Blocker/Major、reviewed revision `a4e3478`；Runtime diff明确排除。
 
@@ -14,5 +15,5 @@ FIX-0001 fourth repair candidate 正在完成全门禁，TASK-REQ-0007-08等待�
 - [x] TASK-REQ-0007-05: 实现三级cancel request authority、probe/ack lease binding、interruptibility、FakeClock deadline、TimeoutKey/确定性recovery ID与显式timeout recovery、terminal race与late audit。Validation: `cancellation_authority`、timeout identity golden、not_due、response-loss、same/different-ID priority及cancel/time/recovery/race/late/model filters；`check_req0007_scope.py`证明no real sleep。
 - [x] TASK-REQ-0007-06: 实现Fake Operation最小纵切和read-only Recorded control replay，证明replay零dispatch/append/重复核算。Validation: `runtime_control::recorded_replay` plus event/account/counter assertions。
 - [x] TASK-REQ-0007-07: 完成全scope隔离、unknown/old Schema、crash/reopen、row drift和REQ-0003..0006回归；运行全部completion gates并记录evidence。Validation: complete PLAN command list and `VALIDATION.md`。
-- [ ] TASK-REQ-0007-08: 由fresh independent Agent执行implementation code-review；实现者修复，reviewer复审关闭全部Blocker/Major。Validation: 使用REVIEW-0007或当时下一个可用ID，independence independent、exact revision、0 open Blocker/Major；不得覆盖设计REVIEW-0006。
-- [ ] TASK-REQ-0007-09: 同步implemented facts、final freshness和全门禁，REQ-0007 verified/done并归档；确认REQ-0008未提前实现。Validation: docs/governance/schema/diff/status gates。
+- [x] TASK-REQ-0007-08: 由fresh independent Agent执行implementation code-review；实现者修复，reviewer复审关闭全部Blocker/Major。Validation: REVIEW-0007 approved，independence independent，exact revision `80249cc5c73575a3f92027f843cc657536905b9e`，0 open Blocker/Major；设计REVIEW-0006保持独立记录。
+- [x] TASK-REQ-0007-09: 同步implemented facts、final freshness和全门禁，REQ-0007 verified/done并归档；确认REQ-0008未提前实现。Validation: docs/governance/schema/diff/status gates全部通过，详见VALIDATION。
