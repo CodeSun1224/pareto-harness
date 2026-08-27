@@ -40,7 +40,7 @@ const FAKE_PRODUCER_REVISION: &str = "rev_fake-producer-v1";
 const FAKE_CALLBACK_NAMESPACE: &str = "callback_fake-";
 // Updated only when the generated control-capable SchemaSet is deliberately published.
 const RETAINED_CONTROL_SCHEMA_SET_DIGEST: &str =
-    "sha256:c3e2fda5ebfa148029d47131f1394d2a2a2eabc9d4305ccfb14dff31d284bd7e";
+    "sha256:a95c824d3a47dbc891f884921811859dc2d132e1e39f6f781e833ea9b306a217";
 const CONTROL_EVENT_TYPES: [&str; 11] = [
     "budget-refunded",
     "capability-issued",
@@ -1078,7 +1078,7 @@ impl EventStore {
                     operation_id: command.operation_id.clone(),
                     callback_id: command.callback_id.clone(),
                     callback_fingerprint: callback_fingerprint.clone(),
-                    callback_authority: durable_lease_authority(lease),
+                    callback_authority: durable_lease_authority(lease, sample),
                     classification: format!("late_after_{:?}", settlement.outcome)
                         .to_ascii_lowercase(),
                     payload_digest: command.redacted_payload_digest.clone(),
@@ -1135,7 +1135,7 @@ impl EventStore {
                 operation_id: command.operation_id.clone(),
                 callback_id: command.callback_id.clone(),
                 callback_fingerprint: callback_fingerprint.clone(),
-                callback_authority: durable_lease_authority(lease),
+                callback_authority: durable_lease_authority(lease, sample),
                 classification: format!("late_after_{:?}", settlement.outcome).to_ascii_lowercase(),
                 payload_digest: command.redacted_payload_digest.clone(),
                 redaction_policy_revision: find_contract(
@@ -1355,7 +1355,7 @@ impl EventStore {
             reservation_id: command.reservation_id.clone(),
             producer_revision: command.producer_revision.clone(),
             authority_kind: "producer_lease".to_owned(),
-            lease_authority: durable_lease_authority(lease),
+            lease_authority: durable_lease_authority(lease, &sample),
             acknowledged_at_utc: sample.canonical_utc.clone(),
         };
         if event_sequence(&mut tx, &command.event_id).await?.is_some() {
@@ -1489,7 +1489,7 @@ impl EventStore {
             operation_id: command.operation_id.clone(),
             callback_id: command.callback_id.clone(),
             callback_fingerprint: safe_digest("late-callback-command", command)?,
-            callback_authority: durable_lease_authority(lease),
+            callback_authority: durable_lease_authority(lease, &sample),
             classification: "late_after_terminal".to_owned(),
             payload_digest: command.redacted_payload_digest.clone(),
             redaction_policy_revision: contract.redaction_policy_revision.clone(),
@@ -2351,8 +2351,21 @@ fn apply_control_event(
                             &payload.operation_id,
                             &record.reservation,
                             authority,
+                            settled_wall,
                         )
                         .is_err()
+                            || authority
+                                .decision_monotonic_millis
+                                .parse::<u64>()
+                                .ok()
+                                .zip(authority.deadline_monotonic_millis.parse::<u64>().ok())
+                                .is_none_or(|(decision, deadline)| decision >= deadline)
+                            || payload
+                                .kernel_meter_evidence
+                                .as_ref()
+                                .is_some_and(|evidence| {
+                                    evidence.process_epoch != authority.process_epoch
+                                })
                     })
                 || payload.settled_at_utc != event.envelope().occurred_at
             {
@@ -2527,6 +2540,7 @@ fn apply_control_event(
                     &payload.operation_id,
                     &operation.reservation,
                     &payload.lease_authority,
+                    parse_utc_millis(&payload.acknowledged_at_utc)?,
                 )
                 .is_err()
                 || payload.producer_revision != operation.reservation.producer_revision
@@ -2577,6 +2591,7 @@ fn apply_control_event(
                     &payload.operation_id,
                     &record.reservation,
                     &payload.callback_authority,
+                    parse_utc_millis(&payload.received_at_utc)?,
                 )
                 .is_err()
                 || !payload
@@ -3295,7 +3310,7 @@ fn settlement_payload(
         reservation_id: command.reservation_id.clone(),
         callback_id: Some(command.callback_id.clone()),
         callback_fingerprint: Some(safe_digest("callback-command", command)?),
-        callback_authority: Some(durable_lease_authority(lease)),
+        callback_authority: Some(durable_lease_authority(lease, &command.decision_clock)),
         outcome,
         evidence_class,
         kernel_meter_evidence: meter_evidence,
@@ -3372,7 +3387,7 @@ fn make_lease(
     Ok(lease)
 }
 
-fn durable_lease_authority(lease: &OperationLease) -> CallbackAuthorityV1 {
+fn durable_lease_authority(lease: &OperationLease, decision: &ClockSample) -> CallbackAuthorityV1 {
     CallbackAuthorityV1 {
         reservation_id: lease.reservation_id.clone(),
         producer_revision: lease.producer_revision.clone(),
@@ -3380,6 +3395,7 @@ fn durable_lease_authority(lease: &OperationLease) -> CallbackAuthorityV1 {
         lease_wall_millis: lease.reserved_wall_millis.to_string(),
         lease_monotonic_millis: lease.reserved_monotonic_millis.to_string(),
         deadline_monotonic_millis: lease.deadline_monotonic_millis.to_string(),
+        decision_monotonic_millis: decision.monotonic_millis.to_string(),
         lease_fingerprint: lease.seal.clone(),
     }
 }
@@ -3389,6 +3405,7 @@ fn validate_callback_authority(
     operation_id: &OperationId,
     reservation: &OperationReservedPayloadV1,
     authority: &CallbackAuthorityV1,
+    decision_wall_millis: u64,
 ) -> Result<(), RuntimeControlError> {
     let lease = OperationLease {
         scope: scope.clone(),
@@ -3418,6 +3435,10 @@ fn validate_callback_authority(
         .reserved_monotonic_millis
         .checked_add(remaining)
         .ok_or_else(corrupt_error)?;
+    let decision_monotonic_millis = authority
+        .decision_monotonic_millis
+        .parse::<u64>()
+        .map_err(|_| corrupt_error())?;
     if authority.reservation_id != reservation.reservation_id
         || authority.producer_revision != reservation.producer_revision
         || authority.process_epoch.is_empty()
@@ -3425,6 +3446,8 @@ fn validate_callback_authority(
         || lease.reserved_wall_millis < parse_utc_millis(&reservation.reserved_at_utc)?
         || lease.reserved_wall_millis >= deadline_wall
         || lease.deadline_monotonic_millis != expected_monotonic_deadline
+        || decision_wall_millis < lease.reserved_wall_millis
+        || decision_monotonic_millis < lease.reserved_monotonic_millis
     {
         return corrupt();
     }

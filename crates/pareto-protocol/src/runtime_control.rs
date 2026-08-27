@@ -570,6 +570,8 @@ pub struct CallbackAuthorityV1 {
     pub lease_monotonic_millis: String,
     /// Derived monotonic deadline in the same process epoch.
     pub deadline_monotonic_millis: String,
+    /// Callback or acknowledgement decision time in the same monotonic epoch.
+    pub decision_monotonic_millis: String,
     /// Domain-separated fingerprint of the complete presented lease.
     pub lease_fingerprint: Digest,
 }

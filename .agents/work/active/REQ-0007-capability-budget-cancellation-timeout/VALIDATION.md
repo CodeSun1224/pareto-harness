@@ -88,9 +88,21 @@ finding 仍必须由同一独立 reviewer 关闭。
 | Late exact idempotency regression | 同一 focused command | passed | bounded model每个case exact retry | 修复terminal后late callback同event ID重试误按`operation-settled`比较而产生`idempotency_conflict`的问题；不重复audit/effect/accounting |
 | Governance/static/full | governance unittest；scope；fmt；clippy；workspace test；schema generator；diff check | passed | Python 21；Kernel 121 passed/1 ignored；Protocol 9+23 passed/1 ignored | final SchemaSet仍为`sha256:c3e2fda5…`且generator无diff；DB v2/依赖/real I/O未变 |
 
+## REVIEW-0007 fourth repair candidate
+
+第三次 focused independent re-review 在 exact `97bca8b7b34ceadd5ab4f8ad01f49e10b3377adb`
+关闭 F-005/F-009，仅保留 F-007 一个 Major。第四轮把 callback/ack decision monotonic
+时间纳入durable authority，并补齐live/pure一致性；finding仍须由同一reviewer关闭。
+
+| Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
+|---|---|---|---|---|
+| Decision/lease authority | Runtime focused and illegal terminal history filter | passed | 53 passed；新增`lease-after-settlement`与`meter-epoch-mismatch` | pure fold要求decision wall/monotonic不早于lease，non-timeout monotonic decision早于deadline，meter evidence epoch等于callback authority epoch |
+| Protocol/Schema identity | Protocol contracts；schema generator | passed | 9 unit + 23 contract；`sha256:a95c824d…` | 新必填`decision_monotonic_millis`进入closed callback-authority Schema；替换未发布candidate `c3e2fda5…`；既有published retained sets不改写 |
+| Projection compatibility | projection digest golden and full workspace | passed | 六个canonical digest golden按新source identity重算 | output reducer语义不变；source schema identity变化显式进入projection/snapshot provenance |
+
 ## Skipped tests
 
-REVIEW-0007 third focused independent re-review and post-review full gate rerun remain pending. Real Provider/Tool/network/performance claims are out of scope；ignored tests are observation-only baselines already marked by the repository。
+REVIEW-0007 fourth focused independent re-review and post-review full gate rerun remain pending. Real Provider/Tool/network/performance claims are out of scope；ignored tests are observation-only baselines already marked by the repository。
 
 ## Remaining limitations
 

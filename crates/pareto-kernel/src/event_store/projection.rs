@@ -1448,11 +1448,11 @@ async fn digest_golden() {
     );
     assert_eq!(
         projection.projection_digest.as_str(),
-        "sha256:b7e9b4647bbef82f2ade3d54d0f7fced1e754fff9779722c8ea1a28cc79ee7f3"
+        "sha256:cdc9d528aadb91b7eded8b95fd8c36dd41b773971d86dd55e86442d0aa483a04"
     );
     assert_eq!(
         snapshot.snapshot_digest.as_str(),
-        "sha256:b404f48efe004a28058f07ef3df8b5993f53af95eec366b51246a90b79330df6"
+        "sha256:ad22dcb25dbae95c57e39eac271ab60d97c6271d369f782455127e4e57a175b2"
     );
     transaction.rollback().await.unwrap();
 
@@ -1500,19 +1500,19 @@ async fn digest_golden() {
     );
     assert_eq!(
         one.as_str(),
-        "sha256:c94b97319805648d0ae656b9f8b4d753d9b56620e32fc817ab37680c9361b41a"
+        "sha256:5ee375d497798d193c4dae74fe25f7b60519ee5665ff7859f4aabde75b2e0626"
     );
     assert_eq!(
         two.as_str(),
-        "sha256:19f5cd358b56c1e59dcb72d5f1f471f08d0b79beacf97e4ae78b84ed797f44ee"
+        "sha256:3b3eeb8e383caaeb0e1176bceebac7f5a569c7be700581d585cea820c380193c"
     );
     assert_eq!(
         projection_n.projection_digest.as_str(),
-        "sha256:df0bac61457755f459016ee6c99b921072861b5f489ae0424ddd1e55a110c650"
+        "sha256:02885f3fc0e0997cf83fd06d55be54aaf75d62f215140ad6b551efae50e2bfae"
     );
     assert_eq!(
         snapshot_n.snapshot_digest.as_str(),
-        "sha256:1a7a0ccff67e63f168829394525f85e4b3780995ea8f7b40842e9dea8348fb0e"
+        "sha256:506b9f13b16f13d70541cab07316c652f38d1421bd3ddb8d1ca71a3a0a1fc968"
     );
 }
 

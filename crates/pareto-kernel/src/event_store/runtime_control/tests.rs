@@ -776,7 +776,7 @@ async fn timeout_recovery() {
     let command = store.prepare_timeout_recovery(
         &fixture.registry(), &fixture.target(), timeout_request("operation_timeout", "corr-timeout", None, digest('e')), &at_deadline,
     ).await.unwrap();
-    assert_eq!(command.event_id.as_str(), "event_5f31f90df9f053e582311dd4ae733cb0d383d1ceaf252dc08411626084c31ffc");
+    assert_eq!(command.event_id.as_str(), "event_f2e7de1827eb20d160fdf23fab402cc4b2611d3874fe953bb39762cdba18f211");
     let first = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     let retry = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     assert_eq!(append_identity(&first), append_identity(&retry));
@@ -1758,6 +1758,7 @@ async fn compatibility_rejects_schema_valid_illegal_budget_and_cancel_history() 
             producer_revision: RevisionId::parse(FAKE_PRODUCER_REVISION).unwrap(),
             process_epoch: "epoch-b".to_owned(), lease_wall_millis: "0".to_owned(),
             lease_monotonic_millis: "0".to_owned(), deadline_monotonic_millis: "1".to_owned(),
+            decision_monotonic_millis: "0".to_owned(),
             lease_fingerprint: digest('9'),
         },
         acknowledged_at_utc: "2026-08-26T00:00:20.000Z".to_owned(),
@@ -1838,7 +1839,10 @@ async fn compatibility_rejects_forged_settlement_and_late_lease_authority() {
     let late_store = create_running(&late_fixture).await;
     let late_lease = reserve(&late_store, &late_fixture, "forged-late").await;
     late_store.settle_operation(&late_fixture.registry(), &late_fixture.target(), &late_lease, &settlement(&late_fixture, "forged-late", OperationOutcomeV1::Succeeded, 1)).await.unwrap();
-    let mut authority = durable_lease_authority(&late_lease);
+    let mut authority = durable_lease_authority(
+        &late_lease,
+        &FakeClock::at("2026-08-26T00:00:21.000Z", 2_100, "epoch-a").sample(),
+    );
     authority.process_epoch = "epoch-forged".to_owned();
     let late = LateResultObservedPayloadV1 {
         operation_id: OperationId::parse("operation_forged-late").unwrap(),
@@ -1866,6 +1870,8 @@ async fn compatibility_rejects_schema_valid_illegal_terminal_winner_history() {
         "success-at-deadline",
         "timeout-before-deadline",
         "invalid-monotonic-equation",
+        "lease-after-settlement",
+        "meter-epoch-mismatch",
     ] {
         let fixture = Fixture::new(&format!("run_forged-terminal-{case}"));
         let store = create_running(&fixture).await;
@@ -1925,6 +1931,20 @@ async fn compatibility_rejects_schema_valid_illegal_terminal_winner_history() {
                     .checked_add(1)
                     .unwrap()
                     .to_string();
+                reseal_callback_authority(&fixture.scope, &forged.operation_id, authority);
+            }
+            "lease-after-settlement" => {
+                let authority = forged.callback_authority.as_mut().unwrap();
+                authority.lease_wall_millis =
+                    parse_utc_millis("2026-08-26T00:00:30.000Z").unwrap().to_string();
+                authority.lease_monotonic_millis = "3000".to_owned();
+                authority.deadline_monotonic_millis = "33000".to_owned();
+                authority.decision_monotonic_millis = "3000".to_owned();
+                reseal_callback_authority(&fixture.scope, &forged.operation_id, authority);
+            }
+            "meter-epoch-mismatch" => {
+                let authority = forged.callback_authority.as_mut().unwrap();
+                authority.process_epoch = "epoch-b".to_owned();
                 reseal_callback_authority(&fixture.scope, &forged.operation_id, authority);
             }
             _ => unreachable!(),

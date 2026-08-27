@@ -84,6 +84,12 @@ producer settlement command 和 JSON-Schema-valid history 仍被赋予了定义�
 - bounded model额外发现并修复late callback exact event-ID retry误按settlement payload比较的
   幂等缺陷，确保相同late command返回原提交且不重复audit。
 
+第三次 focused re-review 关闭 F-005/F-009 后，fourth repair 将callback/ack decision
+monotonic sample持久化进authority；pure fold校验decision wall/monotonic均不早于lease、
+non-timeout decision未越过monotonic deadline，并要求Kernel meter evidence与callback
+authority来自同一process epoch。新增validly re-sealed lease-after-settlement与meter-epoch
+mismatch历史，证明Projection、reopen和Recorded replay拒绝live path不可能提交的terminal。
+
 # Regression proof
 
 每项 F-001 至 F-009 必须至少有一个在首个候选上失败、修复后通过的命名测试；
