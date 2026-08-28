@@ -1,0 +1,16 @@
+# Requirement Tasks
+
+Current execution: planned / no Runtime implementation。设计 exact `3aee02adf8815466b02f51de247ae19922efc126` 已由 fresh independent REVIEW-0010批准，F-001至F-004全部closed，0 open Blocker/Major；ADR-0009和accepted docs exact `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` 已完成独立freshness复核。
+
+- [x] TASK-REQ-0008-00: 完成Requirement、直接/间接影响分析、SPEC、RFC、AC→测试矩阵、fresh independent设计Review、finding整改复审、ADR接受和active work门禁。Validation: REVIEW-0010 `approved`、0 open Blocker/Major，reviewed revision `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6`；产品/Schema/Cargo/script diff为零。
+- [ ] TASK-REQ-0008-01: 新增闭合Hook Protocol类型、Manifest registry role/new major、Hook Event/Projection Schema和内容地址SchemaSet，保留全部旧set与旧Run解释。Validation: protocol hook contract、golden/compatibility tests、两次Schema生成byte-identical。
+- [ ] TASK-REQ-0008-02: 实现crate-private Hook derived stream、sequence-1 source contract、exact reader、pure fold、Projection与read-only Recorded replay入口，不改SQLite v2或增加第二状态表。Validation: `hook_runtime::{fold_contract,recovery,compatibility,recorded_replay}`及Event Store/Projection回归。
+- [ ] TASK-REQ-0008-03: 实现Manifest-pinned registry、kind×point矩阵、固定phase、稳定phase-local顺序、input lineage、point decision/finalization和Rust Fake handler boundary。Validation: `hook_runtime::{kind_point_table,phase_order_lineage,ordering}`及bounded permutation cases。
+- [ ] TASK-REQ-0008-04: 实现transaction-local Runtime Control admission与reserve/terminal atomic pair command，覆盖zero/two exact、mutation、one-existing corruption、第一/第二insert及commit fault rollback、response-loss和single-stream terminal拒绝。Validation: `hook_runtime::{reserve_pair_atomicity,pair_fault_injection,terminal_pair_atomicity,pair_corruption,idempotency}`。
+- [ ] TASK-REQ-0008-05: 实现bounded authority、全scope隔离、Capability撤销/过期/收窄、trusted envelope、Run/Task/Actor/operation预算及并发防超卖。Validation: `hook_runtime::{authority,isolation,budget_reserve,budget_concurrency,settlement}`和compile-fail API证明。
+- [ ] TASK-REQ-0008-06: 实现Observer非权威失败语义、Gate组合/default deny、Transform pipeline/mask/protected fields及不可信输出limits/Schema/redaction。Validation: `hook_runtime::{gate_composition,default_deny,failure_policy,observer_non_authority,transform_chain_failure,transform_protected_fields,output_security}`。
+- [ ] TASK-REQ-0008-07: 实现FakeClock cancel/deadline/timeout、hung recovery、terminal race与late/duplicate/retry/out-of-order安全审计。Validation: `hook_runtime::{cancellation_deadline,terminal_race,model_sequences,late_and_duplicate,recovery}`，无真实sleep。
+- [ ] TASK-REQ-0008-08: 完成Fake Run/Task→Manifest pin→Observer/Gate/Transform→pair settlement→Projection recovery纵切，并证明Recorded零handler/append/核算及unsupported mode拒绝。Validation: `hook_runtime::{recorded_replay,unsupported_modes}`的counter/Event/account逐字段断言。
+- [ ] TASK-REQ-0008-09: 完成全部Focused/Impacted/Core、真实SQLite fault/concurrency、兼容/隔离/安全/model测试，新增scope checker并运行AGENTS完整门禁，记录`VALIDATION.md`。Validation: PLAN完整命令、非零filter count、Schema/DB identity、quality/cost/latency观察和clean hygiene证据。
+- [ ] TASK-REQ-0008-10: 由新的fresh independent Agent执行实现Code Review；实现者修复，原Reviewer复审关闭全部Blocker/Major。Validation: 新REVIEW approved、independence independent、exact implementation revision、0 open Blocker/Major。
+- [ ] TASK-REQ-0008-11: 同步implemented facts与最终freshness，REQ-0008 reviewing→verified→done并归档active work；确认REQ-0009尚未开始。Validation: 完整门禁最终复跑、Review 0/0、工作区只含预期提交。
