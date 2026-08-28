@@ -62,6 +62,7 @@
 - [REQ-0007 独立设计评审](reviews/REVIEW-0006-capability-budget-cancellation-timeout-design.md)
 - [REQ-0007 独立实现评审](reviews/REVIEW-0007-capability-budget-cancellation-timeout-implementation.md)
 - [Rust 权威控制面与多语言扩展边界独立设计评审](reviews/REVIEW-0009-rust-authority-polyglot-extensions-design.md)
+- [REQ-0008 Observer/Gate/Transform Hook 独立设计评审](reviews/REVIEW-0010-observer-gate-transform-hooks-design.md)
 - [REQ-0007 Runtime Control 修复记录](fixes/FIX-0001-runtime-control-authority-and-replay-contract.md)
 
 ## 记录类型

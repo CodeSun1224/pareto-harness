@@ -5,7 +5,7 @@ status: proposed
 owners: [runtime-kernel]
 created: 2026-08-28
 updated: 2026-08-28
-links: [REQ-0008, SPEC-0007, REQ-0004, REQ-0007, RFC-0007, ADR-0008, ARCH-0002, ARCH-0003, ARCH-0004]
+links: [REQ-0008, SPEC-0007, REQ-0004, REQ-0007, RFC-0007, ADR-0008, ARCH-0002, ARCH-0003, ARCH-0004, REVIEW-0010]
 ---
 
 # Summary
@@ -30,9 +30,9 @@ point 分成 pre-commit 与 post-commit。pre-commit failure 可阻止尚未提�
 
 ## 2. Manifest-pinned registry and deterministic order
 
-`HookRegistryRevisionV1` 是内容寻址闭合记录，包含排序后的 `HookRegistrationV1` 与 registry/config digest。Run Manifest 通过新 revision role `hook_registry` 固定 registry，SchemaSet 固定 registry、Hook Event 和 Projection reader。排序 tuple 为 `(point ordinal, priority ascending, hook logical ID bytes, hook revision bytes)`；相同完整 tuple 非法，不使用注册时间、map 顺序或进程地址。
+`HookRegistryRevisionV1` 是内容寻址闭合记录，包含排序后的 `HookRegistrationV1` 与 registry/config digest。Run Manifest 通过新 revision role `hook_registry` 固定 registry，SchemaSet 固定 registry、Hook Event 和 Projection reader。排序 tuple 为 `(point ordinal, phase ordinal, priority ascending, hook logical ID bytes, hook revision bytes)`；phase不是注册字段，而由point/kind矩阵推导；相同完整 tuple 非法，不使用注册时间、map 顺序或进程地址。
 
-每个 proposal 在 point 开始时固定 source cursor 和 ordered invocation list；本轮 registry 不能热更新。handler implementation registry 只能按 exact revision/config/compatibility identity 解析，missing、unknown 或 current substitution 在调用前 fail closed。
+每个 proposal 在 point 开始时固定 source cursor、初始input bytes/digest和ordered invocation list；本轮 registry 不能热更新。`before_proposal_admission`固定`Transform -> Gate -> Observer`，`before_authoritative_commit`固定`Gate -> Observer`，`after_*`只有Observer。Transform n接收前一已验证output，成功后固定final input；所有Gate接收相同final input；Observer只在业务决定固定后接收final input与决定只读view，输出不能回写决定。Transform失败或Gate deny规范skip后续phase。Observer fail-closed只产生分离的execution failure并阻止尚未开始的下游阶段，不能改变业务allow/deny或回滚已提交事实。每个invocation Event记录input digest与predecessor output digest，point-finalized Event分别记录initial/final digest、有序component/skip identity、immutable business decision与execution status；重启和Recorded replay由这些事实重算相同lineage。handler implementation registry只能按 exact revision/config/compatibility identity解析，missing、unknown 或 current substitution在调用前fail closed。
 
 ## 3. Gate composition
 
@@ -42,7 +42,7 @@ Gate 串行执行。每个结果先验证 limits、Schema、producer/lease、poi
 2. handler failure、timeout、非法输出、unknown reader/revision 都转换为安全 deny，不转换为 abstain。
 3. 无 deny 时，每个 required Gate 都必须 allow；required abstain 或 missing 决定 deny。
 4. optional Gate 可 allow 或 abstain，但不能弥补 required Gate 缺失。
-5. 只有 registry 对该 point 显式声明 `gate_requirement=none` 时才允许空 required set，否则 deny。
+5. 两个Gate-bearing point都必须至少有一个required Gate；零Gate或仅optional Gate稳定deny。Registry没有`gate_requirement=none`或同义例外；`after_*`因矩阵禁止Gate而不适用该检查。
 
 最终 `HookPointDecisionV1` 记录 ordered component decision IDs、short-circuit 位置、final outcome、稳定 reason 与 input/registry/source identity。它是 Kernel 决定，不是某个 Gate 自签 authority。
 
@@ -54,13 +54,15 @@ Transform 使用稳定串行 pipeline。`TransformContractV1` 为每个 point �
 
 ## 5. Authority, budget, and handler boundary
 
-Kernel 从认证 principal 与 persisted Manifest/lifecycle/control 构造 invocation context，忽略 handler 自报 scope。每次调用映射为 REQ-0007 protected operation：retained trusted contract 产生完整 finite envelope；Kernel 在同一 writer transaction 完成 lifecycle/cancel/deadline/Capability、Run/Task/Actor/per-operation 全账户 reserve，并追加 control reservation 与 Hook invocation-reserved 事实。
+Kernel 从认证 principal 与 persisted Manifest/lifecycle/control 构造 invocation context，忽略 handler 自报 scope。每次调用映射为 REQ-0007 protected operation：retained trusted contract 产生完整 finite envelope；Kernel 使用crate-private `HookReservePairCommandV1`在同一 writer transaction完成 lifecycle/cancel/deadline/Capability、Run/Task/Actor/per-operation全账户reserve，并追加control reservation与Hook invocation-reserved事实。
 
-两条 stream 的追加必须在同一 SQLite transaction 内完成或由 Event Store 证明为一个不可分割的 private command；不允许 control 已 reserve 但 Hook invocation identity 未记录的部分成功。实现若不能满足，必须退回 RFC，不得以补偿事件替代原子准入。
+reserve pair闭合固定pair ID/kind、canonical full-command fingerprint、完整scope/owner、两stream ID和expected inclusive cursor/next sequence、两个确定性Event ID/sequence及完整prepared bytes；两个payload互相引用pair/counterpart Event/operation/invocation/reservation。单个`BEGIN IMMEDIATE`按完整性/Schema/隔离 → pair ID exact/mutation → 双stream现有状态 → expected cursor/领域准入 → insert control → insert Hook → commit处理。zero-existing才尝试写入；任一validation/insert/commit失败rollback且两边均不可见。two-existing只有两个Event ID/sequence/bytes、fingerprint和交叉引用全部exact才返回原结果；同pair ID不同bytes冲突；one-existing即使单边历史已合法重封也属于`corrupt_partial_pair`，绝不补写或调用handler。different pair ID由writer与expected cursor决定winner；commit response loss只可重试相同pair bytes。
 
-Kernel 随后向 Fake handler 发放不可序列化 `HookInvocationLease`，只暴露 read-only input/probe 与结果返回能力。handler 不能 append、refund、确认其他 operation 的取消、构造 timeout recovery 或执行 Effect。Kernel meter 包围 Fake 执行，settlement 复用 REQ-0007 verified/unknown 规则。
+这要求把当前会自行commit的Runtime Control reserve/settlement admission重构为Kernel-private transaction-local helper，但不扩大public API、SQL或handler authority。实现若不能证明双insert rollback、pair exact/mutation、one-existing corruption与response-loss幂等，必须退回RFC，不得以补偿Event替代原子准入。
 
-handler 运行期间 Run/Task 可请求取消或到达 deadline。结果返回后 Kernel 重新 fold 两条 stream 并验证 lease、producer、process epoch、attempt、terminal 与 Clock；loser 成为 late/rejected audit。hung/uninterruptible handler 由 REQ-0007 显式 timeout recovery 终结，Hook 层只引用最终 operation outcome，不建立第二 timeout 机制。
+Kernel 随后向 Fake handler 发放不可序列化 `HookInvocationLease`，只暴露 read-only input/probe 与结果返回能力。handler 不能 append、refund、确认其他 operation 的取消、构造 timeout recovery 或执行 Effect。Kernel meter 包围 Fake 执行，settlement 复用 REQ-0007 verified/unknown 规则，并由`HookTerminalPairCommandV1`在一个transaction原子追加control settlement与Hook result/component-decision terminal。
+
+handler 运行期间 Run/Task 可请求取消或到达 deadline。结果返回后 Kernel 重新 fold 两条 stream并验证lease、producer、process epoch、attempt、terminal与Clock；loser成为late/rejected audit。completion、cancellation和hung/uninterruptible timeout recovery都只能提交同一terminal pair命令；通用单stream Runtime Control terminal入口遇到Hook operation binding必须fail closed。recovery authority仍继承REQ-0007 persisted TimeoutKey/FakeClock规则，但调用transaction-local settlement admission并同步写Hook terminal，不先结算后补写。terminal pair采用与reserve pair相同zero/two exact、mutation、one-existing corruption、rollback和response-loss规则。point-finalized随后由Hook-only幂等命令追加，不参与预算结算。
 
 ## 6. Events, projection, recovery, and replay
 
@@ -80,12 +82,12 @@ Observer 注册策略只有 warn-and-continue 与 fail-closed；Gate 固定 fail
 
 ```text
 Manifest-pinned Hook registry
-  -> stable ordered point invocations
+  -> fixed point phases + stable phase-local invocations + input lineage
   -> Kernel persisted identity/lifecycle/control admission
-  -> atomic control reserve + Hook invocation fact
+  -> atomic reserve pair: control reservation + Hook invocation fact
   -> opaque bounded lease + Fake handler
   -> Kernel output limits/Schema/scope/protected-field validation
-  -> Observer audit OR Gate component decision OR transformed proposal
+  -> atomic terminal pair + transformed proposal/Gate component/Observer audit
   -> deterministic point composition
   -> Kernel-only authoritative Event admission
   -> Hook Projection/recovery
@@ -103,10 +105,12 @@ Manifest-pinned Hook registry
 | Gate failure/timeout/required abstain | stable deny；剩余 Gate 按 short-circuit 规则 skip；无 authoritative effect |
 | Transform 保护字段/unknown mutation | protected hash 与 mask 验证拒绝整个 proposal；无 partial commit |
 | self-signed scope/capability/lease | Kernel 从 persisted facts 重建；unknown producer no-write 且不能触发 unknown usage 扣账 |
-| budget 不足或并发竞争 | handler 前全账户原子拒绝；reverse-winner 测试证明不超卖 |
-| crash after reserve | pending 保留；reopen 从双 stream 恢复并显式 reconcile；不自动 release/reexecute |
-| cancel/complete/timeout race | writer refold 决定唯一 terminal；late 只写安全 digest audit |
-| response loss/duplicate/out-of-order | exact command retry 返回原结果；mutation conflict；late 不改 decision/budget |
+| budget 不足或并发竞争 | handler 前全账户原子拒绝；reserve pair与reverse-winner测试证明不超卖 |
+| pair第二insert/commit失败 | transaction rollback使双stream均无新Event；禁止补偿Event |
+| 单边pair历史 | 即使合法重封也判`corrupt_partial_pair`并阻止调用/恢复；不自动catch-up |
+| crash after reserve | 完整pending pair保留；reopen从双stream恢复并显式提交terminal pair；不自动release/reexecute |
+| cancel/complete/timeout race | writer refold决定唯一terminal pair；通用单stream入口拒绝；late只写安全digest audit |
+| response loss/duplicate/out-of-order | exact pair/command retry返回原结果；mutation conflict；late不改decision/budget |
 | oversized/injection/sensitive output | pre-decode limits 与 closed Schema 拒绝；Kernel-only redaction；文本不成为 instruction/authority |
 | old/unknown Schema/reducer | exact retained reader；missing fail closed；旧 Run 不后加 Hook |
 | Recorded replay | API 无 handler/writer；counter/event/budget 前后相等；source Run 不覆盖 |
@@ -132,7 +136,7 @@ SQLite 预期仍为 v2，Hook stream 复用 events 表。若原子双 stream com
 
 # Evaluation and acceptance
 
-- 质量：AC-01 至 AC-20 全部映射到命名、非零、确定性测试；重点是 default deny、Observer 无权威效力、Transform 保护字段、全隔离、防超卖、唯一 terminal、crash recovery 与 Recorded 零执行。
+- 质量：AC-01 至 AC-20 全部映射到命名、非零、确定性测试；重点是固定phase/input lineage、空required集default deny、Observer无权威效力、Transform保护字段与chain失败、全隔离、pair双insert故障/单边损坏/response loss、防超卖、唯一terminal、crash recovery与Recorded零执行。
 - Token/费用：无真实模型/Provider/Tool；记录 Fake usage 和 unknown 保守核算，不声明优化。
 - 延迟：记录 1/N Hook 串行、short-circuit、reserve/settle、争用、fold/replay 观察；无基线前不并行化或设阈值。
 - 设计门禁：fresh independent reviewer 对 exact design commit 检查 Requirement/Spec/RFC、现有代码/测试与架构边界；0 open Blocker/Major 后才能接受 RFC、创建 ADR-0009、批准 Spec/Requirement并创建 Plan、Tasks 和 active Handoff。此前禁止 Runtime 功能代码。
