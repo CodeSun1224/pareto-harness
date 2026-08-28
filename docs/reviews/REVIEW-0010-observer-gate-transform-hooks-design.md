@@ -7,7 +7,7 @@ created: 2026-08-28
 updated: 2026-08-28
 links: [REQ-0008, SPEC-0007, RFC-0008, RFC-0007, ADR-0008, REQ-0004, REQ-0007, REVIEW-0006, REVIEW-0007, REVIEW-0009, FIX-0001]
 independence: independent
-reviewed_revision: 3aee02adf8815466b02f51de247ae19922efc126
+reviewed_revision: 3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6
 open_blockers: 0
 open_majors: 0
 ---
@@ -92,6 +92,15 @@ Focused remediation re-review 在 Windows/PowerShell、2026-08-28 对 exact `3ae
 - `git diff --check`：无输出，exit 0。
 - `git status --short`：仅 REVIEW-0001..0007 freshness与 REVIEW-0010 focused closure；REQ/SPEC/RFC及产品代码保持只读。
 
+Focused accepted-doc freshness re-review 在 Windows/PowerShell、2026-08-28 对 exact
+`3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` 独立执行：
+
+- `git diff --quiet ea9633c8883353289f32ea90757cee0ed20a545f 3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6 -- crates schemas Cargo.toml Cargo.lock scripts .agents`：无产品、Schema、Cargo、script或agent diff，exit 0。
+- `python -m unittest discover -s scripts/tests -p "test_*.py"`：21 tests passed，exit 0。
+- `python scripts/check_docs.py`：`Document validation passed: 181 Markdown files, 60 formal IDs.`，exit 0。
+- `git diff --check`：无输出，exit 0。
+- `git status --short`：仅 REVIEW-0001..0007 与 REVIEW-0010 reviewer-owned freshness；accepted design与产品代码保持只读。
+
 # Scope and unrelated changes
 
 精确 `754798de..8507bae4` diff仅新增REQ-0008、SPEC-0007、RFC-0008，并更新`docs/index.md`与
@@ -108,3 +117,9 @@ Focused remediation re-review 在 Windows/PowerShell、2026-08-28 对 exact `3ae
   F-001 fixed phase/input lineage/Observer non-authority、F-002 Gate-bearing empty-required unconditional deny、
   F-003 reserve/terminal atomic pair及single-stream terminal拒绝、F-004 fixed Transform reject-whole均由durable合同和
   命名非零测试计划关闭；无新finding。结论0 Blocker、0 Major，`approved`，但产品代码仍禁止在后续接受/规划门禁前开始。
+- 2026-08-28：focused independent accepted-doc freshness re-review of exact
+  `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` against parent
+  `ea9633c8883353289f32ea90757cee0ed20a545f`。新增ADR-0009忠实等价接受exact `3aee02ad`：fixed phase/input
+  lineage与Observer decision隔离、Gate-bearing empty-required deny、reserve/terminal atomic pair及single-stream terminal
+  拒绝、Transform fixed reject-whole均无漂移；REQ/SPEC/RFC只更新accepted状态/链接，ARCH/index/Epic只同步“设计已接受、
+  Runtime未实现”事实。crates/schemas/Cargo/scripts/agents零差异；无新finding。REVIEW-0010保持approved、0/0。

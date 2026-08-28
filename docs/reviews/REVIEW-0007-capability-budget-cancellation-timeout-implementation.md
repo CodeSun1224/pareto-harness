@@ -7,7 +7,7 @@ created: 2026-08-26
 updated: 2026-08-27
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: 3aee02adf8815466b02f51de247ae19922efc126
+reviewed_revision: 3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6
 open_blockers: 0
 open_majors: 0
 ---
@@ -166,3 +166,4 @@ REQ-0008未实现。后续若改变callback authority、meter evidence epoch、d
 - 2026-08-27：focused accepted-doc freshness re-review exact `b42ccdc3216f518ff60303cec20da92b78d190a1`。`2c80b89..b42ccdc`对Runtime、Protocol、Schema、DB、Cargo、Capability、Budget、Cancellation、deadline、callback/late authority与Recorded replay实现零差异；accepted ADR/architecture延续default-deny与Rust admission。REQ-0007批准实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。
 - 2026-08-28：focused REQ-0008 design freshness re-review exact `8507bae4ad979232e69ba282ee9c97ee71e3520e`。`754798d..8507bae`对Runtime、Protocol、Schema、DB、Cargo、Capability、Budget、Cancellation、deadline、callback/late authority与Recorded replay实现零差异；候选只设计未来Hook消费者并继续禁止handler构造authority或自报usage。REVIEW-0010以4 open Major阻塞设计/实现，尤其没有把现有单Event reserve helper虚构为已实现atomic pair。REQ-0007批准实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。
 - 2026-08-28：focused REQ-0008 remediation freshness re-review exact `3aee02adf8815466b02f51de247ae19922efc126`。`43f3a5b..3aee02a`对Runtime、Protocol、Schema、DB、Cargo及REQ-0007 authority/accounting实现零差异；文档准确要求未来把自行commit的single-event helper重构为private transaction-local admission，并为Hook operation拒绝single-stream terminal。该能力仍未实现，REVIEW-0010仅批准设计。REQ-0007实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。
+- 2026-08-28：focused REQ-0008 accepted-doc freshness re-review exact `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6`。`ea9633c..3318cbc`对Runtime、Protocol、Schema、DB、Cargo及REQ-0007 authority/accounting实现零差异；ADR-0009继续把transaction-local pair列为未来实现代价。REQ-0007实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。

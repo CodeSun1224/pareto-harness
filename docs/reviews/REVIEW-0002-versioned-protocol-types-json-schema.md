@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 3aee02adf8815466b02f51de247ae19922efc126
+reviewed_revision: 3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6
 open_blockers: 0
 open_majors: 0
 ---
@@ -101,3 +101,4 @@ Remaining Notes/limitations:
 - Exact accepted-doc candidate `b42ccdc3216f518ff60303cec20da92b78d190a1` substantive freshness re-review: `2c80b89..b42ccdc`对protocol、schemas、Cargo、API、canonicalization、limits和retained readers零差异；ADR-0008与ARCH-0004继续把wire Schema、identity、compatibility和transport留给首次真实Requirement，且禁止Rust ABI/SQLite layout成为跨语言合同。REVIEW-0002保持approved、0 open Blocker/Major。
 - Exact REQ-0008 design candidate `8507bae4ad979232e69ba282ee9c97ee71e3520e` substantive freshness re-review: `754798d..8507bae`没有修改protocol、schemas、Cargo、API、canonicalization、limits或retained readers；仅提出未来新RunManifest major、Hook Schema/Event/reader且明确保留全部旧set、unknown/current substitution fail closed。REVIEW-0010以4 open Major阻塞该设计和实现，未发布任何Schema。REQ-0003合同无回退，REVIEW-0002保持approved、0 open Blocker/Major。
 - Exact REQ-0008 remediation `3aee02adf8815466b02f51de247ae19922efc126` substantive freshness re-review: `43f3a5b..3aee02a`仍无protocol、schemas、Cargo、API、canonicalization、limits或retained-reader变化；只闭合未来Hook phase/pair/failure合同和测试计划。没有发布Hook Schema或修改既有set；REVIEW-0010批准设计不替代实现兼容证据。REQ-0003合同无回退，REVIEW-0002保持approved、0 open Blocker/Major。
+- Exact REQ-0008 accepted-doc `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` substantive freshness re-review: `ea9633c..3318cbc`对protocol、schemas、Cargo、API、canonicalization、limits和retained readers零差异；ADR-0009只接受未来Hook Schema/reader合同且明确Runtime未实现。REQ-0003合同无回退，REVIEW-0002保持approved、0 open Blocker/Major。

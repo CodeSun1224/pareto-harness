@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: 3aee02adf8815466b02f51de247ae19922efc126
+reviewed_revision: 3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6
 open_blockers: 0
 open_majors: 0
 ---
@@ -88,3 +88,4 @@ open_majors: 0
 - 2026-08-27：exact accepted-doc candidate `b42ccdc3216f518ff60303cec20da92b78d190a1` substantive freshness re-review。`2c80b89..b42ccdc`无Event Store、SQLite、DDL、Schema、Cargo或API变化；ADR/architecture继续禁止外部Runtime直接写权威状态、共享权威DB或依赖SQLite布局。REVIEW-0003保持approved、0 open Blocker/Major。
 - 2026-08-28：exact REQ-0008 design candidate `8507bae4ad979232e69ba282ee9c97ee71e3520e` substantive freshness re-review。`754798d..8507bae`无Event Store、SQLite v2、DDL/trigger、writer epoch、Schema、Cargo、API或权限实现变化；RFC-0008要求未来Hook复用private single writer且禁止handler获得DB/Event transaction。REVIEW-0010 F-003因atomic pair命令和测试尚未闭合而阻塞设计，未把未来合同冒充现有能力。REQ-0004 append-only/隔离/事务合同不变，REVIEW-0003保持approved、0 open Blocker/Major。
 - 2026-08-28：exact REQ-0008 remediation `3aee02adf8815466b02f51de247ae19922efc126` substantive freshness re-review。`43f3a5b..3aee02a`无Event Store、SQLite v2、DDL/trigger、Schema、Cargo或API变化；只冻结未来transaction-local双Event pair，明确现有single-event helper必须私有重构且不得扩大SQL/API，失败全rollback、单边历史fail closed。现有REQ-0004合同未被修改或冒充实现，REVIEW-0003保持approved、0 open Blocker/Major。
+- 2026-08-28：exact REQ-0008 accepted-doc `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` substantive freshness re-review。`ea9633c..3318cbc`无Event Store、SQLite、DDL/trigger、Schema、Cargo或API变化；ADR-0009忠实保留未来private atomic pair与禁止public SQL/补偿表，明确尚未实现。REQ-0004合同无回退，REVIEW-0003保持approved、0 open Blocker/Major。
