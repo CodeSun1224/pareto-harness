@@ -7,7 +7,7 @@ created: 2026-08-24
 updated: 2026-08-25
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: 8507bae4ad979232e69ba282ee9c97ee71e3520e
+reviewed_revision: 3aee02adf8815466b02f51de247ae19922efc126
 open_blockers: 0
 open_majors: 0
 ---
@@ -113,3 +113,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-27：exact polyglot design remediation `1748f69d01044a936727b3b5b7659882981b9129` substantive freshness re-review。`8bb885b..1748f69`未修改lifecycle Runtime、Manifest、Run/Task状态边、authority或wire Event；RFC-0007继续把lifecycle、Manifest、DAG/Lease与terminal admission保留在Rust control plane，并禁止Worker自行判定Task完成。REQ-0005合同不变，REVIEW-0004保持approved、0 open Blocker/Major。
 - 2026-08-27：exact accepted-doc candidate `b42ccdc3216f518ff60303cec20da92b78d190a1` substantive freshness re-review。`2c80b89..b42ccdc`未修改lifecycle Runtime、Manifest、状态边或wire Event；accepted ADR/architecture仍由Rust裁决identity、lifecycle、DAG/Lease与completion，外部Worker不得自行完成Task。REVIEW-0004保持approved、0 open Blocker/Major。
 - 2026-08-28：exact REQ-0008 design candidate `8507bae4ad979232e69ba282ee9c97ee71e3520e` substantive freshness re-review。`754798d..8507bae`未修改lifecycle Runtime、v1 Manifest、Run/Task状态边、owner authority或四类wire Event；未来Hook-capable Manifest明确要求新major/exact reader，旧Run不后加Hook。REVIEW-0010以4 open Major阻塞批准和实现，现有REQ-0005合同未被重释。REVIEW-0004保持approved、0 open Blocker/Major。
+- 2026-08-28：exact REQ-0008 remediation `3aee02adf8815466b02f51de247ae19922efc126` substantive freshness re-review。`43f3a5b..3aee02a`未修改lifecycle Runtime、v1 Manifest、状态边、authority或wire Event；fixed Hook phase与pair命令仍从persisted lifecycle重建且旧Run不升级。REVIEW-0010批准的是未来设计合同，不是Manifest/Runtime实现。REQ-0005无回退，REVIEW-0004保持approved、0 open Blocker/Major。

@@ -1,59 +1,59 @@
 ---
 id: REVIEW-0010
 title: REQ-0008 Observer、Gate 与 Transform Hook 独立设计评审
-status: changes-requested
+status: approved
 owners: [independent-reviewer]
 created: 2026-08-28
 updated: 2026-08-28
 links: [REQ-0008, SPEC-0007, RFC-0008, RFC-0007, ADR-0008, REQ-0004, REQ-0007, REVIEW-0006, REVIEW-0007, REVIEW-0009, FIX-0001]
 independence: independent
-reviewed_revision: 8507bae4ad979232e69ba282ee9c97ee71e3520e
+reviewed_revision: 3aee02adf8815466b02f51de247ae19922efc126
 open_blockers: 0
-open_majors: 4
+open_majors: 0
 ---
 
 # Findings
 
 | ID | Severity | Location | Finding and impact | Required proof | Status |
 |---|---|---|---|---|---|
-| F-001 | Major | `SPEC-0007:21-29,65-69`; `RFC-0008:25-35,47`; REQ-0008 AC-02/03 | 一个 point 可同时注册 Observer、Gate、Transform，但唯一排序 tuple 不含 kind/phase，设计只分别定义 Gate 串行组合和 Transform 串行 pipeline，没有定义跨类型执行 phase、每个 Observer/Gate 看到原 proposal 还是前一 Transform 输出、以及 input digest/source cursor 何时固定。实现可合法地产生“先 Gate 后 Transform”或“先 Transform 后 Gate”等不同权威准入结果，违反相同 Manifest/输入/历史产生相同顺序和决定的合同。 | 冻结版本化的 point phase/order 与逐 invocation input lineage；明确 Transform、Gate、Observer 的跨类型可见性和 point finalization，或禁止同一 point 混合类型。增加至少覆盖 Observer/Gate/Transform 优先级交错、输入摘要、重启和 Recorded replay 等价的命名非零测试。 | open |
-| F-002 | Major | `REQ-0008:30`; `SPEC-0007:21,67`; `RFC-0008:39-47` | Requirement 明确“空 required gate 集默认 deny”，RFC/SPEC 却允许 registry 声明 `gate_requirement=none` 后放行；而列出的 `HookRegistryRevisionV1`/`HookRegistrationV1` 字段中也没有这个 point-level policy。该未定义例外既削弱 AC-04 的默认拒绝硬门禁，也无法被 Schema、Manifest pin 或 retained reader 精确验证。 | 删除该例外并证明所有空 required 集稳定 deny；或先修订 Requirement，再把 point-level gate policy 定义为闭合、版本化、Manifest-pinned 字段，说明谁有权选择、兼容/升级语义和为何不构成 required Gate 绕过。测试须覆盖无 Gate、仅 optional Gate、显式 none、unknown/missing policy 和旧 reader。 | open |
-| F-003 | Major | `SPEC-0007:38-59,73-79,96-102,136-142`; `RFC-0008:55-63,100-111`; REQ-0008 AC-09/10/12/14/15/20 | 设计要求 control reservation 与 Hook invocation 在同一 SQLite transaction 成对追加，但没有冻结 pair-command identity/fingerprint、两条 event ID/sequence 的 exact retry 判定、单边已存在历史的 corruption 规则、第二次 insert/validation/commit 失败的 rollback结果，或 settlement/timeout 后 control terminal 与 Hook terminal 的 catch-up/reconcile command。现有 `reserve_protected_operation`/`append_control` 会自行 commit 单一 control Event，底层 `insert_prepared` 也只判断单 Event；实现需要实质重构。当前测试矩阵只有余额竞争和普通 idempotency，没有第二 Hook append 失败、pair exact/mutation retry、单边 validly re-sealed history或 timeout 后 Hook terminal 恢复证明，因此不能证明“无部分成功”。 | 冻结一个 Kernel-private atomic pair command：两个 stream 的预期 cursor、两个完整 Event/fingerprint、检查优先级、exact/mutation retry、zero/one/two-existing 状态和 rollback结果；同样冻结 control terminal 到 Hook decision/terminal 的原子或显式幂等 reconciliation。加入真实 SQLite fault/validation injection、commit-response-loss、close/reopen、two-writer reverse winner、单边重封历史及 Recorded replay 零执行/零核算测试。 | open |
-| F-004 | Major | `REQ-0008:27,31`; `SPEC-0007:21,65-69`; `RFC-0008:92-95` | AC-01 要求每个注册固定 failure policy，AC-05 又要求 Transform 按注册策略选择“拒绝原 proposal”或“整体失败”；候选 registration 只列 Observer failure policy，Gate 固定 fail closed，Transform 固定 reject-whole-proposal。因而 Transform 的两个允许结果没有版本化选择字段或精确下游语义，Manifest/registry digest也无法 pin该行为。实现者会被迫自行决定这是固定策略、缺失字段还是把两种结果合并。 | 选择并统一 Requirement/Spec/RFC：若 Transform 策略可配置，定义闭合 enum、合法 point、状态/decision/reason、组合和 replay 语义；若首片固定一种行为，修订 AC-01/05 明确无选择。测试须逐策略覆盖 chain 中间失败、零 partial authority、下游最终结果和 Recorded replay。 | open |
+| F-001 | Major | `REQ-0008` AC-02/03/05/14；`SPEC-0007` point phases、invocation key与test trace；`RFC-0008` §§2/Interfaces | Remediation 固定 `before_proposal_admission = Transform → Gate → Observer`、`before_authoritative_commit = Gate → Observer`、`after_* = Observer`，priority仅在phase内排序；每步持久化initial/input/predecessor/final digest与point finalization。所有Gate读取同一final Transform输出，Observer只在business decision固定后读取只读view；其failure只能改变分离execution status，不能回写allow/deny。 | `phase_order_lineage`、`ordering`、`observer_non_authority`及Recorded/reopen等价的命名非零计划覆盖原required proof；实现仍须提交实际测试证据。 | closed |
+| F-002 | Major | `REQ-0008` AC-04；`SPEC-0007` Gate-bearing rule；`RFC-0008` §3 | Remediation 删除`gate_requirement=none`及同义字段；两个Gate-bearing point无条件要求至少一个required Gate，零Gate或仅optional Gate稳定deny；`after_*`由类型矩阵禁止Gate而不适用该检查。 | `gate_composition`与`default_deny`计划明确覆盖零Gate、仅optional、failure/timeout/invalid/unknown，并要求所有filter非零；旧/unknown reader由compatibility矩阵覆盖。 | closed |
+| F-003 | Major | `REQ-0008` AC-09/12/14/15/20；`SPEC-0007` Atomic pair commands；`RFC-0008` §5/Failure modes | Remediation 冻结reserve与terminal两类crate-private pair command：pair ID/kind、full-command fingerprint、双stream expected cursor/next sequence、两个确定性Event ID/sequence/prepared bytes及交叉引用；固定zero写两者、two仅exact retry、mutation conflict、one即`corrupt_partial_pair`、任一validation/first-or-second insert/commit fault rollback、response-loss exact bytes retry。Hook terminal只能走pair入口，现有通用single-stream terminal遇Hook binding必须fail closed；不存在补写/catch-up合法态。 | `reserve_pair_atomicity`、`pair_fault_injection`、`terminal_pair_atomicity`、`pair_corruption`、`terminal_race`与Recorded测试覆盖two-writer、commit loss、validly-resealed one-sided history、预算守恒和零执行/零核算；当前单Event baseline明确要求transaction-local重构且不扩大public SQL/API。 | closed |
+| F-004 | Major | `REQ-0008` AC-01/05；`SPEC-0007` registration/failure semantics；`RFC-0008` §7 | Remediation 统一为仅Observer注册warn-and-continue或fail-closed；Gate固定fail closed；Transform没有policy字段并固定reject-whole-proposal，失败后skip后续Transform/Gate/Observer，不能返回原proposal继续。 | protocol `hook_contract`拒绝Gate/Transform policy字段；`failure_policy`与`transform_chain_failure`覆盖中间失败、零partial authority和Recorded结果。 | closed |
 
 # Verdict
 
-`changes-requested` for exact candidate `8507bae4ad979232e69ba282ee9c97ee71e3520e`
-(parent `754798de3a7f0f09d38c466b8f09199c7ebda9d1`)。本评审由未参与设计的 fresh
-independent Reviewer 执行。候选正确保持 Rust Kernel authority、Observer 非权威、Transform 保护字段、
-全隔离、REQ-0007 预算/取消/deadline、Recorded replay 零执行和 transport neutrality，但上述四项仍会让
-不同实现对准入、默认拒绝、跨 stream 原子性或失败结果作出不同解释。最终 0 Blocker、4 open Major；不得批准
-RFC/SPEC/Requirement，也不得进入实现。
+`approved` for exact remediation `3aee02adf8815466b02f51de247ae19922efc126`
+(parent `43f3a5bc4bc44fe103856565a238105837c67c6e`；initial candidate
+`8507bae4ad979232e69ba282ee9c97ee71e3520e`)。同一 fresh independent Reviewer 逐项复核
+`43f3a5b..3aee02a`，没有采纳实现者closure结论。F-001至F-004 required proof已成为一致、durable、
+可测试的Requirement/Spec/RFC合同；0 Blocker、0 open Major。批准仅解除设计门禁，不是产品实现或测试批准；
+仍须先接受RFC、建立ADR-0009、批准Spec/Requirement并创建Plan/Tasks/Handoff，之后才可编写Runtime代码。
 
 # Acceptance trace
 
 | Acceptance | Review result | Independent evidence / gap |
 |---|---|---|
-| AC-01 | blocked | registry identity/config/Schema方向明确，但通用 failure policy 没有覆盖 Transform，见 F-004。 |
-| AC-02 | blocked | kind × point allow matrix明确；同 point 跨 kind 的输入可见性与 phase 未冻结，见 F-001。 |
-| AC-03 | blocked | `(point, priority, ID, revision)`可稳定排序单一列表，却不足以确定跨 kind 执行语义，见 F-001。 |
-| AC-04 | blocked | deny/required allow/abstain/short-circuit主体规则明确；`gate_requirement=none`与空集默认拒绝冲突，见 F-002。 |
-| AC-05 | blocked | Observer/Gate安全方向明确；Transform 注册策略与最终拒绝/整体失败结果缺失，见 F-004。 |
+| AC-01 | design-satisfied | registration明确Observer-only policy；Gate/Transform无policy字段且固定失败语义，见F-004。 |
+| AC-02 | design-satisfied | kind × point矩阵与固定phase闭合；Observer只读且业务决定先固定，见F-001。 |
+| AC-03 | design-satisfied | phase ordinal由point/kind推导，phase内priority/ID/revision稳定排序；lineage逐Event持久化。 |
+| AC-04 | design-satisfied | deny优先、required explicit allow、abstain不放行；Gate-bearing空required集无条件deny，见F-002。 |
+| AC-05 | design-satisfied | Observer两策略不改business decision；Gate fail closed；Transform固定reject-whole，见F-001/F-004。 |
 | AC-06 | design-satisfied | allow mask之外再比较保护 hash view，覆盖 identity、authority、budget、Receipt、Evidence、terminal及 unknown field。 |
 | AC-07 | design-satisfied | principal/Manifest/lifecycle/control重建和不可序列化、不可委托的 bounded lease保持 Kernel-private。 |
 | AC-08 | design-satisfied | tenant/user presence-value/workspace/run/task/owner/subject及业务 ID 均要求 exact；未授权 no-write。 |
-| AC-09 | blocked | trusted envelope和全账户 reserve规则明确，但 reserve + invocation 的实际原子 pair contract和失败证明缺失，见 F-003。 |
-| AC-10 | blocked | verified/unknown settlement方向继承REQ-0007；跨 stream terminal/reconcile exact retry仍未闭合，见 F-003。 |
+| AC-09 | design-satisfied | reserve pair固定双cursor/Event/fingerprint与zero/one/two/rollback/response-loss语义，见F-003。 |
+| AC-10 | design-satisfied | verified/unknown settlement继承REQ-0007并只能通过terminal pair结算，exact retry不重复核算。 |
 | AC-11 | design-satisfied | absolute/monotonic deadline、FakeClock、cooperative probe、hung recovery均复用REQ-0007且禁止真实 sleep。 |
-| AC-12 | blocked | terminal winner与 late isolation方向明确；control terminal 与 Hook terminal 的 crash/catch-up identity仍未定义，见 F-003。 |
+| AC-12 | design-satisfied | completion/cancel/timeout共享terminal pair；common single-stream terminal拒绝，late不反转。 |
 | AC-13 | design-satisfied | pre-decode limits、closed output、Kernel-only redaction和安全摘要覆盖 injection/secret/path/SQL 泄漏。 |
-| AC-14 | blocked | 单 Hook stream和 pure fold方向正确；pair event边界、point finalization与跨 stream引用的合法前缀尚不闭合，见 F-001/F-003。 |
-| AC-15 | blocked | exact reader/current substitution拒绝明确；单边 pair历史与 timeout 后显式 reconcile 未定义，见 F-003。 |
+| AC-14 | design-satisfied | point-start/lineage/invocation/terminal/skip/finalization均为版本化Hook Event并交叉验证pair。 |
+| AC-15 | design-satisfied | reopen恢复完整pending/terminal pair；one-sided reseal与unknown/current substitution均fail closed。 |
 | AC-16 | design-satisfied | Recorded只读 fold、不持有handler/writer/timeout authority；Simulated/Reexecute dispatch前拒绝。 |
 | AC-17 | design-satisfied at plan level | 新内容地址set、RunManifest新major倾向、旧Run不升级、SQLite v2和既有reducer保留均明确；实现须证明retained bytes。 |
 | AC-18 | design-satisfied | 仅进程内Rust Fake reference，不暴露Rust ABI/SQLite布局，也未选择外部transport。 |
 | AC-19 | design-satisfied | 下游只获得proposal/observation/result，Effect/Evidence/terminal authority仍由后续Requirement批准。 |
-| AC-20 | blocked | 现有表覆盖多数风险，但缺跨 kind phase、atomic pair第二append失败/单边历史及Transform policy测试，见 F-001/F-003/F-004。 |
+| AC-20 | design-satisfied at plan level | 命名矩阵已补phase/lineage、Observer隔离、Transform chain、pair fault/response-loss/one-sided reseal/common terminal拒绝；所有filter要求list非零。 |
 
 # Compatibility, permission, and isolation review
 
@@ -61,7 +61,7 @@ RFC/SPEC/Requirement，也不得进入实现。
 - Gate与Transform输出在Kernel重新验证后才可进入组合或后续权威提交；Observer annotation不自动成为业务决定、Memory或Evidence。
 - Event envelope仍由Manifest owner作为Kernel signer，subject/producer在闭合payload中验证；Task与Hook业务ID不被误当Event Store isolation authority。
 - 新Hook SchemaSet/RunManifest major的方向与当前v1八角色闭合验证相容，但实现必须按exact schema reader分支，不能全局把旧Manifest改成九角色。
-- F-002是当前唯一明确的默认拒绝回退；F-001/F-003/F-004是会导致权限/结果解释分叉的未冻结合同，而非实现细节。
+- Remediation 删除F-002默认拒绝回退并闭合F-001/F-003/F-004；实现不得弱化fixed phase、empty-required deny、atomic pair或fixed Transform failure语义。
 
 # Regression and test review
 
@@ -82,6 +82,16 @@ Independent Reviewer 在 Windows/PowerShell、2026-08-28 执行：
 - `git diff --check`：无输出，exit 0。
 - `git status --short`：仅 REVIEW-0001..0007 reviewer-owned freshness修改及新增 REVIEW-0010；设计和产品代码保持只读。
 
+Focused remediation re-review 在 Windows/PowerShell、2026-08-28 对 exact `3aee02ad` 独立执行：
+
+- `git diff --quiet 43f3a5b 3aee02a -- crates schemas Cargo.toml Cargo.lock scripts`：无产品、Schema、Cargo或script diff，exit 0。
+- `python -m unittest discover -s scripts/tests -p "test_*.py"`：21 tests passed，exit 0。
+- 首次 `python scripts/check_docs.py`：除本Review表格中一个未转义竖线外，只报告 REVIEW-0001..0007 stale；没有产品合同或finding计数错误。
+- 修正Review表格，并在逐项确认旧治理/Protocol/Event Store/Lifecycle/Projection/Runtime Control批准合同未回退后，Reviewer仅前移 REVIEW-0001..0007 freshness。
+- 最终 `python scripts/check_docs.py`：`Document validation passed: 180 Markdown files, 59 formal IDs.`，exit 0。
+- `git diff --check`：无输出，exit 0。
+- `git status --short`：仅 REVIEW-0001..0007 freshness与 REVIEW-0010 focused closure；REQ/SPEC/RFC及产品代码保持只读。
+
 # Scope and unrelated changes
 
 精确 `754798de..8507bae4` diff仅新增REQ-0008、SPEC-0007、RFC-0008，并更新`docs/index.md`与
@@ -93,3 +103,8 @@ Independent Reviewer 在 Windows/PowerShell、2026-08-28 执行：
 - 2026-08-28：fresh independent design review of exact `8507bae4ad979232e69ba282ee9c97ee71e3520e`
   against parent `754798de3a7f0f09d38c466b8f09199c7ebda9d1`。结论0 Blocker、4 open Major，
   `changes-requested`。设计文件与产品代码保持只读；Reviewer仅创建本Review记录。
+- 2026-08-28：focused independent design re-review of exact `3aee02adf8815466b02f51de247ae19922efc126`
+  against parent `43f3a5bc4bc44fe103856565a238105837c67c6e`，并回看initial candidate `8507bae4`。
+  F-001 fixed phase/input lineage/Observer non-authority、F-002 Gate-bearing empty-required unconditional deny、
+  F-003 reserve/terminal atomic pair及single-stream terminal拒绝、F-004 fixed Transform reject-whole均由durable合同和
+  命名非零测试计划关闭；无新finding。结论0 Blocker、0 Major，`approved`，但产品代码仍禁止在后续接受/规划门禁前开始。
