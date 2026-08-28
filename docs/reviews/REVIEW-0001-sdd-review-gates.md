@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-25
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6
+reviewed_revision: e3d8d805b46fb4e1e25b23bc53bead71de730853
 open_blockers: 0
 open_majors: 0
 ---
@@ -82,3 +82,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact REQ-0008 design candidate `8507bae4ad979232e69ba282ee9c97ee71e3520e` substantive freshness re-review：`754798d..8507bae`只新增specified/draft/proposed REQ-0008设计并同步导航/Epic；AGENTS、skills/agents/templates、checker、CI及REQ-0002/SPEC-0001治理规则零差异。本fresh independent REVIEW-0010如实记录4 open Major并给出`changes-requested`，禁止设计批准和实现，未绕过finding/open-count/freshness或完成门禁。REVIEW-0001保持approved、0 open Blocker/Major。
 - exact REQ-0008 remediation `3aee02adf8815466b02f51de247ae19922efc126` substantive freshness re-review：`43f3a5b..3aee02a`只修订REQ/SPEC/RFC并同步REVIEW链接，不改治理规则。REVIEW-0010仅由原fresh independent Reviewer逐项关闭4个Major后批准exact remediation；Requirement/Spec/RFC仍待正式接受且产品代码继续禁止，finding/open-count/freshness门禁未绕过。REVIEW-0001保持approved、0 open Blocker/Major。
 - exact REQ-0008 accepted-doc `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` substantive freshness re-review：`ea9633c..3318cbc`仅新增ADR-0009、接受REQ/SPEC/RFC并同步ARCH/index/Epic；接受发生在REVIEW-0010 exact `3aee02a`独立批准0/0之后，且明确Runtime未实现。AGENTS/checker/skills/CI零差异，finding/freshness/完成门禁未绕过。REVIEW-0001保持approved、0 open Blocker/Major。
+- exact REQ-0008 planning `e3d8d805b46fb4e1e25b23bc53bead71de730853` substantive freshness re-review：`5546d1f..e3d8d80`只在设计独立批准0/0与ADR接受后创建PLAN/TASKS/HANDOFF，并把REQ从approved推进planned；仅治理TASK-00完成，后续实现、fresh code Review、原Reviewer关闭Major/Blocker与REQ-0009禁启门禁均明确。AGENTS/checker/skills/CI和产品路径零差异，治理合同无回退。REVIEW-0001保持approved、0 open Blocker/Major。

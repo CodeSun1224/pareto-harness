@@ -7,7 +7,7 @@ created: 2026-08-28
 updated: 2026-08-28
 links: [REQ-0008, SPEC-0007, RFC-0008, RFC-0007, ADR-0008, REQ-0004, REQ-0007, REVIEW-0006, REVIEW-0007, REVIEW-0009, FIX-0001]
 independence: independent
-reviewed_revision: 3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6
+reviewed_revision: e3d8d805b46fb4e1e25b23bc53bead71de730853
 open_blockers: 0
 open_majors: 0
 ---
@@ -101,6 +101,18 @@ Focused accepted-doc freshness re-review 在 Windows/PowerShell、2026-08-28 对
 - `git diff --check`：无输出，exit 0。
 - `git status --short`：仅 REVIEW-0001..0007 与 REVIEW-0010 reviewer-owned freshness；accepted design与产品代码保持只读。
 
+Focused planning freshness re-review 在 Windows/PowerShell、2026-08-28 对 exact
+`e3d8d805b46fb4e1e25b23bc53bead71de730853` 独立执行：
+
+- exact parent为`5546d1fc638785f8db8eac111853f8fbe951f0cd`；candidate只新增PLAN/TASKS/HANDOFF并把REQ-0008从`approved`推进到`planned`。
+- PLAN/TASKS/HANDOFF创建于REVIEW-0010批准0/0及ADR-0009正式接受之后；仅治理TASK-00完成，TASK-01至TASK-11全部未开始，且明确新的fresh independent code-review、实现者只修复、原代码Reviewer关闭Blocker/Major、REQ-0009禁启。
+- AC-01至AC-20及F-001至F-004 required proof均映射到具体任务、命名filter、fault/race/replay/compatibility/isolation矩阵；PLAN第9步全局要求每个Cargo filter先由helper证明非零，覆盖Protocol `hook_contract`，kernel filters另有具体helper模板。
+- `git diff --quiet 5546d1fc638785f8db8eac111853f8fbe951f0cd e3d8d805b46fb4e1e25b23bc53bead71de730853 -- crates schemas Cargo.toml Cargo.lock scripts`：无Runtime、Schema、Cargo或script diff，exit 0。
+- `python -m unittest discover -s scripts/tests -p "test_*.py"`：21 tests passed，exit 0。
+- 首次`python scripts/check_docs.py`仅报告REVIEW-0001..0007 stale；逐项确认治理、Protocol/Schema、Event Store、Lifecycle/Manifest、Projection/Replay与Runtime Control既有合同未回退后，仅更新reviewer-owned freshness。
+- 最终`python scripts/check_docs.py`：`Document validation passed: 184 Markdown files, 60 formal IDs.`，exit 0。
+- `git diff --check`：无输出，exit 0；`git status --short`仅REVIEW-0001..0007与REVIEW-0010 reviewer-owned freshness。
+
 # Scope and unrelated changes
 
 精确 `754798de..8507bae4` diff仅新增REQ-0008、SPEC-0007、RFC-0008，并更新`docs/index.md`与
@@ -123,3 +135,6 @@ Focused accepted-doc freshness re-review 在 Windows/PowerShell、2026-08-28 对
   lineage与Observer decision隔离、Gate-bearing empty-required deny、reserve/terminal atomic pair及single-stream terminal
   拒绝、Transform fixed reject-whole均无漂移；REQ/SPEC/RFC只更新accepted状态/链接，ARCH/index/Epic只同步“设计已接受、
   Runtime未实现”事实。crates/schemas/Cargo/scripts/agents零差异；无新finding。REVIEW-0010保持approved、0/0。
+- 2026-08-28：focused independent planning freshness re-review of exact
+  `e3d8d805b46fb4e1e25b23bc53bead71de730853` against parent
+  `5546d1fc638785f8db8eac111853f8fbe951f0cd`。REQ只从approved推进planned；PLAN/TASKS/HANDOFF在设计批准0/0和ADR接受后创建，完整承接AC-01至AC-20及F-001至F-004 proof，只有治理TASK-00完成。新的fresh code Review、原代码Reviewer关闭Major/Blocker和REQ-0009禁启门禁明确；产品路径零差异。无新finding，保持approved、0/0。
