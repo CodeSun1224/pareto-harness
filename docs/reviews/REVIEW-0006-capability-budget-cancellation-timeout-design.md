@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-25
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REQ-0003, REQ-0004, REQ-0005, REQ-0006, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
+reviewed_revision: 8507bae4ad979232e69ba282ee9c97ee71e3520e
 open_blockers: 0
 open_majors: 0
 ---
@@ -160,3 +160,4 @@ preimage或冲突优先级。实现仍需fresh independent code review和新的R
   late result、Effect或Replay合同；RFC-0007把这些authority及trusted envelope/evidence admission保留在Rust
   control plane，外部扩展只能request或返回observation。REVIEW-0006保持approved、0 open Blocker/Major。
 - 2026-08-27：exact accepted-doc candidate `b42ccdc3216f518ff60303cec20da92b78d190a1` substantive freshness re-review。`2c80b89..b42ccdc`未修改REQ-0007/SPEC-0006/RFC-0006/ADR-0007或Runtime/Schema；ADR-0008明确Rust继续拥有Capability、Budget、Cancellation、deadline、Effect/Evidence与Replay admission，跨语言边界必须另行冻结late result和opaque bounded authority。REVIEW-0006保持approved、0 open Blocker/Major。
+- 2026-08-28：exact REQ-0008 design candidate `8507bae4ad979232e69ba282ee9c97ee71e3520e` substantive freshness re-review。`754798d..8507bae`未修改REQ-0007/SPEC-0006/RFC-0006/ADR-0007、Runtime或Schema；新Hook设计继续要求default-deny Capability、trusted envelope、opaque lease、Kernel meter、cancel/deadline/timeout和Recorded零核算。REVIEW-0010 F-003指出新双stream组合尚未闭合并阻塞实现，没有放宽已批准REQ-0007合同。REVIEW-0006保持approved、0 open Blocker/Major。

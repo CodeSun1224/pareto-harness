@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-25
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
+reviewed_revision: 8507bae4ad979232e69ba282ee9c97ee71e3520e
 open_blockers: 0
 open_majors: 0
 ---
@@ -79,3 +79,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact architecture clarification `8bb885bda678f5f785706e9eb335f472b5244974` substantive freshness re-review：`53338a8..8bb885b`先完成REQ-0007 reviewer-owned closure，再仅澄清`ARCH-0004`分阶段语言边界；`AGENTS.md`、skills/agents/templates、CI、checker及REQ-0002/SPEC-0001治理规则零差异。REVIEW-0008由fresh independent Reviewer批准exact candidate，finding/open-count/freshness门禁未绕过。REVIEW-0001保持approved、0 open Blocker/Major。
 - exact polyglot design remediation `1748f69d01044a936727b3b5b7659882981b9129` substantive freshness re-review：完整`8bb885b..1748f69`只新增proposed RFC-0007、研究证据/综合判断、导航、REVIEW-0009及其evidence-only整改；`AGENTS.md`、skills/agents/templates、CI、checker与REQ-0002/SPEC-0001治理规则零差异。REVIEW-0009首轮如实保持1 open Major，只有fresh Reviewer逐项打开E-017..E-027官方来源并确认原子声明及fact/inference边界后才关闭F-001；finding/open-count/freshness门禁未被绕过。REVIEW-0001保持approved、0 open Blocker/Major。
 - exact accepted-doc candidate `b42ccdc3216f518ff60303cec20da92b78d190a1` substantive freshness re-review：`2c80b89..b42ccdc`只接受RFC-0007、新增ADR-0008并同步accepted architecture/Roadmap/Backlog/research/index；未修改治理规则。接受发生在REVIEW-0009已独立批准、0 open Blocker/Major之后，且ADR明确后续Runtime仍需accepted Requirement，未绕过finding、freshness或完成门禁。REVIEW-0001保持approved、0 open Blocker/Major。
+- exact REQ-0008 design candidate `8507bae4ad979232e69ba282ee9c97ee71e3520e` substantive freshness re-review：`754798d..8507bae`只新增specified/draft/proposed REQ-0008设计并同步导航/Epic；AGENTS、skills/agents/templates、checker、CI及REQ-0002/SPEC-0001治理规则零差异。本fresh independent REVIEW-0010如实记录4 open Major并给出`changes-requested`，禁止设计批准和实现，未绕过finding/open-count/freshness或完成门禁。REVIEW-0001保持approved、0 open Blocker/Major。

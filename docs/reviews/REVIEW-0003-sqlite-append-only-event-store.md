@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-25
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
+reviewed_revision: 8507bae4ad979232e69ba282ee9c97ee71e3520e
 open_blockers: 0
 open_majors: 0
 ---
@@ -86,3 +86,4 @@ open_majors: 0
 - 2026-08-27：exact architecture clarification `8bb885bda678f5f785706e9eb335f472b5244974` substantive freshness re-review。`53338a8..8bb885b`对Event Store、SQLite、Schema、Cargo、API和权限实现零差异；新文档边界明确离线Python不得直接访问权威数据库，未来Worker同样不得依赖内核数据库布局。REQ-0004 append-only与事务authority不变。REVIEW-0003保持approved、0 open Blocker/Major。
 - 2026-08-27：exact polyglot design remediation `1748f69d01044a936727b3b5b7659882981b9129` substantive freshness re-review。`8bb885b..1748f69`对Event Store、SQLite v2、DDL/trigger、writer epoch、Schema、Cargo、API和权限实现零差异；RFC-0007明确扩展不得共享权威数据库、直接append Event或取得transaction authority。REQ-0004 append-only、isolation与single-writer合同不变，REVIEW-0003保持approved、0 open Blocker/Major。
 - 2026-08-27：exact accepted-doc candidate `b42ccdc3216f518ff60303cec20da92b78d190a1` substantive freshness re-review。`2c80b89..b42ccdc`无Event Store、SQLite、DDL、Schema、Cargo或API变化；ADR/architecture继续禁止外部Runtime直接写权威状态、共享权威DB或依赖SQLite布局。REVIEW-0003保持approved、0 open Blocker/Major。
+- 2026-08-28：exact REQ-0008 design candidate `8507bae4ad979232e69ba282ee9c97ee71e3520e` substantive freshness re-review。`754798d..8507bae`无Event Store、SQLite v2、DDL/trigger、writer epoch、Schema、Cargo、API或权限实现变化；RFC-0008要求未来Hook复用private single writer且禁止handler获得DB/Event transaction。REVIEW-0010 F-003因atomic pair命令和测试尚未闭合而阻塞设计，未把未来合同冒充现有能力。REQ-0004 append-only/隔离/事务合同不变，REVIEW-0003保持approved、0 open Blocker/Major。
