@@ -19,6 +19,8 @@
 - [SPEC-0005：Projection、Snapshot 与 Replay 规范](specs/SPEC-0005-projection-snapshot-replay.md)
 - [REQ-0007：Capability、预算、取消与超时](requirements/REQ-0007-capability-budget-cancellation-timeout.md)
 - [SPEC-0006：Capability、预算、取消与超时规范](specs/SPEC-0006-capability-budget-cancellation-timeout.md)
+- [REQ-0008：Observer、Gate 与 Transform Hook 骨架](requirements/REQ-0008-observer-gate-transform-hooks.md)
+- [SPEC-0007：Observer、Gate 与 Transform Hook 骨架规范](specs/SPEC-0007-observer-gate-transform-hooks.md)
 
 ## 研究
 
@@ -46,6 +48,7 @@
 - [ADR-0007：采用事件溯源 Runtime Control 可信内核合同](adrs/ADR-0007-event-sourced-runtime-control.md)
 - [RFC-0007：Rust 权威控制面与多语言扩展边界](rfcs/RFC-0007-rust-authority-polyglot-extensions.md)
 - [ADR-0008：采用 Rust 权威控制面与多语言扩展边界](adrs/ADR-0008-rust-authority-polyglot-extension-boundary.md)
+- [RFC-0008：Kernel 治理的 Observer、Gate 与 Transform Hook 合同](rfcs/RFC-0008-kernel-governed-hook-contract.md)
 
 ## 交付
 
