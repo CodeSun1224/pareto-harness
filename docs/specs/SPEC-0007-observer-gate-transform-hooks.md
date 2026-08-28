@@ -1,11 +1,11 @@
 ---
 id: SPEC-0007
 title: Observer、Gate 与 Transform Hook 骨架规范
-status: draft
+status: approved
 owners: [runtime-kernel]
 created: 2026-08-28
 updated: 2026-08-28
-links: [REQ-0008, EPIC-0002, REQ-0004, REQ-0007, RFC-0007, RFC-0008, ADR-0008, ARCH-0002, ARCH-0003, ARCH-0004, REVIEW-0010]
+links: [REQ-0008, EPIC-0002, REQ-0004, REQ-0007, RFC-0007, RFC-0008, ADR-0008, ADR-0009, ARCH-0002, ARCH-0003, ARCH-0004, REVIEW-0010]
 ---
 
 # Behavioral contract

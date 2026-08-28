@@ -1,11 +1,11 @@
 ---
 id: REQ-0008
 title: Observer、Gate 与 Transform Hook 骨架
-status: specified
+status: approved
 owners: [runtime-kernel]
 created: 2026-08-28
 updated: 2026-08-28
-links: [EPIC-0002, REQ-0004, REQ-0007, SPEC-0007, RFC-0007, RFC-0008, ADR-0008, REVIEW-0010]
+links: [EPIC-0002, REQ-0004, REQ-0007, SPEC-0007, RFC-0007, RFC-0008, ADR-0008, ADR-0009, REVIEW-0010]
 risk: high
 work: .agents/work/active/REQ-0008-observer-gate-transform-hooks
 ---

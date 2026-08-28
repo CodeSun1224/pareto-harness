@@ -49,6 +49,7 @@
 - [RFC-0007：Rust 权威控制面与多语言扩展边界](rfcs/RFC-0007-rust-authority-polyglot-extensions.md)
 - [ADR-0008：采用 Rust 权威控制面与多语言扩展边界](adrs/ADR-0008-rust-authority-polyglot-extension-boundary.md)
 - [RFC-0008：Kernel 治理的 Observer、Gate 与 Transform Hook 合同](rfcs/RFC-0008-kernel-governed-hook-contract.md)
+- [ADR-0009：采用 Kernel 治理的 Observer、Gate 与 Transform Hook 合同](adrs/ADR-0009-kernel-governed-observer-gate-transform-hooks.md)
 
 ## 交付
 

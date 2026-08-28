@@ -4,8 +4,8 @@ title: Pareto Harness 总体架构
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-27
-links: [PRD-0001, RFC-0001, RFC-0007, ADR-0001, ADR-0002, ADR-0008]
+updated: 2026-08-28
+links: [PRD-0001, RFC-0001, RFC-0007, RFC-0008, ADR-0001, ADR-0002, ADR-0008, ADR-0009]
 ---
 
 # 总体架构
@@ -69,6 +69,8 @@ links: [PRD-0001, RFC-0001, RFC-0007, ADR-0001, ADR-0002, ADR-0008]
 - `cli`：首个操作入口，不承载业务规则。
 
 这些是逻辑模块，不要求全部使用 Rust 或处于同一进程。Event、identity、state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 和 Promotion 保持在 Rust 权威控制面；Provider、Tool、Hook handler、Agent Worker、Memory 检索、评测、SDK 和受限 Guest 可按 Requirement 使用其他语言，但不得取得权威数据库或内核私有对象。设计基线阶段不创建空目录。
+
+Hook 采用 ADR-0009 的 Kernel 治理合同：Manifest 固定registry/config和顺序，Observer只读，Gate默认拒绝，Transform只改明确允许的非权威proposal，预算准入与终结通过双stream原子pair提交，Recorded replay只消费已记录决定。该合同当前是已接受设计，不代表真实Hook Runtime或外部transport已经实现。
 
 ## 一致性原则
 
