@@ -26,7 +26,7 @@
 |---|---|---|
 | Named Hook filters | `python scripts/assert_cargo_test_filter.py pareto-kernel <filter>` for all 29 PLAN filters | passed; every filter independently reported `matched: 1` and ran 1/1 |
 | Hook aggregate | `cargo test -p pareto-kernel hook_runtime:: --offline` | 39 passed after REVIEW-0011 remediation |
-| Kernel-owned vertical execution | `cargo test -p pareto-kernel hook_runtime::kernel_owned_ --offline` | 6 passed: Transform→Gate→Observer plus exact no-write retry, point-start crash recovery, Gate deny short-circuit+skip, cancellation winner+late audit+skip, deadline timeout authority+late audit+skip, and invalid-kind rejection audit |
+| Kernel-owned vertical execution | `cargo test -p pareto-kernel hook_runtime::kernel_owned_ --offline` | 6 passed: Transform→Gate→Observer plus exact no-write retry and full-command mutation rejection, point-start crash recovery, Gate deny short-circuit+skip, cancellation winner+late audit+skip, deadline timeout authority+late audit+skip, and invalid-kind rejection audit with a seven-field resealed-lineage matrix |
 | Validly resealed negative history | `cargo test -p pareto-kernel hook_runtime::resealed_history_rejection --offline` | passed: wrong point/lineage, wrong final digest, pair mutation, and mutually resealed cross-stream payload IDs that disagree with the actual Hook envelope all fail closed |
 | Event Store | `cargo test -p pareto-kernel event_store --offline` | 160 passed, 1 existing performance observation ignored |
 | Lifecycle | `cargo test -p pareto-kernel lifecycle:: --offline` | 18 passed |
@@ -54,12 +54,15 @@ registry/schema/handler before start, emits point/reserve/terminal/skip/final fa
 candidate under one writer transaction with strict registry-aware fold, validates both actual
 Control and Hook envelope identities plus pair payloads at one MVCC horizon, short-circuits
 Gate/Observer failure, and derives cancellation/timeout terminal winners through Runtime Control.
-Exact finalized retry is no-write/no-handler and deliberately returns no redacted Transform payload;
+The point-start Event identity now binds a canonical fingerprint of every execute-command field, so
+finalized and start-only mutation retries conflict without writes. Exact finalized retry is
+no-write/no-handler and deliberately returns no redacted Transform payload;
 a persisted point-start is resumed without duplicating the start fact. Registry order includes the
 full canonical Hook-point vector before phase-local order. Nested JSON pointers, pair kind/identity,
 next sequences, canonical Event preimages and both payloads are closed. Recorded replay remains
 projection-only and the live vertical test proves replay causes no handler, Event, operation,
-account or budget change.
+account or budget change. Rejection fold admission binds decision, point, Hook identity/revision,
+subject, source cursor, input digest, registry and redaction policy to the current invocation.
 
 ## Completion gates before independent review
 

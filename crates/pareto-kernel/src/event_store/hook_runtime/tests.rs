@@ -2235,6 +2235,45 @@ pub(super) async fn kernel_owned_execution_case() {
             .unwrap(),
         event_count_after_execution
     );
+    let mut mutations = Vec::new();
+    let mut task_mutation = execution_command(&fixture);
+    task_mutation.task_id = Some(TaskId::parse("task_mutated").unwrap());
+    mutations.push(task_mutation);
+    let mut occurred_at_mutation = execution_command(&fixture);
+    occurred_at_mutation.occurred_at = "2026-08-26T00:00:11.000Z".to_owned();
+    mutations.push(occurred_at_mutation);
+    let mut correlation_mutation = execution_command(&fixture);
+    correlation_mutation.correlation_id = "corr-hook-mutated".to_owned();
+    mutations.push(correlation_mutation);
+    let mut deadline_mutation = execution_command(&fixture);
+    deadline_mutation.absolute_deadline_utc = "2026-08-26T00:02:00.000Z".to_owned();
+    mutations.push(deadline_mutation);
+    for mutation in mutations {
+        assert_eq!(
+            store
+                .execute_hook_point(
+                    &fixture.registry(),
+                    &target,
+                    &fixture.target(),
+                    &registry,
+                    &handlers,
+                    &mutation,
+                    &control::live_clock(),
+                )
+                .await
+                .unwrap_err()
+                .kind,
+            HookErrorKind::IdempotencyConflict
+        );
+    }
+    assert_eq!(calls.lock().unwrap().len(), 4);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM events")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap(),
+        event_count_after_execution
+    );
 
     let before_events: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
         .fetch_one(&store.pool)
@@ -2297,7 +2336,7 @@ pub(super) async fn kernel_owned_start_recovery_case() {
             Some(&resolved),
             &HookFactCommand {
                 expected_cursor: projection.inclusive_cursor,
-                event_id: event_id_for("hook-point-start-event-v1", &point_id).unwrap(),
+                event_id: point_start_event_id(&point_id, &command).unwrap(),
                 occurred_at: command.occurred_at.clone(),
                 correlation_id: command.correlation_id.clone(),
                 event_type: "hook-point-started",
@@ -2549,6 +2588,63 @@ pub(super) async fn kernel_owned_rejection_case() {
     assert_eq!(result.projection.rejected_count, 1);
     assert_eq!(result.projection.skipped_count, 3);
     assert_eq!(calls.lock().unwrap().len(), 1);
+
+    let limits = ProtocolLimitsRef {
+        profile: "protocol-limits-v1".to_owned(),
+        digest: Digest::parse(ProtocolLimitsV1::DIGEST).unwrap(),
+    };
+    let events = store
+        .read_hook_events(&target, fixture.set.clone(), limits.clone())
+        .await
+        .unwrap();
+    let rejection_index = events
+        .iter()
+        .position(|event| {
+            event
+                .downcast_payload::<HookMessageRejectedPayloadV1>()
+                .is_some()
+        })
+        .unwrap();
+    let rejection = events[rejection_index]
+        .downcast_payload::<HookMessageRejectedPayloadV1>()
+        .unwrap();
+    let mut mutations = Vec::new();
+    let mut wrong_point = rejection.clone();
+    wrong_point.hook_point = HookPointV1::BeforeAuthoritativeCommit;
+    mutations.push(wrong_point);
+    let mut wrong_hook = rejection.clone();
+    wrong_hook.hook_id = Some(HookId::parse("hook_unknown-rejection").unwrap());
+    mutations.push(wrong_hook);
+    let mut wrong_revision = rejection.clone();
+    wrong_revision.hook_revision = Some(RevisionId::parse("rev_wrong-rejection").unwrap());
+    mutations.push(wrong_revision);
+    let mut wrong_source = rejection.clone();
+    wrong_source.source_cursor.event_id = EventId::parse("event_wrong-source").unwrap();
+    mutations.push(wrong_source);
+    let mut wrong_input = rejection.clone();
+    wrong_input.input_digest = digest('7');
+    mutations.push(wrong_input);
+    let mut wrong_redaction = rejection.clone();
+    wrong_redaction.redaction_policy_revision = RevisionId::parse("rev_wrong-redaction").unwrap();
+    mutations.push(wrong_redaction);
+    let mut wrong_decision = rejection.clone();
+    wrong_decision.decision_id = HookDecisionId::parse("decision_wrong-rejection").unwrap();
+    mutations.push(wrong_decision);
+    let resolved =
+        ResolvedHookRegistry::resolve(&fixture.manifest, &registry, &fixture.set).unwrap();
+    for mutation in mutations {
+        let mut history = store
+            .read_hook_events(&target, fixture.set.clone(), limits.clone())
+            .await
+            .unwrap();
+        history[rejection_index] = reseal_hook_event(&fixture, &events[rejection_index], &mutation);
+        assert_eq!(
+            fold_hook_events(&fixture.set, &history, Some(&resolved))
+                .unwrap_err()
+                .kind,
+            HookErrorKind::AggregateCorrupt
+        );
+    }
 }
 
 pub(super) async fn resealed_history_rejection_case() {

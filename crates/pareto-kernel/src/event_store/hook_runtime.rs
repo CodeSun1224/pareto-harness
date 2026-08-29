@@ -849,7 +849,7 @@ struct InvocationLineage {
     predecessor_output_digest: Option<Digest>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 struct ExecuteHookPointCommand {
     point: HookPointV1,
     task_id: Option<TaskId>,
@@ -900,6 +900,19 @@ fn point_id_for(
         )?
     ))
     .map_err(|_| HookError::new(HookErrorKind::AggregateCorrupt))
+}
+
+fn point_start_event_id(
+    point_id: &HookDecisionId,
+    command: &ExecuteHookPointCommand,
+) -> Result<EventId, HookError> {
+    event_id_for(
+        "hook-point-start-event-v1",
+        &serde_json::json!({
+            "point_id": point_id,
+            "command_fingerprint": pair_digest("hook-execute-command-v1", command)?,
+        }),
+    )
 }
 
 fn invocation_id_for(
@@ -1421,6 +1434,7 @@ impl EventStore {
                 invocation_id_for(&point_id, registration, ordinal as u32)
             })
             .collect::<Result<_, _>>()?;
+        let start_event_id = point_start_event_id(&point_id, command)?;
         if let Some(finalized) = current_events.iter().find_map(|event| {
             event
                 .downcast_payload::<HookPointFinalizedPayloadV1>()
@@ -1430,6 +1444,14 @@ impl EventStore {
                 || finalized.source_cursor != command.source_cursor
                 || finalized.initial_input_digest != initial_digest
                 || finalized.ordered_invocations != ordered_invocations
+                || current_events
+                    .iter()
+                    .find(|event| {
+                        event
+                            .downcast_payload::<HookPointStartedPayloadV1>()
+                            .is_some_and(|payload| payload.point_id == point_id)
+                    })
+                    .is_none_or(|event| event.envelope().event_id != start_event_id)
             {
                 return Err(HookError::new(HookErrorKind::IdempotencyConflict));
             }
@@ -1454,7 +1476,6 @@ impl EventStore {
             initial_input_digest: initial_digest.clone(),
             ordered_invocations: ordered_invocations.clone(),
         };
-        let start_event_id = event_id_for("hook-point-start-event-v1", &point_id)?;
         let existing_start = current_events.iter().find(|event| {
             event
                 .downcast_payload::<HookPointStartedPayloadV1>()
@@ -3168,7 +3189,34 @@ fn fold_hook_events(
             }
             late_result_count += 1;
         } else if let Some(payload) = event.downcast_payload::<HookMessageRejectedPayloadV1>() {
-            if payload.hook_registry_revision != initialization.hook_registry_revision
+            let point = open_point
+                .as_ref()
+                .ok_or_else(|| HookError::new(HookErrorKind::AggregateCorrupt))?;
+            let entry = invocations
+                .values()
+                .find(|entry| entry.decision_id.as_ref() == Some(&payload.decision_id))
+                .ok_or_else(|| HookError::new(HookErrorKind::AggregateCorrupt))?;
+            let registration = registry.and_then(|registry| {
+                registry.registrations.iter().find(|registration| {
+                    registration.hook_id == entry.key.hook_id
+                        && registration.hook_revision == entry.key.hook_revision
+                })
+            });
+            if entry.terminal_state.is_none()
+                || payload.hook_point != entry.key.hook_point
+                || payload.hook_id.as_ref() != Some(&entry.key.hook_id)
+                || payload.hook_revision.as_ref() != Some(&entry.key.hook_revision)
+                || payload.safe_subject_id != entry.key.subject_proposal_id
+                || payload.input_digest != entry.key.input_digest
+                || payload.source_cursor != entry.key.source_cursor
+                || payload.hook_registry_revision != initialization.hook_registry_revision
+                || !point
+                    .start
+                    .ordered_invocations
+                    .contains(&entry.invocation_id)
+                || registration.is_some_and(|registration| {
+                    registration.redaction_policy_revision != payload.redaction_policy_revision
+                })
                 || payload.reason_code != HookReasonCodeV1::MessageRejected
             {
                 return Err(HookError::new(HookErrorKind::AggregateCorrupt));
