@@ -14,12 +14,12 @@ use super::lifecycle::{
 };
 
 #[derive(Clone)]
-struct FakeClock {
+pub(super) struct FakeClock {
     sample: ClockSample,
 }
 
 impl FakeClock {
-    fn at(value: &str, monotonic: u64, epoch: &str) -> Self {
+    pub(super) fn at(value: &str, monotonic: u64, epoch: &str) -> Self {
         Self {
             sample: ClockSample {
                 canonical_utc: value.to_owned(),
@@ -37,18 +37,18 @@ impl RuntimeClock for FakeClock {
     }
 }
 
-struct Fixture {
+pub(super) struct Fixture {
     _temp: TempDir,
-    path: std::path::PathBuf,
-    set: Arc<SchemaSet>,
+    pub(super) path: std::path::PathBuf,
+    pub(super) set: Arc<SchemaSet>,
     limits: pareto_protocol::ProtocolLimitsRef,
-    scope: IsolationScope,
-    manifest: RunManifest,
-    task_id: TaskId,
+    pub(super) scope: IsolationScope,
+    pub(super) manifest: RunManifest,
+    pub(super) task_id: TaskId,
 }
 
 impl Fixture {
-    fn new(run: &str) -> Self {
+    pub(super) fn new(run: &str) -> Self {
         Self::with_mode(run, ExecutionMode::Live {})
     }
 
@@ -73,6 +73,7 @@ impl Fixture {
             schema_ref: set.schema_ref("run-manifest").unwrap().clone(),
             scope: scope.clone(),
             revisions: revision_pins(),
+            hook_registry_config_digest: Some(digest('e')),
             plan_revision: None,
             schema_set_ref: set.reference().clone(),
             budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -96,11 +97,11 @@ impl Fixture {
         }
     }
 
-    fn registry(&self) -> SchemaRegistry {
+    pub(super) fn registry(&self) -> SchemaRegistry {
         SchemaRegistry(vec![self.set.clone()])
     }
 
-    fn target(&self) -> RuntimeControlTarget {
+    pub(super) fn target(&self) -> RuntimeControlTarget {
         RuntimeControlTarget {
             scope: self.scope.clone(),
             principal: self.scope.agent_id.clone(),
@@ -121,6 +122,7 @@ impl Fixture {
             schema_set: self.set.clone(),
             protocol_limits_ref: self.limits.clone(),
             revisions: self.manifest.revisions.clone(),
+            hook_registry_config_digest: self.manifest.hook_registry_config_digest.clone(),
             plan_revision: None,
             budget_revision: self.manifest.budget_revision.clone(),
             boundary_recording_policy_ref: self.manifest.boundary_recording_policy_ref.clone(),
@@ -203,7 +205,7 @@ impl Fixture {
         }
     }
 
-    fn proposal(&self, suffix: &str) -> ProtectedOperationProposal {
+    pub(super) fn proposal(&self, suffix: &str) -> ProtectedOperationProposal {
         ProtectedOperationProposal {
             event_id: EventId::parse(format!("event_reserve-{suffix}")).unwrap(),
             denied_event_id: EventId::parse(format!("event_denied-{suffix}")).unwrap(),
@@ -222,14 +224,14 @@ impl Fixture {
 }
 
 fn revision_pins() -> BTreeMap<String, RevisionId> {
-    ["task", "behavior", "workspace", "environment", "context_graph", "model_snapshot", "tool_set", "kernel"]
+    ["task", "behavior", "workspace", "environment", "context_graph", "model_snapshot", "tool_set", "kernel", "hook_registry"]
         .into_iter().map(|role| (role.to_owned(), RevisionId::parse(format!("rev_{}", role.replace('_', "-"))).unwrap())).collect()
 }
 
 fn digest(fill: char) -> Digest { Digest::parse(format!("sha256:{}", fill.to_string().repeat(64))).unwrap() }
 fn usage(amount: u64) -> Vec<BudgetVectorEntryV1> { vec![BudgetVectorEntryV1 { dimension: BudgetDimensionV1::Tokens, amount: BudgetAmountV1::new(amount) }] }
 fn resource() -> ResourceSelectorV1 { ResourceSelectorV1 { kind: "fake".to_owned(), id: Some("fixture".to_owned()) } }
-fn live_clock() -> FakeClock { FakeClock::at("2026-08-26T00:00:10.000Z", 1_000, "epoch-a") }
+pub(super) fn live_clock() -> FakeClock { FakeClock::at("2026-08-26T00:00:10.000Z", 1_000, "epoch-a") }
 
 fn timeout_request(
     operation_id: &str,
@@ -271,7 +273,7 @@ async fn create_lifecycle_only(fixture: &Fixture) -> EventStore {
     store
 }
 
-async fn create_running(fixture: &Fixture) -> EventStore {
+pub(super) async fn create_running(fixture: &Fixture) -> EventStore {
     create_running_with_payload(fixture, fixture.initialization()).await
 }
 
@@ -432,7 +434,7 @@ async fn assert_control_history_corrupt(store: EventStore, fixture: &Fixture) {
     );
 }
 
-fn settlement(fixture: &Fixture, suffix: &str, outcome: OperationOutcomeV1, metered: u64) -> SettlementCommand {
+pub(super) fn settlement(fixture: &Fixture, suffix: &str, outcome: OperationOutcomeV1, metered: u64) -> SettlementCommand {
     let contract = retained_operation_contract(fixture.set.reference()).unwrap();
     let mut meter = KernelMeter::new(&contract, "epoch-a").unwrap();
     for _ in 0..metered {
@@ -677,6 +679,7 @@ fn cancellation_propagation() {
     let operation = OperationReservedPayloadV1 {
         operation_id: OperationId::parse("operation_probe").unwrap(),
         reservation_id: ReservationId::parse("reservation_probe").unwrap(),
+        hook_pair: None,
         subject_actor: AgentId::parse("agent_owner").unwrap(), task_id: Some(TaskId::parse("task_probe").unwrap()), resource: resource(), operation: "invoke".to_owned(), grant_id: CapabilityId::parse("cap_probe").unwrap(),
         authorization_decision: AuthorizationDecisionV1 { outcome: AuthorizationOutcomeV1::Allowed, reason_code: "allowed".to_owned(), grant_id: Some(CapabilityId::parse("cap_probe").unwrap()), request_digest: digest('1') },
         requested_usage: usage(1), trusted_reservation: usage(1), allocations: Vec::new(), operation_contract_revision: RevisionId::parse("rev_operation").unwrap(), adapter_revision: RevisionId::parse("rev_adapter").unwrap(),
@@ -776,7 +779,7 @@ async fn timeout_recovery() {
     let command = store.prepare_timeout_recovery(
         &fixture.registry(), &fixture.target(), timeout_request("operation_timeout", "corr-timeout", None, digest('e')), &at_deadline,
     ).await.unwrap();
-    assert_eq!(command.event_id.as_str(), "event_f2e7de1827eb20d160fdf23fab402cc4b2611d3874fe953bb39762cdba18f211");
+    assert_eq!(command.event_id.as_str(), "event_e78a2c9795d4c638d17d612bb4761d86830e678a18d37906bf9b56a0f414f0d8");
     let first = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     let retry = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     assert_eq!(append_identity(&first), append_identity(&retry));
@@ -1727,6 +1730,7 @@ async fn compatibility_rejects_schema_valid_illegal_budget_and_cancel_history() 
     let payload = OperationSettledPayloadV1 {
         operation_id: OperationId::parse("operation_illegal-budget").unwrap(),
         reservation_id: ReservationId::parse("reservation_illegal-budget").unwrap(),
+        hook_pair: None,
         callback_id: Some(CallbackId::parse("callback_fake-illegal-budget").unwrap()),
         callback_fingerprint: Some(digest('7')),
         callback_authority: None,

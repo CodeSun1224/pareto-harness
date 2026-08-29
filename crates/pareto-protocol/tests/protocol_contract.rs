@@ -173,7 +173,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 46);
+    assert_eq!(first.len(), 61);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -284,7 +284,7 @@ fn projection_digest_golden() {
 fn lifecycle_manifest_contract() {
     let bundle = generate_schema_bundle().unwrap();
     let expected_bindings = [
-        ("run-created", "run-created-payload", "run-created-v1"),
+        ("run-created", "run-created-payload", "run-created-v2"),
         (
             "run-state-transitioned",
             "run-state-transitioned-payload",
@@ -315,7 +315,14 @@ fn lifecycle_manifest_contract() {
             ),
             expected
         );
-        assert_eq!((binding.major, binding.minor), (1, 0));
+        assert_eq!(
+            (binding.major, binding.minor),
+            if binding.event_type == "run-created" {
+                (2, 0)
+            } else {
+                (1, 0)
+            }
+        );
     }
 
     let member = |name: &str| {
@@ -336,6 +343,7 @@ fn lifecycle_manifest_contract() {
         "model_snapshot",
         "tool_set",
         "kernel",
+        "hook_registry",
     ]
     .into_iter()
     .map(|role| {
@@ -349,6 +357,7 @@ fn lifecycle_manifest_contract() {
         schema_ref: member("run-manifest"),
         scope: scope(),
         revisions,
+        hook_registry_config_digest: Some(digest('e')),
         plan_revision: None,
         schema_set_ref: bundle.reference.clone(),
         budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -377,7 +386,7 @@ fn lifecycle_manifest_contract() {
         causation_id: None,
         correlation_id: "corr-run-create".to_owned(),
         event_type: "run-created".to_owned(),
-        event_major: 1,
+        event_major: 2,
         event_minor: 0,
         occurred_at: "2026-08-24T00:00:00.000Z".to_owned(),
         actor: AgentId::parse("agent_primary").unwrap(),
@@ -396,7 +405,7 @@ fn lifecycle_manifest_contract() {
             manifest.protocol_limits_ref.clone(),
         )
         .unwrap();
-    assert_eq!(validated.variant_id(), "run-created-v1");
+    assert_eq!(validated.variant_id(), "run-created-v2");
     assert_eq!(
         validated.downcast_payload::<RunCreatedPayload>().unwrap(),
         &payload
@@ -464,7 +473,7 @@ fn capability_budget_contract() {
             "missing {event_type}"
         );
     }
-    assert_eq!(bundle.manifest.event_bindings.len(), 15);
+    assert_eq!(bundle.manifest.event_bindings.len(), 23);
     assert!(BudgetAmountV1::parse("0").is_ok());
     assert!(BudgetAmountV1::parse(u64::MAX.to_string()).is_ok());
     for invalid in ["", "00", "01", "-1", "1.0", "18446744073709551616"] {
@@ -713,6 +722,7 @@ fn checked_in_old_writer_manifests_use_their_exact_retained_reader() {
             schema_ref: retained.schema_ref("run-manifest").unwrap().clone(),
             scope: scope(),
             revisions,
+            hook_registry_config_digest: None,
             plan_revision: None,
             schema_set_ref: retained.reference().clone(),
             budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -885,6 +895,148 @@ fn manifest_requires_all_version_budget_limit_and_policy_pins() {
     let incomplete =
         json!({"schema_ref": schema("run-manifest", 'a'), "scope": scope(), "revisions": {}});
     assert!(serde_json::from_value::<RunManifest>(incomplete).is_err());
+}
+
+#[test]
+fn hook_contract_schema_manifest_and_registration_are_closed() {
+    let bundle = generate_schema_bundle().unwrap();
+    let member = |name: &str| {
+        bundle
+            .manifest
+            .schemas
+            .iter()
+            .find(|schema| schema.r#type == name)
+            .unwrap_or_else(|| panic!("missing {name}"))
+            .clone()
+    };
+    assert_eq!(member("run-manifest").major, 2);
+    assert_eq!(member("run-created-payload").major, 2);
+    for required in [
+        "hook-registry-revision",
+        "hook-stream-initialized-payload",
+        "hook-point-started-payload",
+        "hook-invocation-reserved-payload",
+        "hook-invocation-terminal-payload",
+        "hook-invocation-skipped-payload",
+        "hook-point-finalized-payload",
+        "hook-late-result-observed-payload",
+        "hook-message-rejected-payload",
+        "hook-projection",
+        "hook-projection-hash-view",
+        "protected-proposal-hash-view",
+    ] {
+        member(required);
+    }
+    for event_type in [
+        "hook-stream-initialized",
+        "hook-point-started",
+        "hook-invocation-reserved",
+        "hook-invocation-terminal",
+        "hook-invocation-skipped",
+        "hook-point-finalized",
+        "hook-late-result-observed",
+        "hook-message-rejected",
+    ] {
+        assert!(bundle.manifest.event_bindings.iter().any(|binding| {
+            binding.event_type == event_type && binding.major == 1 && binding.minor == 0
+        }));
+    }
+    assert!(bundle.manifest.event_bindings.iter().any(|binding| {
+        binding.event_type == "run-created"
+            && binding.major == 2
+            && binding.variant_id == "run-created-v2"
+    }));
+
+    let base = HookRegistrationV1 {
+        hook_id: HookId::parse("hook_transform-redact").unwrap(),
+        hook_revision: RevisionId::parse("rev_transform-redact-v1").unwrap(),
+        config_digest: digest('1'),
+        kind: HookKindV1::Transform,
+        hook_points: vec![HookPointV1::BeforeProposalAdmission],
+        priority: 10,
+        required: None,
+        observer_failure_policy: None,
+        transform_contract: Some(TransformContractV1 {
+            allowed_fields: vec!["/content".to_owned(), "/metadata/label".to_owned()],
+            field_schema_ref: schema("transform-fields", '2'),
+            protected_hash_view_schema_ref: member("protected-proposal-hash-view"),
+        }),
+        resource_contract_revision: RevisionId::parse("rev_hook-resource-v1").unwrap(),
+        input_schema_ref: schema("hook-input", '3'),
+        output_schema_ref: schema("hook-output", '4'),
+        limits: HookLimitsV1 {
+            max_input_bytes: 4096,
+            max_output_bytes: 4096,
+            max_depth: 16,
+            max_collection_items: 128,
+        },
+        redaction_policy_revision: RevisionId::parse("rev_redaction-v1").unwrap(),
+        handler_compatibility_digest: digest('5'),
+    };
+    assert!(base.validate().is_ok());
+
+    let mut invalid = base.clone();
+    invalid.observer_failure_policy = Some(ObserverFailurePolicyV1::FailClosed);
+    assert!(
+        invalid.validate().is_err(),
+        "Transform accepted Observer policy"
+    );
+    let mut invalid = base.clone();
+    invalid.transform_contract.as_mut().unwrap().allowed_fields = vec!["/*".to_owned()];
+    assert!(
+        invalid.validate().is_err(),
+        "Transform accepted wildcard mask"
+    );
+    let mut invalid = base.clone();
+    invalid.transform_contract.as_mut().unwrap().allowed_fields =
+        vec!["/z".to_owned(), "/a".to_owned()];
+    assert!(
+        invalid.validate().is_err(),
+        "Transform accepted non-canonical mask"
+    );
+
+    let gate = HookRegistrationV1 {
+        hook_id: HookId::parse("hook_gate-required").unwrap(),
+        hook_revision: RevisionId::parse("rev_gate-required-v1").unwrap(),
+        config_digest: digest('6'),
+        kind: HookKindV1::Gate,
+        hook_points: vec![HookPointV1::BeforeAuthoritativeCommit],
+        priority: 20,
+        required: Some(true),
+        observer_failure_policy: None,
+        transform_contract: None,
+        resource_contract_revision: RevisionId::parse("rev_hook-resource-v1").unwrap(),
+        input_schema_ref: schema("hook-input", '3'),
+        output_schema_ref: schema("hook-output", '4'),
+        limits: base.limits.clone(),
+        redaction_policy_revision: RevisionId::parse("rev_redaction-v1").unwrap(),
+        handler_compatibility_digest: digest('7'),
+    };
+    assert!(gate.validate().is_ok());
+    let mut invalid = gate.clone();
+    invalid.observer_failure_policy = Some(ObserverFailurePolicyV1::WarnAndContinue);
+    assert!(invalid.validate().is_err(), "Gate accepted Observer policy");
+    let mut invalid = gate;
+    invalid.hook_points = vec![HookPointV1::AfterAuthoritativeCommit];
+    assert!(invalid.validate().is_err(), "Gate accepted after point");
+
+    let observer_json = json!({
+        "hook_id":"hook_observer-a",
+        "hook_revision":"rev_observer-a-v1",
+        "config_digest":digest('8'),
+        "kind":"observer",
+        "hook_points":["after_authoritative_commit"],
+        "priority":30,
+        "observer_failure_policy":"warn_and_continue",
+        "resource_contract_revision":"rev_hook-resource-v1",
+        "input_schema_ref":schema("hook-input", '3'),
+        "output_schema_ref":schema("hook-output", '4'),
+        "limits":base.limits,
+        "redaction_policy_revision":"rev_redaction-v1",
+        "handler_compatibility_digest":digest('9'),
+        "unknown_policy":"allow"
+    });
+    assert!(serde_json::from_value::<HookRegistrationV1>(observer_json).is_err());
 }
 
 #[test]
@@ -1168,6 +1320,7 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
         "model_snapshot",
         "tool_set",
         "kernel",
+        "hook_registry",
     ]
     .into_iter()
     .map(|role| {
@@ -1181,6 +1334,7 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
         schema_ref: run_schema,
         scope: source_scope.clone(),
         revisions,
+        hook_registry_config_digest: Some(digest('e')),
         plan_revision: None,
         schema_set_ref: set_ref.clone(),
         budget_revision: RevisionId::parse("rev_budget").unwrap(),

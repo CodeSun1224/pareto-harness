@@ -10,15 +10,15 @@ use pareto_protocol::{
     BudgetVectorEntryV1, CallbackAuthorityV1, CallbackId, CancellationAcknowledgedPayloadV1,
     CancellationId, CancellationRequestedPayloadV1, CancellationTargetV1, CapabilityGrantV1,
     CapabilityId, CapabilityIssuedPayloadV1, CapabilityRevokedPayloadV1,
-    ControlMessageRejectedPayloadV1, Digest, EventCursor, EventId, ExecutionMode, IsolationScope,
-    KernelMeterEvidenceV1, LateResultObservedPayloadV1, LifecycleAdmissionV1, OperationId,
-    OperationInterruptibilityV1, OperationOutcomeV1, OperationReservedPayloadV1,
-    OperationSettledPayloadV1, ProtectedOperationDeniedPayloadV1, ReservationId, RevisionId,
-    RunState, RuntimeControlAccountProjectionV1, RuntimeControlCancellationProjectionV1,
-    RuntimeControlInitializedPayloadV1, RuntimeControlOperationProjectionV1,
-    RuntimeControlProjectionHashViewV1, RuntimeControlProjectionV1, StreamId, TaskId, TaskState,
-    TimeoutKeyV1, TrustedOperationContractV1, UsageEvidenceClassV1, ValidatedEvent, canonical_json,
-    digest_json,
+    ControlMessageRejectedPayloadV1, Digest, EventCursor, EventId, ExecutionMode,
+    HookPairBindingV1, IsolationScope, KernelMeterEvidenceV1, LateResultObservedPayloadV1,
+    LifecycleAdmissionV1, OperationId, OperationInterruptibilityV1, OperationOutcomeV1,
+    OperationReservedPayloadV1, OperationSettledPayloadV1, ProtectedOperationDeniedPayloadV1,
+    ReservationId, RevisionId, RunState, RuntimeControlAccountProjectionV1,
+    RuntimeControlCancellationProjectionV1, RuntimeControlInitializedPayloadV1,
+    RuntimeControlOperationProjectionV1, RuntimeControlProjectionHashViewV1,
+    RuntimeControlProjectionV1, StreamId, TaskId, TaskState, TimeoutKeyV1,
+    TrustedOperationContractV1, UsageEvidenceClassV1, ValidatedEvent, canonical_json, digest_json,
 };
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
@@ -41,6 +41,8 @@ const FAKE_CALLBACK_NAMESPACE: &str = "callback_fake-";
 // Updated only when the generated control-capable SchemaSet is deliberately published.
 const RETAINED_CONTROL_SCHEMA_SET_DIGEST: &str =
     "sha256:a95c824d3a47dbc891f884921811859dc2d132e1e39f6f781e833ea9b306a217";
+const HOOK_CAPABLE_SCHEMA_SET_DIGEST: &str =
+    "sha256:3a0c6e67a97675cf6bfcdc1fb9766b30a79ae62e662479d9ae1ef5d7b43ff99d";
 const CONTROL_EVENT_TYPES: [&str; 11] = [
     "budget-refunded",
     "capability-issued",
@@ -935,6 +937,7 @@ impl EventStore {
         let payload = OperationReservedPayloadV1 {
             operation_id: proposal.operation_id.clone(),
             reservation_id: proposal.reservation_id.clone(),
+            hook_pair: None,
             subject_actor: target.principal.clone(),
             task_id: proposal.task_id.clone(),
             resource: proposal.resource.clone(),
@@ -1045,6 +1048,11 @@ impl EventStore {
             )
             .await;
         };
+        if record.reservation.hook_pair.is_some() {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::ProducerUnauthorized,
+            ));
+        }
         verify_lease(
             target,
             lease,
@@ -1691,6 +1699,11 @@ impl EventStore {
             .operations
             .get(&command.timeout_key.operation_id)
             .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+        if record.reservation.hook_pair.is_some() {
+            return Err(RuntimeControlError::new(
+                RuntimeControlErrorKind::ProducerUnauthorized,
+            ));
+        }
         if command.timeout_key != record.reservation.timeout_key {
             return Err(RuntimeControlError::new(
                 RuntimeControlErrorKind::Unauthorized,
@@ -1726,6 +1739,7 @@ impl EventStore {
         let payload = OperationSettledPayloadV1 {
             operation_id: record.reservation.operation_id.clone(),
             reservation_id: record.reservation.reservation_id.clone(),
+            hook_pair: None,
             callback_id: None,
             callback_fingerprint: None,
             callback_authority: None,
@@ -1951,7 +1965,9 @@ fn timeout_fingerprint<T: Serialize>(value: &T) -> Result<Digest, RuntimeControl
     Digest::parse(format!("sha256:{:x}", hasher.finalize())).map_err(|_| corrupt_error())
 }
 
-fn runtime_control_stream_id(scope: &IsolationScope) -> Result<StreamId, RuntimeControlError> {
+pub(super) fn runtime_control_stream_id(
+    scope: &IsolationScope,
+) -> Result<StreamId, RuntimeControlError> {
     let suffix = scope
         .run_id
         .as_str()
@@ -2187,6 +2203,14 @@ fn apply_control_event(
             )?;
             if state.operations.contains_key(&payload.operation_id)
                 || state.denials.contains_key(&payload.operation_id)
+                || payload.hook_pair.as_ref().is_some_and(|pair| {
+                    !valid_hook_pair_binding(
+                        pair,
+                        &event.envelope().event_id,
+                        &payload.operation_id,
+                        &payload.reservation_id,
+                    )
+                })
                 || payload.authorization_decision.outcome != AuthorizationOutcomeV1::Allowed
                 || payload.authorization_decision.reason_code != "capability_allowed"
                 || payload.authorization_decision.grant_id.as_ref() != Some(&payload.grant_id)
@@ -2284,6 +2308,18 @@ fn apply_control_event(
                 .ok_or_else(corrupt_error)?;
             if record.settlement.is_some()
                 || payload.reservation_id != record.reservation.reservation_id
+                || match (&record.reservation.hook_pair, &payload.hook_pair) {
+                    (None, None) => false,
+                    (Some(reserve), Some(terminal)) => {
+                        !valid_hook_pair_binding(
+                            terminal,
+                            &event.envelope().event_id,
+                            &payload.operation_id,
+                            &payload.reservation_id,
+                        ) || reserve.invocation_id != terminal.invocation_id
+                    }
+                    _ => true,
+                }
             {
                 return corrupt();
             }
@@ -2646,6 +2682,18 @@ fn apply_control_event(
     Ok(())
 }
 
+fn valid_hook_pair_binding(
+    pair: &HookPairBindingV1,
+    control_event_id: &EventId,
+    operation_id: &OperationId,
+    reservation_id: &ReservationId,
+) -> bool {
+    pair.control_event_id == *control_event_id
+        && pair.hook_event_id != *control_event_id
+        && pair.operation_id == *operation_id
+        && pair.reservation_id == *reservation_id
+}
+
 fn validate_persisted_meter_evidence(
     evidence: &KernelMeterEvidenceV1,
     reservation: &OperationReservedPayloadV1,
@@ -2764,7 +2812,10 @@ fn validate_initialization(
 fn retained_operation_contract(
     source: &pareto_protocol::SchemaSetRef,
 ) -> Result<TrustedOperationContractV1, RuntimeControlError> {
-    if source.manifest_digest.as_str() != RETAINED_CONTROL_SCHEMA_SET_DIGEST {
+    if !matches!(
+        source.manifest_digest.as_str(),
+        RETAINED_CONTROL_SCHEMA_SET_DIGEST | HOOK_CAPABLE_SCHEMA_SET_DIGEST
+    ) {
         return Err(RuntimeControlError::new(
             RuntimeControlErrorKind::ResourceEnvelopeUnavailable,
         ));
@@ -3308,6 +3359,7 @@ fn settlement_payload(
     Ok(OperationSettledPayloadV1 {
         operation_id: command.operation_id.clone(),
         reservation_id: command.reservation_id.clone(),
+        hook_pair: None,
         callback_id: Some(command.callback_id.clone()),
         callback_fingerprint: Some(safe_digest("callback-command", command)?),
         callback_authority: Some(durable_lease_authority(lease, &command.decision_clock)),
@@ -3359,7 +3411,7 @@ fn verify_meter_snapshot(
     Ok(())
 }
 
-fn make_lease(
+pub(super) fn make_lease(
     target: &RuntimeControlTarget,
     reservation: &OperationReservedPayloadV1,
     sample: &ClockSample,
@@ -3505,6 +3557,140 @@ fn lease_seal(lease: &OperationLease) -> Result<Digest, RuntimeControlError> {
     )
 }
 
+pub(super) struct HookControlEventContext<'a> {
+    pub(super) expected_cursor: &'a EventCursor,
+    pub(super) event_id: &'a EventId,
+    pub(super) occurred_at: &'a str,
+    pub(super) correlation_id: &'a str,
+}
+
+pub(super) async fn prepare_hook_reservation_event(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    context: &HookControlEventContext<'_>,
+    payload: &OperationReservedPayloadV1,
+    sample: &ClockSample,
+) -> Result<(PreparedEvent, OperationLease), RuntimeControlError> {
+    validate_clock_sample(sample)?;
+    let aggregate = load_control(connection, registry, target).await?;
+    if context.expected_cursor.sequence.parse::<i64>().ok() != Some(aggregate.state.sequence)
+        || context.expected_cursor.event_id != aggregate.state.last_event_id
+        || payload.reserved_at_utc != sample.canonical_utc
+        || payload.hook_pair.as_ref().is_none_or(|pair| {
+            !valid_hook_pair_binding(
+                pair,
+                context.event_id,
+                &payload.operation_id,
+                &payload.reservation_id,
+            )
+        })
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::OperationConflict,
+        ));
+    }
+    let event = control_event(
+        &aggregate.lifecycle,
+        &aggregate.stream_id,
+        context.event_id,
+        aggregate.state.sequence + 1,
+        context.occurred_at,
+        context.correlation_id,
+        "operation-reserved",
+        payload,
+    )?;
+    let mut admitted = aggregate.state.clone();
+    apply_control_event(
+        &mut admitted,
+        &aggregate.lifecycle.state,
+        &aggregate.lifecycle.checkpoints,
+        &event,
+    )?;
+    let prepared = PreparedEvent::new(
+        &event,
+        &aggregate.lifecycle.schema_set,
+        &aggregate.lifecycle.limits,
+    )?;
+    let lease = make_lease(target, payload, sample)?;
+    Ok((prepared, lease))
+}
+
+pub(super) async fn prepare_hook_settlement_event(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    context: &HookControlEventContext<'_>,
+    payload: &OperationSettledPayloadV1,
+    recovery_timeout_key: Option<&TimeoutKeyV1>,
+) -> Result<PreparedEvent, RuntimeControlError> {
+    let aggregate = load_control(connection, registry, target).await?;
+    let reservation = aggregate
+        .state
+        .operations
+        .get(&payload.operation_id)
+        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+    let pair_matches = reservation
+        .reservation
+        .hook_pair
+        .as_ref()
+        .zip(payload.hook_pair.as_ref())
+        .is_some_and(|(reserve, terminal)| {
+            reserve.invocation_id == terminal.invocation_id
+                && valid_hook_pair_binding(
+                    terminal,
+                    context.event_id,
+                    &payload.operation_id,
+                    &payload.reservation_id,
+                )
+        });
+    let authority_matches = match payload.outcome {
+        OperationOutcomeV1::TimedOut => recovery_timeout_key
+            .is_some_and(|timeout_key| timeout_key == &reservation.reservation.timeout_key),
+        _ => recovery_timeout_key.is_none(),
+    };
+    if context.expected_cursor.sequence.parse::<i64>().ok() != Some(aggregate.state.sequence)
+        || context.expected_cursor.event_id != aggregate.state.last_event_id
+        || !pair_matches
+        || !authority_matches
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::TerminalConflict,
+        ));
+    }
+    let event = control_event(
+        &aggregate.lifecycle,
+        &aggregate.stream_id,
+        context.event_id,
+        aggregate.state.sequence + 1,
+        context.occurred_at,
+        context.correlation_id,
+        "operation-settled",
+        payload,
+    )?;
+    let mut admitted = aggregate.state.clone();
+    apply_control_event(
+        &mut admitted,
+        &aggregate.lifecycle.state,
+        &aggregate.lifecycle.checkpoints,
+        &event,
+    )?;
+    PreparedEvent::new(
+        &event,
+        &aggregate.lifecycle.schema_set,
+        &aggregate.lifecycle.limits,
+    )
+    .map_err(Into::into)
+}
+
+pub(super) async fn validate_runtime_control_history(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+) -> Result<(), RuntimeControlError> {
+    load_control(connection, registry, target).await.map(|_| ())
+}
+
 async fn append_control<T: Serialize>(
     mut transaction: Transaction<'_, Sqlite>,
     aggregate: &EstablishedControl,
@@ -3545,7 +3731,7 @@ async fn append_control<T: Serialize>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn control_event<T: Serialize>(
+pub(super) fn control_event<T: Serialize>(
     lifecycle: &EstablishedAggregate,
     stream: &StreamId,
     event_id: &EventId,

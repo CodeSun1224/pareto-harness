@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use pareto_protocol::{
-    AgentId, BoundaryRecordingPolicyRef, EventEnvelope, EventId, ExecutionMode, IsolationScope,
-    ProtocolLimitsRef, RevisionId, RunCreatedPayload, RunManifest, RunState,
+    AgentId, BoundaryRecordingPolicyRef, Digest, EventEnvelope, EventId, ExecutionMode,
+    IsolationScope, ProtocolLimitsRef, RevisionId, RunCreatedPayload, RunManifest, RunState,
     RunStateTransitionedPayload, SchemaSet, StreamId, TaskCreatedPayload, TaskId, TaskState,
     TaskStateTransitionedPayload, ValidatedEvent, digest_json,
 };
@@ -74,6 +74,7 @@ pub(super) struct TrustedRunInputs {
     pub(super) schema_set: Arc<SchemaSet>,
     pub(super) protocol_limits_ref: ProtocolLimitsRef,
     pub(super) revisions: BTreeMap<String, RevisionId>,
+    pub(super) hook_registry_config_digest: Option<Digest>,
     pub(super) plan_revision: Option<RevisionId>,
     pub(super) budget_revision: RevisionId,
     pub(super) boundary_recording_policy_ref: BoundaryRecordingPolicyRef,
@@ -459,6 +460,7 @@ fn validate_create_authority(
         return Err(LifecycleError::new(LifecycleErrorKind::Unauthorized));
     }
     let exact = manifest.revisions == trusted.revisions
+        && manifest.hook_registry_config_digest == trusted.hook_registry_config_digest
         && manifest.plan_revision == trusted.plan_revision
         && manifest.schema_set_ref == *trusted.schema_set.reference()
         && manifest.budget_revision == trusted.budget_revision
@@ -496,8 +498,17 @@ pub(super) fn lifecycle_event<T: serde::Serialize>(
     event_type: &str,
     payload: &T,
 ) -> Result<ValidatedEvent, LifecycleError> {
+    let event_major = if event_type == "run-created"
+        && schema_set
+            .schema_ref("run-manifest")
+            .is_some_and(|schema| schema.major == 2)
+    {
+        2
+    } else {
+        1
+    };
     let binding = schema_set
-        .event_type_binding(event_type, 1, 0)
+        .event_type_binding(event_type, event_major, 0)
         .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::SchemaUnavailable))?;
     let envelope_schema = schema_set
         .schema_ref("event-envelope")
@@ -516,7 +527,7 @@ pub(super) fn lifecycle_event<T: serde::Serialize>(
         causation_id: None,
         correlation_id: correlation_id.to_owned(),
         event_type: event_type.to_owned(),
-        event_major: 1,
+        event_major,
         event_minor: 0,
         occurred_at: occurred_at.to_owned(),
         actor: actor.clone(),
@@ -696,11 +707,16 @@ pub(super) fn fold_lifecycle(
         .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
     let expected_stream = lifecycle_stream_id(&created.manifest.scope)
         .map_err(|_| LifecycleError::new(LifecycleErrorKind::AggregateCorrupt))?;
+    let (created_major, created_variant) = match created.manifest.schema_ref.major {
+        1 => (1, "run-created-v1"),
+        2 => (2, "run-created-v2"),
+        _ => return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt)),
+    };
     if first_envelope.event_type != "run-created"
-        || first_envelope.event_major != 1
+        || first_envelope.event_major != created_major
         || first_envelope.event_minor != 0
         || first_envelope.sequence != "1"
-        || first.variant_id() != "run-created-v1"
+        || first.variant_id() != created_variant
         || first.schema_set_ref() != schema_set.reference()
         || created.manifest.scope != first_envelope.scope
         || created.manifest.schema_set_ref != *first.schema_set_ref()

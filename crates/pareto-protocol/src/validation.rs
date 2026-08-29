@@ -246,7 +246,33 @@ fn builtin_event_decoder(binding: &EventTypeBinding) -> Option<Arc<dyn EventVari
         ("control-message-rejected-v1", "control-message-rejected-payload") => {
             Some(decoder!(crate::ControlMessageRejectedPayloadV1))
         }
-        ("run-created-v1", "run-created-payload") => Some(decoder!(crate::RunCreatedPayload)),
+        ("hook-stream-initialized-v1", "hook-stream-initialized-payload") => {
+            Some(decoder!(crate::HookStreamInitializedPayloadV1))
+        }
+        ("hook-point-started-v1", "hook-point-started-payload") => {
+            Some(decoder!(crate::HookPointStartedPayloadV1))
+        }
+        ("hook-invocation-reserved-v1", "hook-invocation-reserved-payload") => {
+            Some(decoder!(crate::HookInvocationReservedPayloadV1))
+        }
+        ("hook-invocation-terminal-v1", "hook-invocation-terminal-payload") => {
+            Some(decoder!(crate::HookInvocationTerminalPayloadV1))
+        }
+        ("hook-invocation-skipped-v1", "hook-invocation-skipped-payload") => {
+            Some(decoder!(crate::HookInvocationSkippedPayloadV1))
+        }
+        ("hook-point-finalized-v1", "hook-point-finalized-payload") => {
+            Some(decoder!(crate::HookPointFinalizedPayloadV1))
+        }
+        ("hook-late-result-observed-v1", "hook-late-result-observed-payload") => {
+            Some(decoder!(crate::HookLateResultObservedPayloadV1))
+        }
+        ("hook-message-rejected-v1", "hook-message-rejected-payload") => {
+            Some(decoder!(crate::HookMessageRejectedPayloadV1))
+        }
+        ("run-created-v1", "run-created-payload") | ("run-created-v2", "run-created-payload") => {
+            Some(decoder!(crate::RunCreatedPayload))
+        }
         ("task-created-v1", "task-created-payload") => Some(decoder!(crate::TaskCreatedPayload)),
         ("run-state-transitioned-v1", "run-state-transitioned-payload") => {
             Some(decoder!(crate::RunStateTransitionedPayload))
@@ -438,6 +464,32 @@ impl SchemaSet {
         self.manifest.event_bindings.iter().find(|binding| {
             binding.event_type == event_type && binding.major == major && binding.minor == minor
         })
+    }
+
+    /// Validates an already bounded JSON value against one exact admitted member Schema.
+    pub fn validate_value_against(
+        &self,
+        schema_ref: &SchemaRef,
+        value: &Value,
+    ) -> Result<(), Vec<ValidationError>> {
+        if !self.contains(schema_ref) {
+            return Err(vec![schema_error(
+                "/schema_ref",
+                "value Schema is not an exact admitted member",
+            )]);
+        }
+        let validator = self
+            .validators
+            .get(schema_ref)
+            .expect("admitted member validator");
+        let mut errors = Vec::new();
+        validate_json_schema(validator, value, "", &mut errors);
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            sort_and_truncate(&mut errors);
+            Err(errors)
+        }
     }
 
     /// Parses one untrusted top-level record in limits → Schema → Serde → semantic order.
@@ -723,7 +775,7 @@ impl SchemaSet {
         ) {
             validate_json_schema(validator, &value, "", &mut errors);
         }
-        for role in [
+        let mut required_roles = vec![
             "task",
             "behavior",
             "workspace",
@@ -732,8 +784,13 @@ impl SchemaSet {
             "model_snapshot",
             "tool_set",
             "kernel",
-        ] {
-            if !manifest.revisions.contains_key(role) {
+        ];
+        let is_hook_manifest = manifest.schema_ref.major == 2;
+        if is_hook_manifest {
+            required_roles.push("hook_registry");
+        }
+        for role in &required_roles {
+            if !manifest.revisions.contains_key(*role) {
                 errors.push(ValidationError::new(
                     ErrorCode::InvariantViolation,
                     &format!("/revisions/{role}"),
@@ -742,12 +799,20 @@ impl SchemaSet {
                 ));
             }
         }
-        if manifest.revisions.len() != 8 {
+        if manifest.revisions.len() != required_roles.len() {
             errors.push(ValidationError::new(
                 ErrorCode::InvariantViolation,
                 "/revisions",
                 "run_manifest",
                 "revision roles must equal the closed required set",
+            ));
+        }
+        if is_hook_manifest != manifest.hook_registry_config_digest.is_some() {
+            errors.push(ValidationError::new(
+                ErrorCode::InvariantViolation,
+                "/hook_registry_config_digest",
+                "run_manifest",
+                "V2 requires and V1 forbids a Hook registry config digest",
             ));
         }
         if let Err(error) = manifest.execution_mode.validate(&manifest.scope.run_id) {
@@ -1388,6 +1453,8 @@ protocol_record!(
     "projection-reducer-descriptor"
 );
 protocol_record!(crate::ProjectionReducerRef, "projection-reducer-ref");
+protocol_record!(crate::HookProjectionV1, "hook-projection");
+protocol_record!(crate::HookProjectionHashViewV1, "hook-projection-hash-view");
 protocol_record!(crate::RunTaskProjection, "run-task-projection");
 protocol_record!(
     crate::RunTaskProjectionHashViewV1,
@@ -1789,6 +1856,7 @@ mod tests {
             schema_ref: schema("run-manifest"),
             scope: scope(),
             revisions,
+            hook_registry_config_digest: Some(digest('e')),
             plan_revision: None,
             schema_set_ref: bundle.reference.clone(),
             budget_revision: crate::RevisionId::parse("rev_budget").unwrap(),

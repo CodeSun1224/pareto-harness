@@ -1,7 +1,7 @@
 ---
 id: REQ-0008
 title: Observer、Gate 与 Transform Hook 骨架
-status: planned
+status: implementing
 owners: [runtime-kernel]
 created: 2026-08-28
 updated: 2026-08-28

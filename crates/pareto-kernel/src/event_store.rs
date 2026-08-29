@@ -85,7 +85,7 @@ const V2_MIGRATION_CHECKSUM: &str =
     "sha256:fe118a4cd78deb4abe730e545d3eb565a52673a3c9e5ad41c1d9adbcc14f600e";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ErrorKind {
+pub(super) enum ErrorKind {
     Migration,
     DatabaseCorrupt,
     ProtocolInvalid,
@@ -99,8 +99,8 @@ enum ErrorKind {
 }
 
 #[derive(Debug)]
-struct EventStoreError {
-    kind: ErrorKind,
+pub(super) struct EventStoreError {
+    pub(super) kind: ErrorKind,
 }
 
 impl EventStoreError {
@@ -133,7 +133,7 @@ impl From<sqlx::Error> for EventStoreError {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum AppendResult {
+pub(super) enum AppendResult {
     Appended { event_id: EventId, sequence: i64 },
     AlreadyCommitted { event_id: EventId, sequence: i64 },
 }
@@ -259,7 +259,7 @@ struct EventStore {
     store_id: String,
 }
 
-struct PreparedEvent {
+pub(super) struct PreparedEvent {
     envelope: EventEnvelope,
     envelope_json: String,
     envelope_fingerprint: String,
@@ -271,7 +271,7 @@ struct PreparedEvent {
 }
 
 impl PreparedEvent {
-    fn new(
+    pub(super) fn new(
         event: &ValidatedEvent,
         schema_set: &SchemaSet,
         limits: &ProtocolLimitsRef,
@@ -294,6 +294,53 @@ impl PreparedEvent {
             limits_json,
             sequence,
         })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum AtomicPairFault {
+    None,
+    AfterFirstInsert,
+    BeforeCommit,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(super) struct AtomicPairResult {
+    pub(super) first: AppendResult,
+    pub(super) second: AppendResult,
+    pub(super) already_committed: bool,
+}
+
+pub(super) async fn append_atomic_pair(
+    connection: &mut SqliteConnection,
+    first: &PreparedEvent,
+    second: &PreparedEvent,
+    fault: AtomicPairFault,
+) -> Result<AtomicPairResult, EventStoreError> {
+    let first_existing = check_prepared_idempotency(connection, first).await?;
+    let second_existing = check_prepared_idempotency(connection, second).await?;
+    match (first_existing, second_existing) {
+        (Some(first), Some(second)) => Ok(AtomicPairResult {
+            first,
+            second,
+            already_committed: true,
+        }),
+        (Some(_), None) | (None, Some(_)) => Err(EventStoreError::new(ErrorKind::DatabaseCorrupt)),
+        (None, None) => {
+            let first = insert_prepared(connection, first).await?;
+            if fault == AtomicPairFault::AfterFirstInsert {
+                return Err(EventStoreError::new(ErrorKind::Io));
+            }
+            let second = insert_prepared(connection, second).await?;
+            if fault == AtomicPairFault::BeforeCommit {
+                return Err(EventStoreError::new(ErrorKind::Io));
+            }
+            Ok(AtomicPairResult {
+                first,
+                second,
+                already_committed: false,
+            })
+        }
     }
 }
 
@@ -817,6 +864,8 @@ fn user_key(scope: &IsolationScope) -> (i64, &str) {
 mod tests;
 
 mod lifecycle;
+
+mod hook_runtime;
 
 mod projection;
 

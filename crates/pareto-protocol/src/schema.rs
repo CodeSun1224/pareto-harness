@@ -8,17 +8,21 @@ use crate::{
     BudgetRefundedPayloadV1, CallbackAuthorityV1, CancellationAcknowledgedPayloadV1,
     CancellationRequestedPayloadV1, CapabilityGrantV1, CapabilityIssuedPayloadV1,
     CapabilityRevokedPayloadV1, ControlMessageRejectedPayloadV1, EventCursor, EventEnvelope,
-    EventTypeBinding, EvidenceRecord, KernelMeterEvidenceV1, LateResultObservedPayloadV1,
-    LifecycleAdmissionV1, OperationReservedPayloadV1, OperationSettledPayloadV1,
+    EventTypeBinding, EvidenceRecord, GateDecisionV1, HookInvocationReservedPayloadV1,
+    HookInvocationSkippedPayloadV1, HookInvocationTerminalPayloadV1,
+    HookLateResultObservedPayloadV1, HookMessageRejectedPayloadV1, HookPointFinalizedPayloadV1,
+    HookPointStartedPayloadV1, HookProjectionHashViewV1, HookProjectionV1, HookRegistryRevisionV1,
+    HookStreamInitializedPayloadV1, KernelMeterEvidenceV1, LateResultObservedPayloadV1,
+    LifecycleAdmissionV1, ObserverResultV1, OperationReservedPayloadV1, OperationSettledPayloadV1,
     ProjectionHistorySeedV1, ProjectionHistoryStepV1, ProjectionReducerDescriptorV1,
-    ProjectionReducerRef, ProtectedOperationDeniedPayloadV1, ProtocolLimitsProfileV1,
-    RevisionHashView, RevisionMetadata, RunCreatedPayload, RunManifest,
+    ProjectionReducerRef, ProtectedOperationDeniedPayloadV1, ProtectedProposalHashViewV1,
+    ProtocolLimitsProfileV1, RevisionHashView, RevisionMetadata, RunCreatedPayload, RunManifest,
     RunStateTransitionedPayload, RunTaskProjection, RunTaskProjectionHashViewV1,
     RunTaskProjectionSnapshot, RunTaskProjectionSnapshotHashViewV1,
     RuntimeControlInitializedPayloadV1, RuntimeControlProjectionHashViewV1,
     RuntimeControlProjectionV1, SchemaRef, SchemaSetManifest, SchemaSetRef, SourceReducerKeyV1,
-    TaskCreatedPayload, TaskStateTransitionedPayload, TimeoutKeyV1, TrustedOperationContractV1,
-    ValidationError, digest_json, digest_schema,
+    TaskCreatedPayload, TaskStateTransitionedPayload, TimeoutKeyV1, TransformProposalV1,
+    TrustedOperationContractV1, ValidationError, digest_json, digest_schema,
 };
 
 /// A generated public JSON Schema and its stable filename.
@@ -61,11 +65,24 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<EventEnvelope>("event-envelope", 1, 0)?,
         generate::<EventCursor>("event-cursor", 1, 0)?,
         generate::<EvidenceRecord>("evidence-record", 1, 0)?,
+        generate::<GateDecisionV1>("gate-decision", 1, 0)?,
         generate::<KernelMeterEvidenceV1>("kernel-meter-evidence", 1, 0)?,
+        generate::<HookInvocationReservedPayloadV1>("hook-invocation-reserved-payload", 1, 0)?,
+        generate::<HookInvocationSkippedPayloadV1>("hook-invocation-skipped-payload", 1, 0)?,
+        generate::<HookInvocationTerminalPayloadV1>("hook-invocation-terminal-payload", 1, 0)?,
+        generate::<HookLateResultObservedPayloadV1>("hook-late-result-observed-payload", 1, 0)?,
+        generate::<HookMessageRejectedPayloadV1>("hook-message-rejected-payload", 1, 0)?,
+        generate::<HookPointFinalizedPayloadV1>("hook-point-finalized-payload", 1, 0)?,
+        generate::<HookPointStartedPayloadV1>("hook-point-started-payload", 1, 0)?,
+        generate::<HookProjectionV1>("hook-projection", 1, 0)?,
+        generate::<HookProjectionHashViewV1>("hook-projection-hash-view", 1, 0)?,
+        generate::<HookRegistryRevisionV1>("hook-registry-revision", 1, 0)?,
+        generate::<HookStreamInitializedPayloadV1>("hook-stream-initialized-payload", 1, 0)?,
         generate::<LateResultObservedPayloadV1>("late-result-observed-payload", 1, 0)?,
         generate::<LifecycleAdmissionV1>("lifecycle-admission", 1, 0)?,
         generate::<OperationReservedPayloadV1>("operation-reserved-payload", 1, 0)?,
         generate::<OperationSettledPayloadV1>("operation-settled-payload", 1, 0)?,
+        generate::<ObserverResultV1>("observer-result", 1, 0)?,
         generate::<ProjectionHistorySeedV1>("projection-history-seed", 1, 0)?,
         generate::<ProjectionHistoryStepV1>("projection-history-step", 1, 0)?,
         generate::<ProjectionReducerDescriptorV1>("projection-reducer-descriptor", 1, 0)?,
@@ -74,8 +91,9 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<ProtectedOperationDeniedPayloadV1>("protected-operation-denied-payload", 1, 0)?,
         generate::<RevisionHashView>("revision-hash-view", 1, 0)?,
         generate::<RevisionMetadata>("revision-metadata", 1, 0)?,
-        generate::<RunCreatedPayload>("run-created-payload", 1, 0)?,
-        generate::<RunManifest>("run-manifest", 1, 0)?,
+        generate::<ProtectedProposalHashViewV1>("protected-proposal-hash-view", 1, 0)?,
+        generate::<RunCreatedPayload>("run-created-payload", 2, 0)?,
+        generate::<RunManifest>("run-manifest", 2, 0)?,
         generate::<RunStateTransitionedPayload>("run-state-transitioned-payload", 1, 0)?,
         generate::<RunTaskProjection>("run-task-projection", 1, 0)?,
         generate::<RunTaskProjectionHashViewV1>("run-task-projection-hash-view", 1, 0)?,
@@ -101,6 +119,7 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<TaskCreatedPayload>("task-created-payload", 1, 0)?,
         generate::<TaskStateTransitionedPayload>("task-state-transitioned-payload", 1, 0)?,
         generate::<TimeoutKeyV1>("timeout-key", 1, 0)?,
+        generate::<TransformProposalV1>("transform-proposal", 1, 0)?,
         generate::<TrustedOperationContractV1>("trusted-operation-contract", 1, 0)?,
     ];
     schemas.sort_by(|left, right| left.filename.cmp(&right.filename));
@@ -137,6 +156,62 @@ pub fn generate_schema_bundle() -> Result<GeneratedSchemaBundle, ValidationError
             .expect("lifecycle payload schema is generated")
     };
     let mut event_bindings = vec![
+        EventTypeBinding {
+            event_type: "hook-invocation-reserved".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("hook-invocation-reserved-payload"),
+            variant_id: "hook-invocation-reserved-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "hook-invocation-skipped".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("hook-invocation-skipped-payload"),
+            variant_id: "hook-invocation-skipped-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "hook-invocation-terminal".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("hook-invocation-terminal-payload"),
+            variant_id: "hook-invocation-terminal-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "hook-late-result-observed".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("hook-late-result-observed-payload"),
+            variant_id: "hook-late-result-observed-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "hook-message-rejected".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("hook-message-rejected-payload"),
+            variant_id: "hook-message-rejected-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "hook-point-finalized".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("hook-point-finalized-payload"),
+            variant_id: "hook-point-finalized-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "hook-point-started".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("hook-point-started-payload"),
+            variant_id: "hook-point-started-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "hook-stream-initialized".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("hook-stream-initialized-payload"),
+            variant_id: "hook-stream-initialized-v1".to_owned(),
+        },
         EventTypeBinding {
             event_type: "budget-refunded".to_owned(),
             major: 1,
@@ -209,10 +284,10 @@ pub fn generate_schema_bundle() -> Result<GeneratedSchemaBundle, ValidationError
         },
         EventTypeBinding {
             event_type: "run-created".to_owned(),
-            major: 1,
+            major: 2,
             minor: 0,
             payload_schema_ref: payload("run-created-payload"),
-            variant_id: "run-created-v1".to_owned(),
+            variant_id: "run-created-v2".to_owned(),
         },
         EventTypeBinding {
             event_type: "run-state-transitioned".to_owned(),
@@ -374,6 +449,7 @@ fn harden_schema(name: &str, document: &mut Value) {
                 "model_snapshot",
                 "tool_set",
                 "kernel",
+                "hook_registry",
             ];
             revisions.clear();
             revisions.insert("type".to_owned(), Value::String("object".to_owned()));
@@ -396,6 +472,15 @@ fn harden_schema(name: &str, document: &mut Value) {
                 ),
             );
             revisions.insert("additionalProperties".to_owned(), Value::Bool(false));
+        }
+        if let Some(required) = document.get_mut("required").and_then(Value::as_array_mut) {
+            if !required
+                .iter()
+                .any(|item| item == "hook_registry_config_digest")
+            {
+                required.push(Value::String("hook_registry_config_digest".to_owned()));
+                required.sort_by(|left, right| left.as_str().cmp(&right.as_str()));
+            }
         }
     }
 }
@@ -555,6 +640,11 @@ fn id_prefix(definition: &str) -> Option<&'static str> {
         "ReservationId" => Some("reservation_"),
         "OperationId" => Some("operation_"),
         "CallbackId" => Some("callback_"),
+        "HookId" => Some("hook_"),
+        "HookInvocationId" => Some("invocation_"),
+        "HookDecisionId" => Some("decision_"),
+        "ProposalId" => Some("proposal_"),
+        "HookPairId" => Some("pair_"),
         "CancellationId" => Some("cancel_"),
         _ => None,
     }

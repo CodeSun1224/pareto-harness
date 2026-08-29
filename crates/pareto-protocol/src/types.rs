@@ -67,6 +67,27 @@ wire_id!(
 );
 wire_id!(OperationId, "operation_", "Protected operation identifier.");
 wire_id!(CallbackId, "callback_", "Operation callback identifier.");
+wire_id!(HookId, "hook_", "Stable Hook logical identifier.");
+wire_id!(
+    HookInvocationId,
+    "invocation_",
+    "Stable Hook invocation identifier."
+);
+wire_id!(
+    HookDecisionId,
+    "decision_",
+    "Stable Hook decision identifier."
+);
+wire_id!(
+    ProposalId,
+    "proposal_",
+    "Non-authoritative proposal identifier."
+);
+wire_id!(
+    HookPairId,
+    "pair_",
+    "Atomic control and Hook pair identifier."
+);
 wire_id!(
     CancellationId,
     "cancel_",
@@ -723,6 +744,13 @@ pub struct RunManifest {
     pub scope: IsolationScope,
     /// Required revision pins by role.
     pub revisions: BTreeMap<String, RevisionId>,
+    /// Exact digest of the Manifest-pinned Hook registry configuration for V2 manifests.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub hook_registry_config_digest: Option<Digest>,
     /// Optional plan revision.
     #[serde(
         default,

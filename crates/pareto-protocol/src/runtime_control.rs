@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AgentId, BudgetAccountId, CallbackId, CancellationId, CapabilityId, Digest, EventCursor,
-    EventId, EventTypeBinding, IsolationScope, OperationId, ProtocolLimitsRef, ReservationId,
-    RevisionId, RunState, SchemaRef, SchemaSetRef, StreamId, TaskId, TaskState,
+    EventId, EventTypeBinding, HookPairBindingV1, IsolationScope, OperationId, ProtocolLimitsRef,
+    ReservationId, RevisionId, RunState, SchemaRef, SchemaSetRef, StreamId, TaskId, TaskState,
 };
 
 fn deserialize_present_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -467,6 +467,13 @@ pub struct OperationReservedPayloadV1 {
     pub operation_id: OperationId,
     /// Reservation identity.
     pub reservation_id: ReservationId,
+    /// Atomic Hook pair binding. Absent for retained non-Hook operations.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub hook_pair: Option<HookPairBindingV1>,
     /// Subject actor.
     pub subject_actor: AgentId,
     /// Exact Task.
@@ -584,6 +591,13 @@ pub struct OperationSettledPayloadV1 {
     pub operation_id: OperationId,
     /// Reservation identity.
     pub reservation_id: ReservationId,
+    /// Atomic Hook pair binding. Absent for retained non-Hook operations.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub hook_pair: Option<HookPairBindingV1>,
     /// Optional callback identity.
     #[serde(
         default,

@@ -23,12 +23,18 @@ const ROW_COLUMNS: &str = "envelope_json,envelope_fingerprint,schema_set_json,sc
 const HISTORY_ALGORITHM: &str = "run-task-history-chain-v1";
 const RETAINED_OUTPUT_MANIFEST_DIGEST: &str =
     "sha256:4ce3872926ce61209fdc5ed48deceeec9703ccfe94ea83be485eb8ef7512ff97";
+const HOOK_OUTPUT_MANIFEST_DIGEST: &str =
+    "sha256:3a0c6e67a97675cf6bfcdc1fb9766b30a79ae62e662479d9ae1ef5d7b43ff99d";
 const SCHEMA_SET_MANIFEST_DIGEST: &str =
     "sha256:e534c2d587c2813a97f0bb1abf992d29585c3b1ddd04d9c73ee0eda5d83b0f4b";
 const RUN_MANIFEST_DIGEST: &str =
     "sha256:449f419966fdcc1b85470c4fbfa1b84c228abcf3ad7df28e1698a27a044a1a87";
 const RUN_CREATED_PAYLOAD_DIGEST: &str =
     "sha256:e727b2af9f96cd826d901656e9161bee2032ad61ca8af67fcdc3c3c3e4b748c1";
+const HOOK_RUN_MANIFEST_DIGEST: &str =
+    "sha256:4723c760d74dc614bbc6716330916a7b6e5e7b79cf1c4803c7cf3b2813bca355";
+const HOOK_RUN_CREATED_PAYLOAD_DIGEST: &str =
+    "sha256:1954105acd0c6191cbd2a5fce9bfcb2c656782e04d1a3811523a98b05911e698";
 const RUN_TRANSITION_PAYLOAD_DIGEST: &str =
     "sha256:bd5af4a5494e71b94df741d91a5286274a494ea0dd8785d1dc7c927ed33937e2";
 const TASK_CREATED_PAYLOAD_DIGEST: &str =
@@ -192,46 +198,60 @@ impl ProjectionRegistry {
                 ProjectionErrorKind::ReducerUnavailable,
             ));
         }
-        let output_reference = retained_output_reference()?;
-        let output = outputs
-            .0
-            .iter()
-            .find(|set| set.reference() == &output_reference)
-            .cloned()
-            .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::SchemaUnavailable))?;
-        let source_key = retained_lifecycle_source_key()?;
-        if !sources
+        let allowed_keys = [
+            retained_lifecycle_source_key()?,
+            hook_lifecycle_source_key()?,
+        ];
+        let present_keys: Vec<_> = sources
             .0
             .iter()
             .filter_map(|source| source_reducer_key(source).ok())
-            .any(|key| key == source_key)
-        {
+            .filter(|key| allowed_keys.contains(key))
+            .collect();
+        if present_keys.is_empty() {
             return Err(ProjectionError::new(
                 ProjectionErrorKind::ReducerUnavailable,
             ));
         }
-        let descriptor = reducer_descriptor(&source_key, &output, &retained_limits)?;
-        let descriptor_bytes = canonical(&descriptor)?.into_bytes();
-        output
-            .parse_record::<ProjectionReducerDescriptorV1>(&descriptor_bytes)
+        let mut reducers = Vec::new();
+        for source_key in allowed_keys {
+            if !present_keys.contains(&source_key) {
+                continue;
+            }
+            let output_reference = if source_key.run_manifest_schema_ref.major == 2 {
+                hook_output_reference()?
+            } else {
+                retained_output_reference()?
+            };
+            let output = outputs
+                .0
+                .iter()
+                .find(|set| set.reference() == &output_reference)
+                .cloned()
+                .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::SchemaUnavailable))?;
+            let descriptor = reducer_descriptor(&source_key, &output, &retained_limits)?;
+            let descriptor_bytes = canonical(&descriptor)?.into_bytes();
+            output
+                .parse_record::<ProjectionReducerDescriptorV1>(&descriptor_bytes)
+                .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
+            let contract_digest = digest_json(
+                "projection-reducer-contract",
+                &descriptor.schema_ref,
+                &serde_json::to_value(&descriptor)
+                    .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+            )
             .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
-        let contract_digest = digest_json(
-            "projection-reducer-contract",
-            &descriptor.schema_ref,
-            &serde_json::to_value(&descriptor)
-                .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
-        )
-        .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
-        let reducer_ref = ProjectionReducerRef {
-            descriptor_schema_ref: descriptor.schema_ref.clone(),
-            contract_digest,
-        };
-        let reducers = vec![ReducerRegistration {
-            source_key,
-            descriptor,
-            reducer_ref,
-            implementation: ReducerImplementation::RunTaskLifecycleV1,
-        }];
+            let reducer_ref = ProjectionReducerRef {
+                descriptor_schema_ref: descriptor.schema_ref.clone(),
+                contract_digest,
+            };
+            reducers.push(ReducerRegistration {
+                source_key,
+                descriptor,
+                reducer_ref,
+                implementation: ReducerImplementation::RunTaskLifecycleV1,
+            });
+        }
         Ok(Self {
             sources,
             outputs,
@@ -295,6 +315,17 @@ fn retained_output_reference() -> Result<SchemaSetRef, ProjectionError> {
     })
 }
 
+fn hook_output_reference() -> Result<SchemaSetRef, ProjectionError> {
+    Ok(SchemaSetRef {
+        manifest_schema_ref: retained_schema_ref(
+            "schema-set-manifest",
+            SCHEMA_SET_MANIFEST_DIGEST,
+        )?,
+        manifest_digest: Digest::parse(HOOK_OUTPUT_MANIFEST_DIGEST)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    })
+}
+
 fn retained_output_limits() -> Result<ProtocolLimitsRef, ProjectionError> {
     Ok(ProtocolLimitsRef {
         profile: "protocol-limits-v1".to_owned(),
@@ -353,6 +384,33 @@ fn retained_lifecycle_source_key() -> Result<SourceReducerKeyV1, ProjectionError
     })
 }
 
+fn hook_lifecycle_source_key() -> Result<SourceReducerKeyV1, ProjectionError> {
+    let mut key = retained_lifecycle_source_key()?;
+    key.run_manifest_schema_ref = SchemaRef {
+        r#type: "run-manifest".to_owned(),
+        major: 2,
+        minor: 0,
+        schema_digest: Digest::parse(HOOK_RUN_MANIFEST_DIGEST)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    };
+    let run_created = key
+        .event_bindings
+        .iter_mut()
+        .find(|binding| binding.event_type == "run-created")
+        .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
+    run_created.major = 2;
+    run_created.variant_id = "run-created-v2".to_owned();
+    run_created.payload_schema_ref = SchemaRef {
+        r#type: "run-created-payload".to_owned(),
+        major: 2,
+        minor: 0,
+        schema_digest: Digest::parse(HOOK_RUN_CREATED_PAYLOAD_DIGEST)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    };
+    key.event_bindings.sort();
+    Ok(key)
+}
+
 fn exact_schema(set: &SchemaSet, name: &str) -> Result<SchemaRef, ProjectionError> {
     set.schema_ref(name)
         .cloned()
@@ -360,18 +418,24 @@ fn exact_schema(set: &SchemaSet, name: &str) -> Result<SchemaRef, ProjectionErro
 }
 
 fn source_reducer_key(source: &SchemaSet) -> Result<SourceReducerKeyV1, ProjectionError> {
+    let run_manifest_schema_ref = exact_schema(source, "run-manifest")?;
     let mut event_bindings = Vec::with_capacity(LIFECYCLE_EVENTS.len());
     for event_type in LIFECYCLE_EVENTS {
+        let major = if event_type == "run-created" {
+            run_manifest_schema_ref.major
+        } else {
+            1
+        };
         event_bindings.push(
             source
-                .event_type_binding(event_type, 1, 0)
+                .event_type_binding(event_type, major, 0)
                 .cloned()
                 .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
         );
     }
     event_bindings.sort();
     Ok(SourceReducerKeyV1 {
-        run_manifest_schema_ref: exact_schema(source, "run-manifest")?,
+        run_manifest_schema_ref,
         event_bindings,
     })
 }
@@ -1311,13 +1375,13 @@ async fn reducer_resolution() {
     let retained_output = fixture.retained_projection_output_set();
     let registry = ProjectionRegistry::retained(
         SchemaRegistry(vec![evolved.clone(), fixture.set.clone()]),
-        SchemaRegistry(vec![retained_output.clone()]),
+        SchemaRegistry(vec![fixture.set.clone(), retained_output.clone()]),
         fixture.limits.clone(),
     )
     .unwrap();
     let reversed = ProjectionRegistry::retained(
         SchemaRegistry(vec![fixture.set.clone(), evolved.clone()]),
-        SchemaRegistry(vec![retained_output.clone()]),
+        SchemaRegistry(vec![fixture.set.clone(), retained_output.clone()]),
         fixture.limits.clone(),
     )
     .unwrap();
@@ -1334,7 +1398,7 @@ async fn reducer_resolution() {
     );
     assert_eq!(
         current.descriptor.output_schema_set_ref,
-        *retained_output.reference()
+        *fixture.set.reference()
     );
 
     let mut unmapped_key = source_reducer_key(&evolved).unwrap();
@@ -1440,7 +1504,7 @@ async fn digest_golden() {
     let snapshot = build_snapshot(&projection, reducer, &output).unwrap();
     assert_eq!(
         reducer.reducer_ref.contract_digest.as_str(),
-        "sha256:18e293687a43d6c594681435650866cd65a3475362eac080140b29b66591f964"
+        "sha256:c1e04beb93c6d4434afca76f74577cb0bc70525d9a920bd161eadee740c4e5b0"
     );
     assert_eq!(
         seed.as_str(),
@@ -1448,11 +1512,11 @@ async fn digest_golden() {
     );
     assert_eq!(
         projection.projection_digest.as_str(),
-        "sha256:cdc9d528aadb91b7eded8b95fd8c36dd41b773971d86dd55e86442d0aa483a04"
+        "sha256:4f7aeb6a637708a6ef7295151e0f621f6c34969b9d2248798f25f08f691b7e26"
     );
     assert_eq!(
         snapshot.snapshot_digest.as_str(),
-        "sha256:ad22dcb25dbae95c57e39eac271ab60d97c6271d369f782455127e4e57a175b2"
+        "sha256:f1caa49f05b4f7f854601f0e12e78964c70278cc6bf6ac5da0842916945878f7"
     );
     transaction.rollback().await.unwrap();
 
@@ -1500,19 +1564,19 @@ async fn digest_golden() {
     );
     assert_eq!(
         one.as_str(),
-        "sha256:5ee375d497798d193c4dae74fe25f7b60519ee5665ff7859f4aabde75b2e0626"
+        "sha256:d47cf7f0f27fd42544d76cfa14cdf0731663b8245e55bfb17b88e060c27a0753"
     );
     assert_eq!(
         two.as_str(),
-        "sha256:3b3eeb8e383caaeb0e1176bceebac7f5a569c7be700581d585cea820c380193c"
+        "sha256:7b670327bc098de983599418202502041efc777e87da704cb37ca96708bcfab1"
     );
     assert_eq!(
         projection_n.projection_digest.as_str(),
-        "sha256:02885f3fc0e0997cf83fd06d55be54aaf75d62f215140ad6b551efae50e2bfae"
+        "sha256:db1120a962526fb90c3d4e1de393bc9525bc3a7161f39454410c3c88bcb524dd"
     );
     assert_eq!(
         snapshot_n.snapshot_digest.as_str(),
-        "sha256:506b9f13b16f13d70541cab07316c652f38d1421bd3ddb8d1ca71a3a0a1fc968"
+        "sha256:0c5271ba244b1c9660de5b7c19d80c49daefa623e7f545b067c4fa4fc51af10e"
     );
 }
 
@@ -1704,7 +1768,7 @@ async fn authority() {
     let retained_output = fixture.retained_projection_output_set();
     let registry = ProjectionRegistry::retained(
         SchemaRegistry(vec![evolved.clone(), fixture.set.clone()]),
-        SchemaRegistry(vec![retained_output.clone()]),
+        SchemaRegistry(vec![fixture.set.clone(), retained_output.clone()]),
         fixture.limits.clone(),
     )
     .unwrap();
@@ -1717,7 +1781,7 @@ async fn authority() {
 
     let missing_exact_source = ProjectionRegistry::retained(
         SchemaRegistry(vec![fixture.evolved_set_with_unrelated_member()]),
-        SchemaRegistry(vec![retained_output]),
+        SchemaRegistry(vec![fixture.set.clone(), retained_output]),
         fixture.limits.clone(),
     )
     .unwrap();
@@ -1757,6 +1821,8 @@ async fn retained_source_compatibility() {
     fixture.set = retained_source.clone();
     fixture.manifest.schema_ref = retained_source.schema_ref("run-manifest").unwrap().clone();
     fixture.manifest.schema_set_ref = retained_source.reference().clone();
+    fixture.manifest.revisions.remove("hook_registry");
+    fixture.manifest.hook_registry_config_digest = None;
     let store = fixture.open_created().await;
     let registry = ProjectionRegistry::retained(
         SchemaRegistry(vec![retained_source.clone()]),
