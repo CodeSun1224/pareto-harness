@@ -1,27 +1,28 @@
 ---
 id: REVIEW-0011
 title: REQ-0008 Observer、Gate 与 Transform Hook 独立实现评审
-status: changes-requested
+status: approved
 owners: [independent-reviewer]
 created: 2026-08-29
 updated: 2026-08-29
 links: [REQ-0008, SPEC-0007, RFC-0008, ADR-0009, REVIEW-0010, REQ-0004, REQ-0007]
 independence: independent
-reviewed_revision: 8cf926a64c0e611aa6b357b0bfb93fb5bf9d6601
+reviewed_revision: e4877834fb54e3db936677f3b87c5fdf9e1d2d97
 open_blockers: 0
-open_majors: 1
+open_majors: 0
 ---
 
 # Verdict
 
-`changes-requested`。本 Reviewer 独立复审 exact remediation revision
-`8cf926a64c0e611aa6b357b0bfb93fb5bf9d6601`，实现基线为
+`approved`。本 Reviewer 独立复审 exact remediation revision
+`e4877834fb54e3db936677f3b87c5fdf9e1d2d97`，实现基线为
 `b1f626ed52ffd7e0e6b4ad9c0cb457c12e8760d7`；`4ea5edc`、`c7483a0`只包含本
 Reviewer-owned Review记录。新整改关闭了point full-command mutation和rejected-audit lineage两个Blocker。
 重新按accepted SPEC/RFC校准后，pending invocation必须由显式terminal recovery authority结清、不能由point
 executor自动重跑；Hook Event只保留Transform安全digest，因此finalized retry返回durable decision/projection和
-`proposal: None`是fail-closed合同，不要求持久化敏感proposal或background recovery。当前0 open Blocker、
-1 open Major：独立完整Hook filter稳定暴露`isolation`红测，故仍不批准进入`verified/done`。
+`proposal: None`是fail-closed合同，不要求持久化敏感proposal或background recovery。最终整改让隔离矩阵走
+registry-aware生产准入并补齐task双payload绑定及different-pair reverse-winner；独立targeted、Hook与workspace
+门禁全绿。当前0 open Blocker、0 open Major，批准进入后续verification gate。
 
 # Findings
 
@@ -32,7 +33,7 @@ executor自动重跑；Hook Event只保留Transform安全digest，因此finalize
 | F-003 | Major | pair persistence/query and pair commands in `event_store.rs` and `hook_runtime.rs` | 整改已按`pair_id`+`pair_kind`查询，持久化完整fingerprint、显式双sequence和canonical prepared-event preimage；zero/one/two、same-pair-new-events、cross-kind、two exact retry和mutation均在writer transaction内处理。跨流validator也核对双侧actual envelope identity。 | 独立Hook 39-test与workspace回归通过；pair mutation/corruption测试非零。 | closed |
 | F-004 | Major | `crates/pareto-kernel/src/event_store/hook_runtime.rs:1471-2149`; `tests.rs:2296-2330` | Kernel执行循环现在首个Gate deny/invalid/required abstain后设置stop reason，后续Gate/Observer不调用并追加规范skip；Observer结果保持非权威。handler counter直接证明只调用Transform与首Gate。 | `hook_runtime::kernel_owned_gate_short_circuit`和全Hook filter通过。 | closed |
 | F-005 | Major | `crates/pareto-protocol/src/hooks.rs:200-310`; Kernel registry/output/transform validation | Registry resolve现验证Manifest exact schema set、input/output/field/protected schema、handler compatibility及resource contract；Kernel构造protected view、递归JSON pointer逐字段验证，reason为闭合enum。Registry canonical key现包含已规范排序的完整`hook_points`向量、phase、priority、ID、revision，消除了旧实现只取首point的歧义，runtime仍按单point闭合phase排序。 | protocol hook contract、nested transform/protected/compatibility/output security filters通过；Schema retained sets与scope checker通过。 | closed |
-| F-006 | Major | `crates/pareto-kernel/src/event_store/hook_runtime/tests.rs:1450-1521`; validation path `hook_runtime::isolation` | Full-command mutation和七类rejection reseal证据已补齐；现有tests也实际包含tenant、user presence/value、workspace、run、actor及task/subject/hook identity矩阵，以及different-pair reverse winner。可是独立运行完整Hook filter得到38 pass/1 fail，失败稳定发生在业务identity mutation循环`tests.rs:1500`：`append_hook_reserve_pair(...).await.is_err()`为false。单独连续两次复跑同样失败。静态原因是test-only low-level wrapper传`registry=None`；`fold_hook_events`的registration/hook identity校验使用`registration.is_some_and`，因此hook-ID mutation可绕过该断言，虽然生产executor传Some(registry)。这是实际红色完成门禁与无效AC-20证据，不能用实现者此前绿色计数关闭。 | 让隔离测试逐个标识task/subject/hook变体，并通过生产等价registry-aware pair入口验证三者均拒绝、双Event零写；或让所有可调用pair admission都闭合验证Hook identity。独立复跑`hook_runtime::isolation`和完整Hook filter必须全绿。 | open |
+| F-006 | Major | `crates/pareto-kernel/src/event_store/hook_runtime.rs:143-179,1683-1690,2174-2203`; tests `tests.rs:1450-1628` | Reserve command现在硬绑定Hook key与Control reservation的`task_id`。隔离矩阵通过`append_hook_reserve_pair_with_registry(..., Some(&resolved), ...)`覆盖tenant、user presence/value、workspace、run、scope actor、authenticated actor、task、subject及Hook identity，全部拒绝且双Event零写。registry-free helper受`#[cfg(test)]`限制；生产executor唯一调用传`Some(&resolved)`，未进入生产identity admission。budget concurrency使用不同pair ID/Event IDs/command bytes，在正反两种调用顺序下都exactly one commit、一个operation与一次reserve。此前红测已独立转为targeted 1/1及Hook 39/39。 | 独立targeted、Hook完整filter和workspace full均通过；代码调用图确认生产registry binding。 | closed |
 
 # Acceptance trace
 
@@ -40,7 +41,7 @@ executor自动重跑；Hook Event只保留Transform安全digest，因此finalize
 |---|---|---|
 | AC-01/02/03 | passed | closed注册、kind×point、规范排序、Kernel-owned固定phase纵切已实现；未知组合默认拒绝。 |
 | AC-04/05 | passed | Gate即时短路并写skip；Observer不能改business decision。 |
-| AC-06/07/08 | partial | recursive Transform/Kernel protected view、narrow lease存在；Hook完整隔离测试当前红，受F-006阻塞。 |
+| AC-06/07/08 | passed | recursive Transform/Kernel protected view、narrow lease及完整scope/business identity no-write矩阵通过。 |
 | AC-09 | passed | atomic pair zero/two/one、kind/identity/sequence/preimage、双侧actual Event binding已闭合。 |
 | AC-10/11/12 | passed | success/failure/cancel/timeout唯一terminal、late audit、pair/point exact retry与full-command mutation均通过。 |
 | AC-13 | passed | exact output schema、limit、kind语义、closed reason与安全rejection writer已实现。 |
@@ -48,27 +49,27 @@ executor自动重跑；Hook Event只保留Transform安全digest，因此finalize
 | AC-16 | passed | Recorded projection只读且独立测试证明Event/control facts不变、无handler入口。 |
 | AC-17/18 | passed | SQLite v2与历史SchemaSet保留，当前set内容地址化；仅Fake Rust reference handler，无外部transport/ABI依赖。 |
 | AC-19 | passed | crate-private live入口提供proposal/result；已提交retry只返回durable decision/projection，未扩大Event敏感payload或下游authority。 |
-| AC-20 | failed | 定向新增用例绿，但完整Hook filter因isolation业务identity mutation红。见F-006。 |
+| AC-20 | passed | isolation与different-pair concurrency targeted、Hook 39-test和workspace回归全部绿色。 |
 
 # Compatibility, permission, and isolation review
 
 - SQLite保持v2，已发布SchemaSet保留byte-identical；当前Manifest/Hook schemas由exact retained reader解析，未增加依赖或第二状态表。
 - reserve/terminal pair在单一`BEGIN IMMEDIATE`内进行registry-aware pre/post fold，Hook Projection在同一read transaction与同一MVCC horizon读取Hook和Runtime Control streams。
 - Hook handler只收到Kernel构造的bounded request/lease，没有Event transaction、budget/cancellation/terminal authority；Recorded路径没有handler参数。
-- 生产executor使用registry-aware pair fold；test-only无registry wrapper暴露的Hook identity测试旁路使AC-20门禁红，计入F-006。
+- 生产executor唯一reserve pair调用使用`Some(&resolved)`的registry-aware fold；registry-free wrapper仅为`#[cfg(test)]` fault/atomicity harness，不构成生产identity admission。
 
 # Regression and test review
 
-本Reviewer在Windows/PowerShell、offline、2026-08-29对 exact `8cf926a6...` 独立执行：
+本Reviewer在Windows/PowerShell、offline、2026-08-29对 exact `e4877834...` 独立执行：
 
-- `cargo test -p pareto-kernel hook_runtime::kernel_owned_execution --offline`：1 passed；新增四类full-command mutation均由该case覆盖。
-- `cargo test -p pareto-kernel hook_runtime::kernel_owned_rejection --offline`：1 passed；新增七类validly re-sealed mutation均由该case覆盖。
-- `cargo test -p pareto-kernel hook_runtime:: --offline`：38 passed、1 failed（`hook_runtime::isolation`），122 filtered。
-- `cargo test -p pareto-kernel hook_runtime::isolation --offline -- --nocapture`：连续两次均0 passed/1 failed，稳定失败于`tests.rs:1500`。
+- `cargo test -p pareto-kernel hook_runtime::isolation --offline`：1 passed，160 filtered。
+- `cargo test -p pareto-kernel hook_runtime::budget_concurrency --offline`：1 passed，160 filtered。
+- `cargo test -p pareto-kernel hook_runtime:: --offline`：39 passed，0 failed，122 filtered。
+- `cargo test --workspace --all-targets --all-features --offline`：Kernel 160 passed/1 ignored；Protocol unit 9 passed、baseline 1 ignored、contract 24 passed；exit 0。all-targets末尾schema generator binary无目标参数时仍打印非门禁`existing content-addressed schema set differs byte-for-byte`，checked-in schema deterministic contract test通过。
 - `python scripts/check_req0008_scope.py`：passed；`python -m unittest discover -s scripts/tests -p "test_*.py"`：24 passed。
 - `cargo fmt --all -- --check`：passed；`cargo clippy --workspace --all-targets --all-features --offline -- -D warnings`：passed。
 
-因此F-001/F-002可以关闭，但红色Focused/Core Hook门禁直接阻止F-006和最终approval；未在已知focused失败后浪费时间声称workspace full绿色。
+F-006的先前红测在exact revision上稳定转绿，且生产调用边界、零写与exactly-one-commit断言均直接覆盖；所有Blocker/Major已关闭。
 
 # Scope and unrelated changes
 
@@ -80,3 +81,4 @@ executor自动重跑；Hook Event只保留Transform安全digest，因此finalize
 - 2026-08-29：检查中间remediation `498597b5e43ccd628f53cd4aca259d6dbae9e791`，确认Kernel纵切、pair identity、short-circuit与schema/Transform大幅修复，同时独立发现cancel、actual Hook envelope binding、完整retry/recovery缺口；该candidate被后续exact revision取代，未作为最终reviewed revision。
 - 2026-08-29：同一independent Reviewer复审 exact `4817ef31a95d00592840be50207ff59baf67f694`。关闭F-003/F-004/F-005；F-001/F-002保持Blocker，F-006保持Major。当前2 Blocker、1 Major，`changes-requested`。后续修复仍须由本Reviewer以新的exact revision和原始证据复审关闭。
 - 2026-08-29：复审 exact `8cf926a64c0e611aa6b357b0bfb93fb5bf9d6601`。按accepted recovery/safe-digest边界关闭F-001；逐字段代码与七类重封负例关闭F-002。独立完整Hook filter稳定暴露`isolation`红测，F-006保持Major。当前0 Blocker、1 Major，`changes-requested`。
+- 2026-08-29：最终复审 exact `e4877834fb54e3db936677f3b87c5fdf9e1d2d97`。task双payload绑定、registry-aware完整隔离矩阵和different-pair reverse-winner均经独立测试与调用图确认；关闭F-006。当前0 Blocker、0 Major，`approved`。
