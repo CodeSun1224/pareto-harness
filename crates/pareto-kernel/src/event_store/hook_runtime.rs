@@ -169,6 +169,7 @@ fn validate_reserve_pair_command(
         || command.control_payload.hook_pair.as_ref() != Some(&command.pair)
         || command.hook_payload.pair != command.pair
         || command.hook_payload.invocation_id != command.pair.invocation_id
+        || command.hook_payload.key.task_id != command.control_payload.task_id
         || command.control_payload.operation_id != command.pair.operation_id
         || command.control_payload.reservation_id != command.pair.reservation_id
         || command.hook_payload.reserved_usage != command.control_payload.trusted_reservation

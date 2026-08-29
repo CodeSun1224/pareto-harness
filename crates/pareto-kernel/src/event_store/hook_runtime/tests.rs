@@ -1449,23 +1449,76 @@ pub(super) async fn authority_case() {
 
 pub(super) async fn isolation_case() {
     let harness = pair_harness("run_hook-isolation").await;
-    let (mut hook_target, control_target) = pair_targets(&harness);
-    hook_target.actor = AgentId::parse("agent_intruder").unwrap();
-    assert_eq!(
-        harness
-            .store
-            .append_hook_reserve_pair(
-                &harness.fixture.registry(),
-                &hook_target,
-                &control_target,
-                &harness.reserve,
-                AtomicPairFault::None,
-            )
-            .await
-            .unwrap_err()
-            .kind,
-        HookErrorKind::Unauthorized
-    );
+    let (hook_target, control_target) = pair_targets(&harness);
+    let mut targets = Vec::new();
+    let mut actor = hook_target.clone();
+    actor.actor = AgentId::parse("agent_intruder").unwrap();
+    targets.push(actor);
+    let mut tenant = hook_target.clone();
+    tenant.scope.tenant_id = TenantId::parse("tenant_other").unwrap();
+    targets.push(tenant);
+    let mut user_presence = hook_target.clone();
+    user_presence.scope.user_id = None;
+    targets.push(user_presence);
+    let mut user_value = hook_target.clone();
+    user_value.scope.user_id = Some(UserId::parse("user_other").unwrap());
+    targets.push(user_value);
+    let mut workspace = hook_target.clone();
+    workspace.scope.workspace_id = WorkspaceId::parse("workspace_other").unwrap();
+    targets.push(workspace);
+    let mut run = hook_target.clone();
+    run.scope.run_id = RunId::parse("run_other").unwrap();
+    targets.push(run);
+    let mut agent_scope = hook_target.clone();
+    agent_scope.scope.agent_id = AgentId::parse("agent_other").unwrap();
+    targets.push(agent_scope);
+    for unauthorized_target in targets {
+        assert_eq!(
+            harness
+                .store
+                .append_hook_reserve_pair(
+                    &harness.fixture.registry(),
+                    &unauthorized_target,
+                    &control_target,
+                    &harness.reserve,
+                    AtomicPairFault::None,
+                )
+                .await
+                .unwrap_err()
+                .kind,
+            HookErrorKind::Unauthorized
+        );
+    }
+    let mut task = harness.reserve.clone();
+    task.hook_payload.key.task_id = Some(TaskId::parse("task_other").unwrap());
+    let mut subject = harness.reserve.clone();
+    subject.hook_payload.key.subject_proposal_id = ProposalId::parse("proposal_other").unwrap();
+    let mut hook = harness.reserve.clone();
+    hook.hook_payload.key.hook_id = HookId::parse("hook_other").unwrap();
+    let resolved = ResolvedHookRegistry::resolve(
+        &harness.fixture.manifest,
+        &harness.hook_registry,
+        &harness.fixture.set,
+    )
+    .unwrap();
+    for (name, mutation) in [("task", task), ("subject", subject), ("hook", hook)] {
+        let mutation = seal_reserve_pair_command(mutation).unwrap();
+        assert!(
+            harness
+                .store
+                .append_hook_reserve_pair_with_registry(
+                    &harness.fixture.registry(),
+                    &hook_target,
+                    &control_target,
+                    Some(&resolved),
+                    &mutation,
+                    AtomicPairFault::None,
+                )
+                .await
+                .is_err(),
+            "{name} identity mutation must fail closed"
+        );
+    }
     assert_eq!(
         event_count(&harness.store, &harness.reserve.pair.control_event_id).await,
         0
@@ -1512,40 +1565,73 @@ pub(super) async fn budget_reserve_case() {
 }
 
 pub(super) async fn budget_concurrency_case() {
-    let harness = pair_harness("run_hook-budget-concurrency").await;
-    let (hook_target, control_target) = pair_targets(&harness);
-    let registry = harness.fixture.registry();
-    let first = harness.store.append_hook_reserve_pair(
-        &registry,
-        &hook_target,
-        &control_target,
-        &harness.reserve,
-        AtomicPairFault::None,
-    );
-    let second = harness.store.append_hook_reserve_pair(
-        &registry,
-        &hook_target,
-        &control_target,
-        &harness.reserve,
-        AtomicPairFault::None,
-    );
-    let (first, second) = tokio::join!(first, second);
-    let first = first.unwrap();
-    let second = second.unwrap();
-    assert_ne!(first.already_committed, second.already_committed);
-    let projection = harness
-        .store
-        .runtime_control_projection(&harness.fixture.registry(), &control_target)
-        .await
-        .unwrap();
-    assert_eq!(projection.operations.len(), 1);
-    for allocation in &harness.reserve.control_payload.allocations {
-        let account = projection
-            .accounts
-            .iter()
-            .find(|account| account.account.account_id == allocation.account_id)
+    for reverse in [false, true] {
+        let harness = pair_harness(if reverse {
+            "run_hook-budget-concurrency-reverse"
+        } else {
+            "run_hook-budget-concurrency"
+        })
+        .await;
+        let (hook_target, control_target) = pair_targets(&harness);
+        let registry = harness.fixture.registry();
+        let mut alternate = harness.reserve.clone();
+        alternate.pair.pair_id = HookPairId::parse("pair_reserve-hook-alternate").unwrap();
+        alternate.pair.control_event_id = EventId::parse("event_reserve-hook-alternate").unwrap();
+        alternate.pair.hook_event_id = EventId::parse("event_hook-reserved-alternate").unwrap();
+        alternate.control_payload.hook_pair = Some(alternate.pair.clone());
+        alternate.hook_payload.pair = alternate.pair.clone();
+        alternate.correlation_id = "corr-hook-reserve-alternate".to_owned();
+        let alternate = seal_reserve_pair_command(alternate).unwrap();
+        let (left, right) = if reverse {
+            tokio::join!(
+                harness.store.append_hook_reserve_pair(
+                    &registry,
+                    &hook_target,
+                    &control_target,
+                    &alternate,
+                    AtomicPairFault::None,
+                ),
+                harness.store.append_hook_reserve_pair(
+                    &registry,
+                    &hook_target,
+                    &control_target,
+                    &harness.reserve,
+                    AtomicPairFault::None,
+                )
+            )
+        } else {
+            tokio::join!(
+                harness.store.append_hook_reserve_pair(
+                    &registry,
+                    &hook_target,
+                    &control_target,
+                    &harness.reserve,
+                    AtomicPairFault::None,
+                ),
+                harness.store.append_hook_reserve_pair(
+                    &registry,
+                    &hook_target,
+                    &control_target,
+                    &alternate,
+                    AtomicPairFault::None,
+                )
+            )
+        };
+        assert_eq!(usize::from(left.is_ok()) + usize::from(right.is_ok()), 1);
+        let projection = harness
+            .store
+            .runtime_control_projection(&harness.fixture.registry(), &control_target)
+            .await
             .unwrap();
-        assert_eq!(account.reserved.as_u64(), allocation.amount.as_u64());
+        assert_eq!(projection.operations.len(), 1);
+        for allocation in &harness.reserve.control_payload.allocations {
+            let account = projection
+                .accounts
+                .iter()
+                .find(|account| account.account.account_id == allocation.account_id)
+                .unwrap();
+            assert_eq!(account.reserved.as_u64(), allocation.amount.as_u64());
+        }
     }
 }
 

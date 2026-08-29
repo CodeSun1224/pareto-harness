@@ -28,6 +28,8 @@
 | Hook aggregate | `cargo test -p pareto-kernel hook_runtime:: --offline` | 39 passed after REVIEW-0011 remediation |
 | Kernel-owned vertical execution | `cargo test -p pareto-kernel hook_runtime::kernel_owned_ --offline` | 6 passed: Transform→Gate→Observer plus exact no-write retry and full-command mutation rejection, point-start crash recovery, Gate deny short-circuit+skip, cancellation winner+late audit+skip, deadline timeout authority+late audit+skip, and invalid-kind rejection audit with a seven-field resealed-lineage matrix |
 | Validly resealed negative history | `cargo test -p pareto-kernel hook_runtime::resealed_history_rejection --offline` | passed: wrong point/lineage, wrong final digest, pair mutation, and mutually resealed cross-stream payload IDs that disagree with the actual Hook envelope all fail closed |
+| Hook isolation | `cargo test -p pareto-kernel hook_runtime::isolation --offline` | passed: tenant, user presence/value, workspace, run, scope actor, authenticated actor, task, subject proposal and Hook identity mutations are rejected with both pair Events absent; the task binding is checked against the admitted Control reservation |
+| Different-pair writer race | `cargo test -p pareto-kernel hook_runtime::budget_concurrency --offline` | passed in both call orders: two distinct pair identities with the same initial cursors produce exactly one commit and one operation/reservation, without double reserve |
 | Event Store | `cargo test -p pareto-kernel event_store --offline` | 160 passed, 1 existing performance observation ignored |
 | Lifecycle | `cargo test -p pareto-kernel lifecycle:: --offline` | 18 passed |
 | Projection/replay | `cargo test -p pareto-kernel projection:: --offline` | 35 passed, 1 existing performance observation ignored |
@@ -63,6 +65,9 @@ next sequences, canonical Event preimages and both payloads are closed. Recorded
 projection-only and the live vertical test proves replay causes no handler, Event, operation,
 account or budget change. Rejection fold admission binds decision, point, Hook identity/revision,
 subject, source cursor, input digest, registry and redaction policy to the current invocation.
+The Hook-specific isolation matrix and a distinct-pair race in both call orders now exercise the
+registry-aware writer path directly; test-only registry-free helpers remain limited to pair
+mechanics fixtures and are not used as production identity admission evidence.
 
 ## Completion gates before independent review
 
