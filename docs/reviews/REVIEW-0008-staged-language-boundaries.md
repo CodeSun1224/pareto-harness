@@ -4,10 +4,10 @@ title: 技术选型分阶段语言边界独立架构评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-27
-updated: 2026-08-27
+updated: 2026-08-29
 links: [REQ-0001, SPEC-0001, RFC-0001, ADR-0001, ADR-0002, ARCH-0002, ARCH-0004, ROADMAP-0001]
 independence: independent
-reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
+reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
 open_blockers: 0
 open_majors: 0
 ---
@@ -77,3 +77,4 @@ REVIEW-0001..0007 的 freshness 记录。
   冻结transport、authority、failure、rollback和quality/cost/latency证据。E-017..E-027经官方来源原子化复核，
   fact/inference边界明确。REVIEW-0008保持approved、0 open Blocker/Major。
 - 2026-08-27：focused accepted-doc re-review exact `b42ccdc3216f518ff60303cec20da92b78d190a1` against `2c80b89`。RFC acceptance、ADR-0008及ARCH-0004正式采用“Rust authority + extension compute”边界；Requirement顺序/prerequisite和默认Rust reference path不变。G2–G5均受具体accepted Requirement、可复现收益和transport neutrality总门禁约束，未扩大成已启用Runtime。REVIEW-0008保持approved、0 open Blocker/Major。
+- 2026-08-29：focused REQ-0008 closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。交付仅为Rust进程内Fake Hook reference implementation；无真实shell/Python/TypeScript/HTTP/MCP/WASI handler、Worker/RPC/queue、Rust ABI或共享SQLite边界。README/architecture明确该限制，REQ-0009未开始。分阶段语言边界无回退，REVIEW-0008保持approved、0/0。

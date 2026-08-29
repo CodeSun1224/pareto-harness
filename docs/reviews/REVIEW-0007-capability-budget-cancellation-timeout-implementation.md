@@ -4,10 +4,10 @@ title: REQ-0007 Capability、预算、取消与超时独立实现评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-26
-updated: 2026-08-27
+updated: 2026-08-29
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: e3d8d805b46fb4e1e25b23bc53bead71de730853
+reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
 open_blockers: 0
 open_majors: 0
 ---
@@ -168,3 +168,4 @@ REQ-0008未实现。后续若改变callback authority、meter evidence epoch、d
 - 2026-08-28：focused REQ-0008 remediation freshness re-review exact `3aee02adf8815466b02f51de247ae19922efc126`。`43f3a5b..3aee02a`对Runtime、Protocol、Schema、DB、Cargo及REQ-0007 authority/accounting实现零差异；文档准确要求未来把自行commit的single-event helper重构为private transaction-local admission，并为Hook operation拒绝single-stream terminal。该能力仍未实现，REVIEW-0010仅批准设计。REQ-0007实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。
 - 2026-08-28：focused REQ-0008 accepted-doc freshness re-review exact `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6`。`ea9633c..3318cbc`对Runtime、Protocol、Schema、DB、Cargo及REQ-0007 authority/accounting实现零差异；ADR-0009继续把transaction-local pair列为未来实现代价。REQ-0007实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。
 - 2026-08-28：focused REQ-0008 planning freshness re-review exact `e3d8d805b46fb4e1e25b23bc53bead71de730853`。`5546d1f..e3d8d80`对Runtime、Protocol、Schema、DB、Cargo及REQ-0007 authority/accounting实现零差异；计划准确把现有self-commit helper的private transaction-local重构、atomic pair fault/response-loss/concurrency与FakeClock proof列为未来TASK，未冒充现成能力。REQ-0007实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。
+- 2026-08-29：focused REQ-0008 closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。Runtime Control admission重构为可由Hook writer transaction调用的private helper，同时普通single-stream terminal对Hook-bound operation fail closed；既有Capability、账户预算、取消传播、deadline/timeout、callback/late与Recorded合同保持，workspace Kernel 160/1 ignored通过。closure无runtime差异。REVIEW-0007保持approved、0/0。

@@ -4,10 +4,10 @@ title: REQ-0004 SQLite append-only Event Store 独立代码评审
 status: approved
 owners: [maintainers]
 created: 2026-08-23
-updated: 2026-08-25
+updated: 2026-08-29
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: e3d8d805b46fb4e1e25b23bc53bead71de730853
+reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
 open_blockers: 0
 open_majors: 0
 ---
@@ -90,3 +90,4 @@ open_majors: 0
 - 2026-08-28：exact REQ-0008 remediation `3aee02adf8815466b02f51de247ae19922efc126` substantive freshness re-review。`43f3a5b..3aee02a`无Event Store、SQLite v2、DDL/trigger、Schema、Cargo或API变化；只冻结未来transaction-local双Event pair，明确现有single-event helper必须私有重构且不得扩大SQL/API，失败全rollback、单边历史fail closed。现有REQ-0004合同未被修改或冒充实现，REVIEW-0003保持approved、0 open Blocker/Major。
 - 2026-08-28：exact REQ-0008 accepted-doc `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` substantive freshness re-review。`ea9633c..3318cbc`无Event Store、SQLite、DDL/trigger、Schema、Cargo或API变化；ADR-0009忠实保留未来private atomic pair与禁止public SQL/补偿表，明确尚未实现。REQ-0004合同无回退，REVIEW-0003保持approved、0 open Blocker/Major。
 - 2026-08-28：exact REQ-0008 planning `e3d8d805b46fb4e1e25b23bc53bead71de730853` substantive freshness re-review。`5546d1f..e3d8d80`无Event Store、SQLite、DDL/trigger、Schema、Cargo或API变化；PLAN把private transaction-local atomic pair、zero/two/one corruption、双insert/commit rollback与single-stream terminal拒绝列为未开始实现及强制fault proof，继续禁止DB v3/public SQL/第二状态表。REQ-0004合同无回退，REVIEW-0003保持approved、0 open Blocker/Major。
+- 2026-08-29：exact REQ-0008 closure `84ce5a705edb20f268898938be4579f4946d5e4f` substantive freshness re-review。Hook复用SQLite v2 `events`与single `BEGIN IMMEDIATE` writer，实现双stream atomic pair zero/two/one、fault rollback和同一MVCC horizon fold；DDL/trigger/user_version不变，无第二状态表、public SQL或依赖增长。Event Store/Kernel workspace 160/1 ignored通过；closure仅文档归档。REQ-0004合同无回退，REVIEW-0003保持approved、0/0。

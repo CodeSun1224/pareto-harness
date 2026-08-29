@@ -4,10 +4,10 @@ title: REQ-0006 Projection、Snapshot 与 Replay 独立代码评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-29
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REVIEW-0002, REVIEW-0003, REVIEW-0004]
 independence: independent
-reviewed_revision: e3d8d805b46fb4e1e25b23bc53bead71de730853
+reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
 open_blockers: 0
 open_majors: 0
 ---
@@ -97,3 +97,4 @@ remediation产品代码限于Event Store v2 migration、Projection/Snapshot/Repl
 - 2026-08-28：substantive freshness confirmation exact `3aee02adf8815466b02f51de247ae19922efc126`。`43f3a5b..3aee02a`对现有Projection/Snapshot/Replay代码、Schema、golden、reader和DB零差异；未来Hook Projection新增phase/lineage/pair fail-closed设计，Recorded仍零handler/writer/accounting。REVIEW-0010批准不替代实现测试，REQ-0006既有pure fold/no-effect合同无回退，REVIEW-0005保持approved、0 open Blocker/Major。
 - 2026-08-28：substantive freshness confirmation exact `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6`。`ea9633c..3318cbc`对Projection/Snapshot/Replay、Schema、golden、reader和DB零差异；ADR-0009忠实保留Recorded只读零handler/writer/accounting及旧reader语义。REQ-0006无回退，REVIEW-0005保持approved、0 open Blocker/Major。
 - 2026-08-28：substantive freshness confirmation exact `e3d8d805b46fb4e1e25b23bc53bead71de730853`。`5546d1f..e3d8d80`对Projection/Snapshot/Replay、Schema、golden、reader和DB零差异；PLAN把Hook pure fold/recovery与Recorded零handler/append/accounting逐字段不变列为未开始任务和命名非零测试，且禁止writer/recovery authority。REQ-0006无回退，REVIEW-0005保持approved、0 open Blocker/Major。
+- 2026-08-29：substantive freshness confirmation exact `84ce5a705edb20f268898938be4579f4946d5e4f`。新增Hook Projection由exact Event range pure fold并与Control同一MVCC horizon核对；Recorded入口类型上无handler/writer/timeout authority，测试证明零执行、零append、零核算。既有RunTask Projection/Snapshot/Replay合同与DDL未改，workspace回归通过；closure仅文档归档。REVIEW-0005保持approved、0/0。

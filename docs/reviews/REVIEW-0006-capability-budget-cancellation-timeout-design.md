@@ -4,10 +4,10 @@ title: REQ-0007 Capability、预算、取消与超时独立设计评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-29
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REQ-0003, REQ-0004, REQ-0005, REQ-0006, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: e3d8d805b46fb4e1e25b23bc53bead71de730853
+reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
 open_blockers: 0
 open_majors: 0
 ---
@@ -164,3 +164,4 @@ preimage或冲突优先级。实现仍需fresh independent code review和新的R
 - 2026-08-28：exact REQ-0008 remediation `3aee02adf8815466b02f51de247ae19922efc126` substantive freshness re-review。`43f3a5b..3aee02a`未修改REQ-0007合同、Runtime或Schema；未来Hook terminal pair明确复用transaction-local settlement admission并拒绝common single-stream terminal，保留trusted envelope、opaque lease、FakeClock和unknown核算。REVIEW-0010关闭新设计F-003不改变REQ-0007已批准语义，REVIEW-0006保持approved、0 open Blocker/Major。
 - 2026-08-28：exact REQ-0008 accepted-doc `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` substantive freshness re-review。`ea9633c..3318cbc`未修改REQ-0007合同、Runtime或Schema；ADR-0009忠实接受transaction-local pair、single-stream terminal拒绝、trusted envelope/FakeClock/unknown核算且不声称实现。REVIEW-0006保持approved、0 open Blocker/Major。
 - 2026-08-28：exact REQ-0008 planning `e3d8d805b46fb4e1e25b23bc53bead71de730853` substantive freshness re-review。`5546d1f..e3d8d80`未修改REQ-0007合同、Runtime或Schema；PLAN把bounded lease、全账户预算、防超卖、FakeClock cancel/deadline/timeout、late隔离与terminal pair守恒列为未开始任务及命名proof，未扩大authority。REVIEW-0006保持approved、0 open Blocker/Major。
+- 2026-08-29：exact REQ-0008 closure `84ce5a705edb20f268898938be4579f4946d5e4f` substantive freshness re-review。Hook只复用REQ-0007 trusted contract、opaque narrowed lease、transaction-local budget/cancel/deadline/timeout admission；handler不能构造authority，complete/cancel/timeout由唯一terminal pair裁决，late仅安全摘要。REQ-0007设计边界未放宽，相关Hook/Runtime Control回归通过；closure无runtime变化。REVIEW-0006保持approved、0/0。

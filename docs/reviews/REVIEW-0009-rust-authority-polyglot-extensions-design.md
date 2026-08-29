@@ -4,10 +4,10 @@ title: Rust 权威控制面与多语言扩展边界独立架构评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-27
-updated: 2026-08-27
+updated: 2026-08-29
 links: [REQ-0001, SPEC-0001, RFC-0007, RFC-0001, ADR-0001, ADR-0002, ARCH-0001, ARCH-0002, ARCH-0004, ROADMAP-0001, BACKLOG-0001, RES-0001, RES-0002]
 independence: independent
-reviewed_revision: b42ccdc3216f518ff60303cec20da92b78d190a1
+reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
 open_blockers: 0
 open_majors: 0
 ---
@@ -116,3 +116,4 @@ Cargo、CI、治理规则或依赖变化。
   Runtime 授权；Requirement 顺序/prerequisite 不变；未预选 JSONL/MCP/WASI/RPC；REQ-0007 及 REQ-0008..0033
   的 authority、isolation、Effect、Budget、Cancellation、late、Replay、Evidence 与 Promotion 边界无削弱。
   0 Blocker、0 Major，`approved`。
+- 2026-08-29：focused REQ-0008 closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。实现忠实保持Rust Kernel拥有Event/Manifest/Capability/Budget/Cancellation/Replay/terminal authority，Fake handler只收bounded view/lease并返回不可信输出；未发布外部transport、共享DB、Rust ABI或真实多语言Runtime，REQ-0009仍未实现。G2–G5及后续Requirement门禁无回退，REVIEW-0009保持approved、0/0。

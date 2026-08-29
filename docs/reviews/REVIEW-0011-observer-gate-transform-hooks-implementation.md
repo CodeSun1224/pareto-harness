@@ -7,7 +7,7 @@ created: 2026-08-29
 updated: 2026-08-29
 links: [REQ-0008, SPEC-0007, RFC-0008, ADR-0009, REVIEW-0010, REQ-0004, REQ-0007]
 independence: independent
-reviewed_revision: e4877834fb54e3db936677f3b87c5fdf9e1d2d97
+reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
 open_blockers: 0
 open_majors: 0
 ---
@@ -82,3 +82,4 @@ F-006的先前红测在exact revision上稳定转绿，且生产调用边界、�
 - 2026-08-29：同一independent Reviewer复审 exact `4817ef31a95d00592840be50207ff59baf67f694`。关闭F-003/F-004/F-005；F-001/F-002保持Blocker，F-006保持Major。当前2 Blocker、1 Major，`changes-requested`。后续修复仍须由本Reviewer以新的exact revision和原始证据复审关闭。
 - 2026-08-29：复审 exact `8cf926a64c0e611aa6b357b0bfb93fb5bf9d6601`。按accepted recovery/safe-digest边界关闭F-001；逐字段代码与七类重封负例关闭F-002。独立完整Hook filter稳定暴露`isolation`红测，F-006保持Major。当前0 Blocker、1 Major，`changes-requested`。
 - 2026-08-29：最终复审 exact `e4877834fb54e3db936677f3b87c5fdf9e1d2d97`。task双payload绑定、registry-aware完整隔离矩阵和different-pair reverse-winner均经独立测试与调用图确认；关闭F-006。当前0 Blocker、0 Major，`approved`。
+- 2026-08-29：closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。相对reviewer-approved runtime与其Review commit仅同步README/index/Epic/architecture/REQ-0008 done及active→archived证据；`crates/`、`schemas/`、Cargo和scripts零差异。归档证据准确引用exact `e4877834`、F-001至F-006 closed与0/0，且明确REQ-0009/真实外部Hook Runtime未实现。原findings/verdict不变，REVIEW-0011保持approved、0/0。

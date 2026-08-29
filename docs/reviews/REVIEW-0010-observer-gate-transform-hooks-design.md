@@ -4,10 +4,10 @@ title: REQ-0008 Observer、Gate 与 Transform Hook 独立设计评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-29
 links: [REQ-0008, SPEC-0007, RFC-0008, RFC-0007, ADR-0008, REQ-0004, REQ-0007, REVIEW-0006, REVIEW-0007, REVIEW-0009, FIX-0001]
 independence: independent
-reviewed_revision: e3d8d805b46fb4e1e25b23bc53bead71de730853
+reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
 open_blockers: 0
 open_majors: 0
 ---
@@ -138,3 +138,4 @@ Focused planning freshness re-review 在 Windows/PowerShell、2026-08-28 对 exa
 - 2026-08-28：focused independent planning freshness re-review of exact
   `e3d8d805b46fb4e1e25b23bc53bead71de730853` against parent
   `5546d1fc638785f8db8eac111853f8fbe951f0cd`。REQ只从approved推进planned；PLAN/TASKS/HANDOFF在设计批准0/0和ADR接受后创建，完整承接AC-01至AC-20及F-001至F-004 proof，只有治理TASK-00完成。新的fresh code Review、原代码Reviewer关闭Major/Blocker和REQ-0009禁启门禁明确；产品路径零差异。无新finding，保持approved、0/0。
+- 2026-08-29：focused implementation/closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。REVIEW-0011独立确认实现遵守fixed phase/input lineage、Gate empty-required deny、atomic pair/single-stream terminal拒绝及Transform reject-whole，并在exact `e4877834`关闭全部实现finding。closure只同步done/archive且明确真实Runtime/REQ-0009未实现。设计合同无漂移，REVIEW-0010保持approved、0/0。
