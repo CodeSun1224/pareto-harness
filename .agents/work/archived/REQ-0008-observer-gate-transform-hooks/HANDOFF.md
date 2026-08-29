@@ -1,6 +1,6 @@
 # REQ-0008 Handoff
 
-当前状态：`implementing`，TASK-REQ-0008-01至09完成，TASK-REQ-0008-10正在整改并复审 REVIEW-0011。初审 exact `dfeee45` 为`changes-requested`，2 Blocker/4 Major仍须同一Reviewer关闭。REQ-0004、REQ-0007前置均done；`.agents/work/active`没有其他Runtime Requirement。
+最终状态：`done / archived`。fresh independent REVIEW-0011最终批准exact `e4877834fb54e3db936677f3b87c5fdf9e1d2d97`，F-001至F-006全部由同一Reviewer关闭，0 Blocker/0 Major。REQ-0004、REQ-0007前置均done；REQ-0009未开始。
 
 TASK-01证据：新增闭合Hook Protocol、RunManifest/RunCreated v2九角色与config digest、八类Hook Event、Hook Projection/hash view、闭合reason及exact request/field Schema，当前内容地址SchemaSet为`sha256-0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771`；先前Hook set `sha256-3a0c...`与全部历史set仍保留不变。
 
@@ -12,7 +12,7 @@ TASK-03至08整改证据：新增唯一Kernel-owned `execute_hook_point`，生�
 
 TASK-09证据在`VALIDATION.md`：29个PLAN filter逐个matched 1并通过；Hook 32、Event Store/Kernel 153 passed/1 ignored、Runtime Control 53、Protocol 9 unit + 24 contract/1 ignored、governance 24、scope/fmt/clippy/workspace/schema双生成均通过。`check_docs.py`仅因既有Review对新实现路径stale而预期失败，必须由TASK-10 fresh implementation Review实质恢复，不得修改历史Review绕过。
 
-下一动作执行TASK-REQ-0008-10：提交exact implementation candidate，并由新的fresh independent Agent只读审查Requirement/Spec/RFC/ADR、完整diff与`VALIDATION.md`，创建REVIEW-0011。任何Blocker/Major由实现者修复、同一Reviewer复审关闭；0/0前不得verified/done或归档。
+TASK-10/11已完成：review、整改、全门禁、durable facts同步及work归档完成。后续REQ-0009必须复用本Requirement的Kernel-private proposal/decision与atomic pair边界，不得把Fake Hook扩展为真实外部Runtime。
 
 atomic pair是首要风险：当前REQ-0007 reserve/settlement helper会自行commit，必须重构为crate-private transaction-local admission。reserve和terminal各自固定pair ID/fingerprint、双stream cursor/sequence、两个Event bytes/交叉引用；zero原子写两者、two只exact retry、mutation冲突、one视为损坏，任何validation/insert/commit失败rollback。Hook operation不得走通用single-stream terminal后再补写Hook事实。
 

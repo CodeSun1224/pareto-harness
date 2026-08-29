@@ -1,6 +1,6 @@
 # 文档导航
 
-本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-27。
+本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-29。
 
 ## 产品
 
@@ -64,6 +64,7 @@
 - [REQ-0007 独立实现评审](reviews/REVIEW-0007-capability-budget-cancellation-timeout-implementation.md)
 - [Rust 权威控制面与多语言扩展边界独立设计评审](reviews/REVIEW-0009-rust-authority-polyglot-extensions-design.md)
 - [REQ-0008 Observer/Gate/Transform Hook 独立设计评审](reviews/REVIEW-0010-observer-gate-transform-hooks-design.md)
+- [REQ-0008 Observer/Gate/Transform Hook 独立实现评审](reviews/REVIEW-0011-observer-gate-transform-hooks-implementation.md)
 - [REQ-0007 Runtime Control 修复记录](fixes/FIX-0001-runtime-control-authority-and-replay-contract.md)
 
 ## 记录类型

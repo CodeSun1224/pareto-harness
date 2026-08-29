@@ -70,7 +70,7 @@ links: [PRD-0001, RFC-0001, RFC-0007, RFC-0008, ADR-0001, ADR-0002, ADR-0008, AD
 
 这些是逻辑模块，不要求全部使用 Rust 或处于同一进程。Event、identity、state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 和 Promotion 保持在 Rust 权威控制面；Provider、Tool、Hook handler、Agent Worker、Memory 检索、评测、SDK 和受限 Guest 可按 Requirement 使用其他语言，但不得取得权威数据库或内核私有对象。设计基线阶段不创建空目录。
 
-Hook 采用 ADR-0009 的 Kernel 治理合同：Manifest 固定registry/config和顺序，Observer只读，Gate默认拒绝，Transform只改明确允许的非权威proposal，预算准入与终结通过双stream原子pair提交，Recorded replay只消费已记录决定。该合同当前是已接受设计，不代表真实Hook Runtime或外部transport已经实现。
+Hook 采用 ADR-0009 的 Kernel 治理合同，并已由REQ-0008交付最小Rust Fake纵切：Manifest固定registry/config和顺序，Observer只读，Gate默认拒绝，Transform只改明确允许的非权威proposal，预算准入与终结通过双stream原子pair提交，取消/timeout由Runtime Control裁决，Recorded replay只消费已记录决定。该实现不包含真实Hook Runtime、外部transport、Worker或REQ-0009 Effect。
 
 ## 一致性原则
 

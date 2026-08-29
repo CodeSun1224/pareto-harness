@@ -2,13 +2,23 @@
 
 ## Subject
 
-- Requirement: REQ-0008 (`implementing`)
+- Requirement: REQ-0008 (`done`)
 - Spec/RFC/ADR: SPEC-0007 / RFC-0008 / ADR-0009
 - Accepted design revision: `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6`
 - Initial implementation candidate: `dfeee45f286c4dce4bdd950bf98d30cbc4b00fb8`
 - REVIEW-0011 remediation candidate: the exact Git commit containing the updated evidence below; the same independent reviewer must re-review that full revision
 - Baseline: initial worktree clean at `b1f626ed52ffd7e0e6b4ad9c0cb457c12e8760d7`; `origin/main` fetched at `754798de3a7f0f09d38c466b8f09199c7ebda9d1` (ahead 8, behind 0)
 - Environment: Windows PowerShell, 2026-08-29, Asia/Shanghai; Cargo commands offline
+
+## Results
+
+| Scope/layer | Command or procedure | Result | Artifact/reference | Notes/risk |
+|---|---|---|---|---|
+| Independent implementation review | Fresh reviewer审查REQ/SPEC/RFC/ADR、完整diff和原始证据并多轮复审 | passed | REVIEW-0011；exact `e4877834fb54e3db936677f3b87c5fdf9e1d2d97` | F-001至F-006全部closed；0 open Blocker/Major |
+| Hook focused | `cargo test -p pareto-kernel hook_runtime:: --offline` | passed | 39 passed | 包含Kernel-owned纵切、隔离、不同pair竞态、恢复、replay与重封负例 |
+| Full regression | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 160 passed/1 ignored；Protocol 9 unit + 24 contract/1 ignored | ignored项均为非阈值观察；publisher drift stderr属于绿色负向夹具 |
+| Governance and scope | Python governance；REQ-0008 scope；fmt；clippy；schema generator；diff check | passed | Python 24；scope/schema/fmt/clippy/diff green | SQLite v2、retained SchemaSet、Fake-only和REQ-0009边界未漂移 |
+| Final completion state | fact sync、Requirement done、active→archived | passed | 本归档目录、README/index/EPIC/architecture/REQ-0008 | 真实外部Hook Runtime与REQ-0009未开始 |
 
 ## Scope and identity
 
@@ -69,12 +79,12 @@ The Hook-specific isolation matrix and a distinct-pair race in both call orders 
 registry-aware writer path directly; test-only registry-free helpers remain limited to pair
 mechanics fixtures and are not used as production identity admission evidence.
 
-## Completion gates before independent review
+## Completion gates and independent review
 
 | Command | Result |
 |---|---|
 | `python -m unittest discover -s scripts/tests -p "test_*.py"` | 24 passed |
-| `python scripts/check_docs.py` | expected pre-review failure only: REVIEW-0001 through REVIEW-0007 are stale against the new substantive implementation paths; a fresh independent implementation Review is required to restore freshness |
+| `python scripts/check_docs.py` | implementation review reports only REVIEW-0001 through REVIEW-0007 stale; final closure freshness is performed after fact sync/archive without rewriting their original findings |
 | `cargo fmt --all -- --check` | passed |
 | `cargo clippy --workspace --all-targets --all-features --offline -- -D warnings` | passed |
 | `cargo test --workspace --all-targets --all-features --offline` | passed: Kernel 160 passed/1 ignored; Protocol 9 unit + 24 contract passed/1 ignored |
@@ -95,9 +105,10 @@ and enclosing test results are zero/green.
   observations remain explicitly ignored non-threshold observations; no latency improvement claim
   is made.
 
-## Remaining gate
+## Final review and closure
 
-A fresh independent Agent created REVIEW-0011; it remains `changes-requested` until its 2 Blocker
-and 4 Major findings are re-reviewed against the exact remediation commit. The same reviewer must
-leave zero open Blocker/Major. Only then may docs freshness, the final completion gates,
-Requirement fact sync, `done` transition and work archival occur.
+Fresh independent REVIEW-0011 approved exact revision
+`e4877834fb54e3db936677f3b87c5fdf9e1d2d97` with 0 open Blocker and 0 open Major after the same
+Reviewer closed F-001 through F-006. Final fact sync and archival do not add runtime behavior;
+REQ-0009 remains unstarted. The closure revision receives a final docs-freshness check before the
+work is considered complete.

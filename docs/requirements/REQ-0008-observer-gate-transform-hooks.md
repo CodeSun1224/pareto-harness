@@ -1,13 +1,13 @@
 ---
 id: REQ-0008
 title: Observer、Gate 与 Transform Hook 骨架
-status: implementing
+status: done
 owners: [runtime-kernel]
 created: 2026-08-28
-updated: 2026-08-28
-links: [EPIC-0002, REQ-0004, REQ-0007, SPEC-0007, RFC-0007, RFC-0008, ADR-0008, ADR-0009, REVIEW-0010]
+updated: 2026-08-29
+links: [EPIC-0002, REQ-0004, REQ-0007, SPEC-0007, RFC-0007, RFC-0008, ADR-0008, ADR-0009, REVIEW-0010, REVIEW-0011]
 risk: high
-work: .agents/work/active/REQ-0008-observer-gate-transform-hooks
+work: .agents/work/archived/REQ-0008-observer-gate-transform-hooks
 ---
 
 # Context and user
@@ -60,4 +60,4 @@ work: .agents/work/active/REQ-0008-observer-gate-transform-hooks
 
 # Risks and open questions
 
-Hook point集合、Gate默认拒绝与组合、Transform mask、调用/决定Event顺序、invocation identity、budget/cancel/timeout复用、失败恢复、redaction、版本兼容和Recorded replay是跨需求且难逆合同。SPEC-0007与RFC-0008必须经fresh independent设计评审批准并达到0 open Blocker/Major后，才能批准本Requirement并创建Plan/Tasks/active Handoff；此前禁止Runtime功能代码。
+Hook point集合、Gate默认拒绝与组合、Transform mask、调用/决定Event顺序、invocation identity、budget/cancel/timeout复用、失败恢复、redaction、版本兼容和Recorded replay是跨需求且难逆合同。REVIEW-0010已独立批准设计；REVIEW-0011对exact实现revision `e4877834fb54e3db936677f3b87c5fdf9e1d2d97`独立批准并关闭F-001至F-006，最终0 open Blocker、0 open Major。实现保持SQLite v2、历史SchemaSet和既有reader字节不变，只提供Rust Fake Hook；真实外部Hook Runtime与REQ-0009均未实现。

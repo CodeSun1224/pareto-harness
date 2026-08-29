@@ -4,7 +4,7 @@
 
 Pareto Harness 的目标是在结果质量、Token/费用与端到端延迟之间持续寻找 Pareto 最优的 Agent 行为。项目采用“稳定机制内核 + 版本化策略”的架构：内核负责事件、版本、权限、重放和晋升安全，规划、上下文、路由、重试和评测策略可以独立实验与演化。
 
-可信内核的前五个纵向切片已交付：REQ-0003 提供版本化协议类型、JSON Schema 和合同测试；REQ-0004 提供 Kernel 私有、真实 SQLite 文件支持的 append-only Event Store；REQ-0005 提供完整 Run Manifest 首事件、Run/Task 状态机和同事务 fold-and-append；REQ-0006 提供版本化 Run/Task Projection、同库 immutable Snapshot、prefix-proved 增量恢复和完整历史 Recorded replay；REQ-0007 提供默认拒绝 Capability、原子多作用域预算、三级取消、确定性 deadline/timeout、迟到结果隔离，以及可恢复、可重放且不重复核算的 Runtime Control 纵向切片。所有执行入口仍仅使用 Fake Operation/Fake Clock，不执行真实 Provider、Tool 或外部副作用；Hook、Effect Intent/Receipt、Simulated fixture resolver、reexecute 和 CLI 仍未实现。
+可信内核的前六个纵向切片已交付：REQ-0003 提供版本化协议类型、JSON Schema 和合同测试；REQ-0004 提供 Kernel 私有、真实 SQLite 文件支持的 append-only Event Store；REQ-0005 提供完整 Run Manifest 首事件、Run/Task 状态机和同事务 fold-and-append；REQ-0006 提供版本化 Run/Task Projection、同库 immutable Snapshot、prefix-proved 增量恢复和完整历史 Recorded replay；REQ-0007 提供默认拒绝 Capability、原子预算、取消/timeout和 Runtime Control；REQ-0008 提供 Manifest-pinned Observer/Gate/Transform Fake Hook、固定phase/短路、受限Transform、双stream原子pair、恢复Projection及Recorded零执行。仍未实现真实外部Hook Runtime、Effect Intent/Receipt、Provider、Tool、Simulated/reexecute或CLI。
 
 ## Start here
 
@@ -21,7 +21,7 @@ Pareto Harness is an independent coding-agent runtime designed to maximize verif
 
 ## Status
 
-`pre-alpha / protocol, SQLite event-store, lifecycle, local projection/replay, and runtime-control foundation delivered`. Claims in research documents are evidence-graded; target metrics are not presented as achieved results.
+`pre-alpha / trusted-kernel protocol, event-store, lifecycle, replay, runtime-control, and fake-hook foundation delivered`. Claims in research documents are evidence-graded; target metrics are not presented as achieved results.
 
 ## License
 
