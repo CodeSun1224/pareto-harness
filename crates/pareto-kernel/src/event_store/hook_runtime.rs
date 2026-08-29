@@ -864,7 +864,8 @@ struct ExecuteHookPointCommand {
 #[derive(Clone, Debug, PartialEq)]
 struct ExecuteHookPointResult {
     point_id: HookDecisionId,
-    proposal: TransformProposalV1,
+    proposal: Option<TransformProposalV1>,
+    already_committed: bool,
     business_decision: HookBusinessDecisionV1,
     execution_status: HookExecutionStatusV1,
     reason_code: HookReasonCodeV1,
@@ -1420,6 +1421,31 @@ impl EventStore {
                 invocation_id_for(&point_id, registration, ordinal as u32)
             })
             .collect::<Result<_, _>>()?;
+        if let Some(finalized) = current_events.iter().find_map(|event| {
+            event
+                .downcast_payload::<HookPointFinalizedPayloadV1>()
+                .filter(|payload| payload.point_id == point_id)
+        }) {
+            if finalized.hook_point != command.point
+                || finalized.source_cursor != command.source_cursor
+                || finalized.initial_input_digest != initial_digest
+                || finalized.ordered_invocations != ordered_invocations
+            {
+                return Err(HookError::new(HookErrorKind::IdempotencyConflict));
+            }
+            let projection = self
+                .hook_projection(schema_registry, target, registry_revision)
+                .await?;
+            return Ok(ExecuteHookPointResult {
+                point_id,
+                proposal: None,
+                already_committed: true,
+                business_decision: finalized.business_decision,
+                execution_status: finalized.execution_status,
+                reason_code: finalized.reason_code,
+                projection,
+            });
+        }
         let start = HookPointStartedPayloadV1 {
             point_id: point_id.clone(),
             hook_point: command.point,
@@ -1428,22 +1454,38 @@ impl EventStore {
             initial_input_digest: initial_digest.clone(),
             ordered_invocations: ordered_invocations.clone(),
         };
-        let start_result = self
-            .append_hook_fact(
-                schema_registry,
-                target,
-                Some(&resolved),
-                &HookFactCommand {
-                    expected_cursor: aggregate.inclusive_cursor,
-                    event_id: event_id_for("hook-point-start-event-v1", &point_id)?,
-                    occurred_at: command.occurred_at.clone(),
-                    correlation_id: command.correlation_id.clone(),
-                    event_type: "hook-point-started",
-                    payload: start,
-                },
-            )
-            .await?;
-        let mut hook_cursor = append_cursor(&start_result);
+        let start_event_id = event_id_for("hook-point-start-event-v1", &point_id)?;
+        let existing_start = current_events.iter().find(|event| {
+            event
+                .downcast_payload::<HookPointStartedPayloadV1>()
+                .is_some_and(|payload| payload.point_id == point_id)
+        });
+        let mut hook_cursor = if let Some(event) = existing_start {
+            if event.downcast_payload::<HookPointStartedPayloadV1>() != Some(&start)
+                || event.envelope().event_id != start_event_id
+                || aggregate.inclusive_cursor.event_id != event.envelope().event_id
+            {
+                return Err(HookError::new(HookErrorKind::IdempotencyConflict));
+            }
+            aggregate.inclusive_cursor
+        } else {
+            let start_result = self
+                .append_hook_fact(
+                    schema_registry,
+                    target,
+                    Some(&resolved),
+                    &HookFactCommand {
+                        expected_cursor: aggregate.inclusive_cursor,
+                        event_id: start_event_id,
+                        occurred_at: command.occurred_at.clone(),
+                        correlation_id: command.correlation_id.clone(),
+                        event_type: "hook-point-started",
+                        payload: start,
+                    },
+                )
+                .await?;
+            append_cursor(&start_result)
+        };
         let mut proposal = command.proposal.clone();
         let mut input_digest = initial_digest.clone();
         let gate_bearing = matches!(
@@ -1831,6 +1873,62 @@ impl EventStore {
                         },
                         live_terminal_control_event,
                     ),
+                    Err(error) if error.kind == RuntimeControlErrorKind::CancellationPending => {
+                        terminal_state = pareto_protocol::HookInvocationTerminalStateV1::Cancelled;
+                        terminal_reason = HookReasonCodeV1::Cancelled;
+                        late_result_digest = output_digest.clone();
+                        output_digest = None;
+                        gate_decision = None;
+                        observer_result = None;
+                        match registration.kind {
+                            HookKindV1::Transform => {
+                                proposal = command.proposal.clone();
+                                input_digest = initial_digest.clone();
+                                business_decision = HookBusinessDecisionV1::Deny;
+                                execution_status = HookExecutionStatusV1::TransformFailed;
+                                stop_reason = Some(HookReasonCodeV1::SkippedAfterTransformFailure);
+                            }
+                            HookKindV1::Gate => {
+                                business_decision = HookBusinessDecisionV1::Deny;
+                                execution_status = HookExecutionStatusV1::GateDenied;
+                                stop_reason = Some(HookReasonCodeV1::SkippedAfterGateDenial);
+                            }
+                            HookKindV1::Observer
+                                if registration.observer_failure_policy
+                                    == Some(
+                                        pareto_protocol::ObserverFailurePolicyV1::FailClosed,
+                                    ) =>
+                            {
+                                execution_status = HookExecutionStatusV1::ObserverFailed;
+                                stop_reason = Some(HookReasonCodeV1::SkippedAfterObserverFailure);
+                            }
+                            HookKindV1::Observer => {}
+                        }
+                        final_reason = HookReasonCodeV1::Cancelled;
+                        let planned = plan_hook_settlement(
+                            &mut control_connection,
+                            schema_registry,
+                            control_target,
+                            &reserve_result.lease,
+                            live_terminal_control_event.clone(),
+                            callback_id_for(&invocation_id)?,
+                            command.correlation_id.clone(),
+                            OperationOutcomeV1::Cancelled,
+                            "cancelled".to_owned(),
+                            input_digest.clone(),
+                            &terminal_sample,
+                        )
+                        .await
+                        .map_err(|_| HookError::new(HookErrorKind::Unauthorized))?;
+                        (
+                            planned.expected_cursor,
+                            planned.payload,
+                            HookTerminalAuthorityV1::LiveLease {
+                                lease_fingerprint: planned.lease_fingerprint,
+                            },
+                            live_terminal_control_event,
+                        )
+                    }
                     Err(error) if error.kind == RuntimeControlErrorKind::DeadlineExceeded => {
                         terminal_state = pareto_protocol::HookInvocationTerminalStateV1::TimedOut;
                         terminal_reason = HookReasonCodeV1::TimedOut;
@@ -2042,7 +2140,8 @@ impl EventStore {
             .await?;
         Ok(ExecuteHookPointResult {
             point_id,
-            proposal,
+            proposal: Some(proposal),
+            already_committed: false,
             business_decision,
             execution_status,
             reason_code: final_reason,
@@ -2620,8 +2719,14 @@ fn validate_cross_stream_pairs(
         let pair = if let Some(payload) =
             event.downcast_payload::<HookInvocationReservedPayloadV1>()
         {
+            if event.envelope().event_id != payload.pair.hook_event_id {
+                return Err(HookError::new(HookErrorKind::AggregateCorrupt));
+            }
             ExpectedPair::Reserve(payload.pair.clone(), payload.reserved_usage.clone())
         } else if let Some(payload) = event.downcast_payload::<HookInvocationTerminalPayloadV1>() {
+            if event.envelope().event_id != payload.pair.hook_event_id {
+                return Err(HookError::new(HookErrorKind::AggregateCorrupt));
+            }
             ExpectedPair::Terminal(payload.pair.clone(), payload.accounted_usage.clone())
         } else {
             continue;
@@ -3255,6 +3360,12 @@ async fn kernel_owned_execution() {
 
 #[cfg(test)]
 #[tokio::test]
+async fn kernel_owned_start_recovery() {
+    tests::kernel_owned_start_recovery_case().await;
+}
+
+#[cfg(test)]
+#[tokio::test]
 async fn kernel_owned_gate_short_circuit() {
     tests::kernel_owned_gate_short_circuit_case().await;
 }
@@ -3263,6 +3374,12 @@ async fn kernel_owned_gate_short_circuit() {
 #[tokio::test]
 async fn kernel_owned_timeout() {
     tests::kernel_owned_timeout_case().await;
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn kernel_owned_cancellation() {
+    tests::kernel_owned_cancellation_case().await;
 }
 
 #[cfg(test)]

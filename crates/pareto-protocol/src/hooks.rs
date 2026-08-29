@@ -296,13 +296,14 @@ impl HookRegistryRevisionV1 {
 
 fn registration_sort_key(
     registration: &HookRegistrationV1,
-) -> (HookPhaseV1, i32, &HookId, &RevisionId) {
+) -> (&[HookPointV1], HookPhaseV1, i32, &HookId, &RevisionId) {
     let phase = match registration.kind {
         HookKindV1::Transform => HookPhaseV1::Transform,
         HookKindV1::Gate => HookPhaseV1::Gate,
         HookKindV1::Observer => HookPhaseV1::Observer,
     };
     (
+        &registration.hook_points,
         phase,
         registration.priority,
         &registration.hook_id,

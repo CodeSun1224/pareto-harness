@@ -581,6 +581,61 @@ struct TimeoutTransformHandler {
     clock: AdvancingClock,
 }
 
+struct CancellingTransformHandler {
+    hook_id: HookId,
+    output: UntrustedHookOutput,
+    calls: Arc<Mutex<Vec<HookId>>>,
+    path: std::path::PathBuf,
+    store_id: String,
+    registry: SchemaRegistry,
+    target: RuntimeControlTarget,
+}
+
+impl FakeHookHandler for CancellingTransformHandler {
+    fn invoke(
+        &self,
+        lease: &HookInvocationLease,
+        request: &HookRequestViewV1,
+    ) -> Result<UntrustedHookOutput, HookReasonCodeV1> {
+        assert_eq!(lease.hook_id, self.hook_id);
+        assert_eq!(lease.input_digest, request.input_digest);
+        self.calls.lock().unwrap().push(self.hook_id.clone());
+        let path = self.path.clone();
+        let store_id = self.store_id.clone();
+        let registry = self.registry.clone();
+        let target = self.target.clone();
+        let operation_id = operation_id_for(&lease.invocation_id).unwrap();
+        std::thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async move {
+                    let store = EventStore::open_pinned(&path, &store_id).await.unwrap();
+                    store
+                        .request_cancellation(
+                            &registry,
+                            &target,
+                            &control::CancellationCommand {
+                                event_id: EventId::parse("event_cancel-kernel-hook").unwrap(),
+                                occurred_at: "2026-08-26T00:00:20.000Z".to_owned(),
+                                correlation_id: "corr-cancel-kernel-hook".to_owned(),
+                                cancellation_id: CancellationId::parse("cancel_kernel-hook")
+                                    .unwrap(),
+                                target: CancellationTargetV1::Operation { operation_id },
+                                reason_code: "user-request".to_owned(),
+                            },
+                        )
+                        .await
+                        .unwrap();
+                });
+        })
+        .join()
+        .unwrap();
+        Ok(self.output.clone())
+    }
+}
+
 impl FakeHookHandler for TimeoutTransformHandler {
     fn invoke(
         &self,
@@ -2130,8 +2185,15 @@ pub(super) async fn kernel_owned_execution_case() {
     assert_eq!(result.business_decision, HookBusinessDecisionV1::Allow);
     assert_eq!(result.execution_status, HookExecutionStatusV1::Completed);
     assert_eq!(result.reason_code, HookReasonCodeV1::Completed);
-    assert_eq!(result.proposal.fields["content"], "transformed");
-    assert_eq!(result.proposal.fields["authority"], "fixed");
+    assert!(!result.already_committed);
+    assert_eq!(
+        result.proposal.as_ref().unwrap().fields["content"],
+        "transformed"
+    );
+    assert_eq!(
+        result.proposal.as_ref().unwrap().fields["authority"],
+        "fixed"
+    );
     assert_eq!(result.projection.invocations.len(), 4);
     assert_eq!(result.projection.finalized_points.len(), 1);
     assert_eq!(result.projection.skipped_count, 0);
@@ -2143,6 +2205,35 @@ pub(super) async fn kernel_owned_execution_case() {
             HookId::parse("hook_gate-second").unwrap(),
             HookId::parse("hook_observer-exec").unwrap(),
         ]
+    );
+
+    let event_count_after_execution: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap();
+    let retry = store
+        .execute_hook_point(
+            &fixture.registry(),
+            &target,
+            &fixture.target(),
+            &registry,
+            &handlers,
+            &execution_command(&fixture),
+            &control::live_clock(),
+        )
+        .await
+        .unwrap();
+    assert!(retry.already_committed);
+    assert_eq!(retry.point_id, result.point_id);
+    assert_eq!(retry.proposal, None);
+    assert_eq!(retry.projection, result.projection);
+    assert_eq!(calls.lock().unwrap().len(), 4);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM events")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap(),
+        event_count_after_execution
     );
 
     let before_events: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
@@ -2177,6 +2268,75 @@ pub(super) async fn kernel_owned_execution_case() {
     assert_eq!(before_events, after_events);
     assert_eq!(before_control.accounts, after_control.accounts);
     assert_eq!(before_control.operations, after_control.operations);
+}
+
+pub(super) async fn kernel_owned_start_recovery_case() {
+    let (fixture, store, registry, target, handlers, calls) =
+        execution_harness("run_hook-kernel-start-recovery", false).await;
+    let command = execution_command(&fixture);
+    let resolved =
+        ResolvedHookRegistry::resolve(&fixture.manifest, &registry, &fixture.set).unwrap();
+    let point_id = point_id_for(&target.scope, &command).unwrap();
+    let ordered_invocations = resolved
+        .ordered_for_point(command.point)
+        .iter()
+        .enumerate()
+        .map(|(ordinal, registration)| {
+            invocation_id_for(&point_id, registration, ordinal as u32).unwrap()
+        })
+        .collect();
+    let initial_input_digest = proposal_digest(&fixture.set, &command.proposal).unwrap();
+    let projection = store
+        .hook_projection(&fixture.registry(), &target, &registry)
+        .await
+        .unwrap();
+    store
+        .append_hook_fact(
+            &fixture.registry(),
+            &target,
+            Some(&resolved),
+            &HookFactCommand {
+                expected_cursor: projection.inclusive_cursor,
+                event_id: event_id_for("hook-point-start-event-v1", &point_id).unwrap(),
+                occurred_at: command.occurred_at.clone(),
+                correlation_id: command.correlation_id.clone(),
+                event_type: "hook-point-started",
+                payload: HookPointStartedPayloadV1 {
+                    point_id: point_id.clone(),
+                    hook_point: command.point,
+                    subject_proposal_id: command.proposal.proposal_id.clone(),
+                    source_cursor: command.source_cursor.clone(),
+                    initial_input_digest,
+                    ordered_invocations,
+                },
+            },
+        )
+        .await
+        .unwrap();
+    let result = store
+        .execute_hook_point(
+            &fixture.registry(),
+            &target,
+            &fixture.target(),
+            &registry,
+            &handlers,
+            &command,
+            &control::live_clock(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.point_id, point_id);
+    assert_eq!(result.execution_status, HookExecutionStatusV1::Completed);
+    assert!(!result.already_committed);
+    assert_eq!(result.projection.finalized_points, vec![point_id]);
+    assert_eq!(calls.lock().unwrap().len(), 4);
+    let started_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE json_extract(envelope_json,'$.event_type')='hook-point-started'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap();
+    assert_eq!(started_count, 1);
 }
 
 pub(super) async fn kernel_owned_gate_short_circuit_case() {
@@ -2257,7 +2417,10 @@ pub(super) async fn kernel_owned_timeout_case() {
         HookExecutionStatusV1::TransformFailed
     );
     assert_eq!(result.reason_code, HookReasonCodeV1::TimedOut);
-    assert_eq!(result.proposal.fields["content"], "initial");
+    assert_eq!(
+        result.proposal.as_ref().unwrap().fields["content"],
+        "initial"
+    );
     assert_eq!(result.projection.invocations.len(), 1);
     assert_eq!(result.projection.skipped_count, 3);
     assert_eq!(result.projection.late_result_count, 1);
@@ -2278,6 +2441,71 @@ pub(super) async fn kernel_owned_timeout_case() {
             .outcome,
         OperationOutcomeV1::TimedOut
     );
+}
+
+pub(super) async fn kernel_owned_cancellation_case() {
+    let (fixture, store, registry, target, mut handlers, calls) =
+        execution_harness("run_hook-kernel-cancel", false).await;
+    let transform = registry
+        .registrations
+        .iter()
+        .find(|registration| registration.kind == HookKindV1::Transform)
+        .unwrap();
+    let output = UntrustedHookOutput::Transform(Box::new(TransformProposalV1 {
+        proposal_id: ProposalId::parse("proposal_execution").unwrap(),
+        schema_ref: fixture
+            .set
+            .schema_ref("transform-proposal")
+            .unwrap()
+            .clone(),
+        fields: serde_json::json!({"content":"cancelled-output","authority":"fixed"}),
+    }));
+    handlers.bindings.insert(
+        transform.hook_id.clone(),
+        FakeHookHandlerBinding {
+            hook_revision: transform.hook_revision.clone(),
+            compatibility_digest: transform.handler_compatibility_digest.clone(),
+            handler: Arc::new(CancellingTransformHandler {
+                hook_id: transform.hook_id.clone(),
+                output,
+                calls: calls.clone(),
+                path: fixture.path.clone(),
+                store_id: store.store_id.clone(),
+                registry: fixture.registry(),
+                target: fixture.target(),
+            }),
+        },
+    );
+    let result = store
+        .execute_hook_point(
+            &fixture.registry(),
+            &target,
+            &fixture.target(),
+            &registry,
+            &handlers,
+            &execution_command(&fixture),
+            &control::live_clock(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.business_decision, HookBusinessDecisionV1::Deny);
+    assert_eq!(
+        result.execution_status,
+        HookExecutionStatusV1::TransformFailed
+    );
+    assert_eq!(result.reason_code, HookReasonCodeV1::Cancelled);
+    assert_eq!(
+        result.proposal.as_ref().unwrap().fields["content"],
+        "initial"
+    );
+    assert_eq!(result.projection.invocations.len(), 1);
+    assert_eq!(result.projection.skipped_count, 3);
+    assert_eq!(result.projection.late_result_count, 1);
+    assert_eq!(
+        result.projection.invocations[0].terminal_state,
+        Some(HookInvocationTerminalStateV1::Cancelled)
+    );
+    assert_eq!(calls.lock().unwrap().len(), 1);
 }
 
 pub(super) async fn kernel_owned_rejection_case() {
@@ -2426,13 +2654,66 @@ pub(super) async fn resealed_history_rejection_case() {
         &target,
         runtime_control_stream_id(&fixture.scope).unwrap(),
         fixture.set.clone(),
-        limits,
+        limits.clone(),
     )
     .await
     .unwrap();
     transaction.rollback().await.unwrap();
     assert_eq!(
         validate_cross_stream_pairs(&wrong_pair_history, &control_events)
+            .unwrap_err()
+            .kind,
+        HookErrorKind::AggregateCorrupt
+    );
+
+    let mut counterpart_hook_history = store
+        .read_hook_events(&target, fixture.set.clone(), limits.clone())
+        .await
+        .unwrap();
+    let mut transaction = store.pool.begin().await.unwrap();
+    let mut counterpart_control_history = read_stream_events_in_transaction(
+        &mut transaction,
+        &target,
+        runtime_control_stream_id(&fixture.scope).unwrap(),
+        fixture.set.clone(),
+        limits,
+    )
+    .await
+    .unwrap();
+    transaction.rollback().await.unwrap();
+    let replacement_hook_event_id = EventId::parse("event_resealed-hook-counterpart").unwrap();
+    let mut hook_terminal = counterpart_hook_history[terminal_index]
+        .downcast_payload::<HookInvocationTerminalPayloadV1>()
+        .unwrap()
+        .clone();
+    let terminal_pair_id = hook_terminal.pair.pair_id.clone();
+    hook_terminal.pair.hook_event_id = replacement_hook_event_id.clone();
+    counterpart_hook_history[terminal_index] = reseal_hook_event(
+        &fixture,
+        &counterpart_hook_history[terminal_index],
+        &hook_terminal,
+    );
+    let control_terminal_index = counterpart_control_history
+        .iter()
+        .position(|event| {
+            event
+                .downcast_payload::<OperationSettledPayloadV1>()
+                .and_then(|payload| payload.hook_pair.as_ref())
+                .is_some_and(|pair| pair.pair_id == terminal_pair_id)
+        })
+        .unwrap();
+    let mut control_terminal = counterpart_control_history[control_terminal_index]
+        .downcast_payload::<OperationSettledPayloadV1>()
+        .unwrap()
+        .clone();
+    control_terminal.hook_pair.as_mut().unwrap().hook_event_id = replacement_hook_event_id;
+    counterpart_control_history[control_terminal_index] = reseal_hook_event(
+        &fixture,
+        &counterpart_control_history[control_terminal_index],
+        &control_terminal,
+    );
+    assert_eq!(
+        validate_cross_stream_pairs(&counterpart_hook_history, &counterpart_control_history,)
             .unwrap_err()
             .kind,
         HookErrorKind::AggregateCorrupt

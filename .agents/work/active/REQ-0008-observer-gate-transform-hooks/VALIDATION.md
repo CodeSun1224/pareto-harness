@@ -25,14 +25,14 @@
 | Scope/layer | Command or procedure | Result |
 |---|---|---|
 | Named Hook filters | `python scripts/assert_cargo_test_filter.py pareto-kernel <filter>` for all 29 PLAN filters | passed; every filter independently reported `matched: 1` and ran 1/1 |
-| Hook aggregate | `cargo test -p pareto-kernel hook_runtime:: --offline` | 37 passed after REVIEW-0011 remediation |
-| Kernel-owned vertical execution | `cargo test -p pareto-kernel hook_runtime::kernel_owned_ --offline` | 4 passed: Transform→Gate→Observer, Gate deny short-circuit+skip, deadline timeout authority+late audit+skip, invalid-kind rejection audit |
-| Validly resealed negative history | `cargo test -p pareto-kernel hook_runtime::resealed_history_rejection --offline` | passed: wrong point/lineage, wrong final digest, and cross-stream pair mutation fail closed |
-| Event Store | `cargo test -p pareto-kernel event_store --offline` | 158 passed, 1 existing performance observation ignored |
+| Hook aggregate | `cargo test -p pareto-kernel hook_runtime:: --offline` | 39 passed after REVIEW-0011 remediation |
+| Kernel-owned vertical execution | `cargo test -p pareto-kernel hook_runtime::kernel_owned_ --offline` | 6 passed: Transform→Gate→Observer plus exact no-write retry, point-start crash recovery, Gate deny short-circuit+skip, cancellation winner+late audit+skip, deadline timeout authority+late audit+skip, and invalid-kind rejection audit |
+| Validly resealed negative history | `cargo test -p pareto-kernel hook_runtime::resealed_history_rejection --offline` | passed: wrong point/lineage, wrong final digest, pair mutation, and mutually resealed cross-stream payload IDs that disagree with the actual Hook envelope all fail closed |
+| Event Store | `cargo test -p pareto-kernel event_store --offline` | 160 passed, 1 existing performance observation ignored |
 | Lifecycle | `cargo test -p pareto-kernel lifecycle:: --offline` | 18 passed |
 | Projection/replay | `cargo test -p pareto-kernel projection:: --offline` | 35 passed, 1 existing performance observation ignored |
 | Runtime Control | `cargo test -p pareto-kernel runtime_control:: --offline` | 53 passed |
-| Kernel all targets/features | `cargo test -p pareto-kernel --all-targets --all-features --offline` | 158 passed, 1 ignored |
+| Kernel all targets/features | `cargo test -p pareto-kernel --all-targets --all-features --offline` | 160 passed, 1 ignored |
 | Kernel public-boundary doctest | `cargo test -p pareto-kernel --doc --offline` | 1 compile-fail doctest passed |
 | Hook protocol contract | `cargo test -p pareto-protocol hook_contract --offline` | 1 matched and passed |
 | Protocol all targets/features | `cargo test -p pareto-protocol --all-targets --all-features --offline` | 9 unit + 24 contract passed; 1 existing performance observation ignored |
@@ -51,11 +51,15 @@ individually and completed green. No zero-test Cargo success is counted as evide
 REVIEW-0011 initially returned `changes-requested` at exact revision `dfeee45` with 2 Blocker and
 4 Major findings. Remediation adds one Kernel-owned execution path that resolves the pinned
 registry/schema/handler before start, emits point/reserve/terminal/skip/final facts, admits each
-candidate under one writer transaction with strict registry-aware fold, validates control+Hook
-pairs at one MVCC horizon, short-circuits Gate/Observer failure, derives timeout settlement through
-Runtime Control, recursively checks JSON pointers, and seals pair kind, identity, next sequences,
-canonical event preimages and both payloads. Recorded replay remains projection-only and the
-new live vertical test proves replay causes no handler, Event, operation, account or budget change.
+candidate under one writer transaction with strict registry-aware fold, validates both actual
+Control and Hook envelope identities plus pair payloads at one MVCC horizon, short-circuits
+Gate/Observer failure, and derives cancellation/timeout terminal winners through Runtime Control.
+Exact finalized retry is no-write/no-handler and deliberately returns no redacted Transform payload;
+a persisted point-start is resumed without duplicating the start fact. Registry order includes the
+full canonical Hook-point vector before phase-local order. Nested JSON pointers, pair kind/identity,
+next sequences, canonical Event preimages and both payloads are closed. Recorded replay remains
+projection-only and the live vertical test proves replay causes no handler, Event, operation,
+account or budget change.
 
 ## Completion gates before independent review
 
@@ -65,7 +69,7 @@ new live vertical test proves replay causes no handler, Event, operation, accoun
 | `python scripts/check_docs.py` | expected pre-review failure only: REVIEW-0001 through REVIEW-0007 are stale against the new substantive implementation paths; a fresh independent implementation Review is required to restore freshness |
 | `cargo fmt --all -- --check` | passed |
 | `cargo clippy --workspace --all-targets --all-features --offline -- -D warnings` | passed |
-| `cargo test --workspace --all-targets --all-features --offline` | passed: Kernel 158 passed/1 ignored; Protocol 9 unit + 24 contract passed/1 ignored |
+| `cargo test --workspace --all-targets --all-features --offline` | passed: Kernel 160 passed/1 ignored; Protocol 9 unit + 24 contract passed/1 ignored |
 | `cargo run -p pareto-protocol --bin generate_schemas --offline -- schemas` | passed twice; generated bytes stable |
 | `git diff --check` | passed |
 
