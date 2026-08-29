@@ -24,7 +24,7 @@ const HISTORY_ALGORITHM: &str = "run-task-history-chain-v1";
 const RETAINED_OUTPUT_MANIFEST_DIGEST: &str =
     "sha256:4ce3872926ce61209fdc5ed48deceeec9703ccfe94ea83be485eb8ef7512ff97";
 const HOOK_OUTPUT_MANIFEST_DIGEST: &str =
-    "sha256:3a0c6e67a97675cf6bfcdc1fb9766b30a79ae62e662479d9ae1ef5d7b43ff99d";
+    "sha256:0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771";
 const SCHEMA_SET_MANIFEST_DIGEST: &str =
     "sha256:e534c2d587c2813a97f0bb1abf992d29585c3b1ddd04d9c73ee0eda5d83b0f4b";
 const RUN_MANIFEST_DIGEST: &str =
@@ -1504,7 +1504,7 @@ async fn digest_golden() {
     let snapshot = build_snapshot(&projection, reducer, &output).unwrap();
     assert_eq!(
         reducer.reducer_ref.contract_digest.as_str(),
-        "sha256:c1e04beb93c6d4434afca76f74577cb0bc70525d9a920bd161eadee740c4e5b0"
+        "sha256:898790b7188270dfa4f7ff5a5b664509aa33ffb3ec714be5ee7ec77551dc3424"
     );
     assert_eq!(
         seed.as_str(),
@@ -1512,11 +1512,11 @@ async fn digest_golden() {
     );
     assert_eq!(
         projection.projection_digest.as_str(),
-        "sha256:4f7aeb6a637708a6ef7295151e0f621f6c34969b9d2248798f25f08f691b7e26"
+        "sha256:1902d00ecc7d61357f22dc195fee81c7870109698b3f4c0cd0f441be25717ce0"
     );
     assert_eq!(
         snapshot.snapshot_digest.as_str(),
-        "sha256:f1caa49f05b4f7f854601f0e12e78964c70278cc6bf6ac5da0842916945878f7"
+        "sha256:72af2cb2249a91ba1188ab0417a070e9c01c96da06043bc325a76843abbb3bc2"
     );
     transaction.rollback().await.unwrap();
 
@@ -1564,19 +1564,19 @@ async fn digest_golden() {
     );
     assert_eq!(
         one.as_str(),
-        "sha256:d47cf7f0f27fd42544d76cfa14cdf0731663b8245e55bfb17b88e060c27a0753"
+        "sha256:be0d9f4f0abc1d1fed36ce6f95a9cfb10aaf291af87808a327900455bf19b977"
     );
     assert_eq!(
         two.as_str(),
-        "sha256:7b670327bc098de983599418202502041efc777e87da704cb37ca96708bcfab1"
+        "sha256:5fda2b1581dcf6c5c91aae3a870c6ba28ccd190b8612934eaf1b24760c0adf71"
     );
     assert_eq!(
         projection_n.projection_digest.as_str(),
-        "sha256:db1120a962526fb90c3d4e1de393bc9525bc3a7161f39454410c3c88bcb524dd"
+        "sha256:36bc5f74adeea792e2b4c6d122d47c1c719edb8a2d56cb0d2e40c57d207504c4"
     );
     assert_eq!(
         snapshot_n.snapshot_digest.as_str(),
-        "sha256:0c5271ba244b1c9660de5b7c19d80c49daefa623e7f545b067c4fa4fc51af10e"
+        "sha256:54797ce933ca2c39b35bd7c84e71a5d70513b2351a25d30901ae80a1826c57d7"
     );
 }
 

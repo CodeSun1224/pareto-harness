@@ -99,7 +99,9 @@ def validate() -> list[str]:
         if required not in hook:
             errors.append(f"missing bounded Hook invariant: {required}")
     replay = re.search(r"(?ms)async fn recorded_hook_projection\b.*?\n    }", hook)
-    if not replay or "self.hook_projection(registry, target).await" not in replay.group(0):
+    if not replay or (
+        "self.hook_projection(registry, target, hook_registry).await" not in replay.group(0)
+    ):
         errors.append("Recorded Hook replay must remain a projection-only reader")
 
     for manifest in (

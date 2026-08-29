@@ -70,6 +70,68 @@ pub enum ObserverFailurePolicyV1 {
     FailClosed,
 }
 
+/// Closed reason vocabulary for persisted Hook decisions and audit facts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookReasonCodeV1 {
+    /// Successful point or invocation completion.
+    Completed,
+    /// A transform completed successfully.
+    Transformed,
+    /// A gate explicitly allowed the input.
+    Allowed,
+    /// An observer completed successfully.
+    Observed,
+    /// A registered policy denied the input.
+    PolicyDenied,
+    /// A transform handler was unavailable.
+    TransformMissing,
+    /// A transform output failed validation.
+    TransformOutputInvalid,
+    /// A transform attempted to change a protected field.
+    TransformProtectedField,
+    /// A required gate handler was unavailable.
+    RequiredGateMissing,
+    /// A gate output failed validation.
+    GateOutputInvalid,
+    /// A gate explicitly denied the input.
+    GateDenied,
+    /// A required gate abstained.
+    RequiredGateAbstained,
+    /// A gate-bearing point had no required gate.
+    RequiredGateEmpty,
+    /// An observer failed with fail-closed policy.
+    ObserverFailedClosed,
+    /// A handler returned an output for the wrong Hook kind.
+    HookKindMismatch,
+    /// The handler failed before producing a valid output.
+    HandlerFailed,
+    /// Cancellation won terminal serialization.
+    Cancelled,
+    /// Timeout recovery won terminal serialization.
+    TimedOut,
+    /// Invocation was skipped after transform rejection.
+    SkippedAfterTransformFailure,
+    /// Invocation was skipped after gate denial.
+    SkippedAfterGateDenial,
+    /// Invocation was skipped after observer fail-closed.
+    SkippedAfterObserverFailure,
+    /// A result arrived after a terminal result.
+    LateAfterTerminal,
+    /// A bounded message failed trusted admission.
+    MessageRejected,
+}
+
+/// Stable kind discriminator for atomic Runtime Control/Hook pairs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookPairKindV1 {
+    /// Budget reservation plus Hook invocation reservation.
+    Reserve,
+    /// Budget settlement plus Hook invocation terminal.
+    Terminal,
+}
+
 /// Closed resource limits applied before semantic output validation.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -234,15 +296,13 @@ impl HookRegistryRevisionV1 {
 
 fn registration_sort_key(
     registration: &HookRegistrationV1,
-) -> (HookPointV1, HookPhaseV1, i32, &HookId, &RevisionId) {
-    let point = registration.hook_points[0];
+) -> (HookPhaseV1, i32, &HookId, &RevisionId) {
     let phase = match registration.kind {
         HookKindV1::Transform => HookPhaseV1::Transform,
         HookKindV1::Gate => HookPhaseV1::Gate,
         HookKindV1::Observer => HookPhaseV1::Observer,
     };
     (
-        point,
         phase,
         registration.priority,
         &registration.hook_id,
@@ -303,6 +363,35 @@ pub struct TransformProposalV1 {
     pub fields: Value,
 }
 
+/// Closed primitive value admitted by the first Transform field contract.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TransformFieldValueV1 {
+    /// UTF-8 text value.
+    Text(String),
+    /// Signed integer value.
+    Integer(i64),
+    /// Boolean value.
+    Boolean(bool),
+}
+
+/// Versioned, bounded request view delivered to a Hook handler.
+#[derive(Clone, Debug, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HookRequestViewV1 {
+    /// Hook point being executed.
+    pub hook_point: HookPointV1,
+    /// Kernel-derived phase.
+    pub phase: HookPhaseV1,
+    /// Exact digest of the delivered proposal bytes.
+    pub input_digest: Digest,
+    /// Non-authoritative proposal view.
+    pub proposal: TransformProposalV1,
+    /// Business decision fixed before Observer dispatch, when applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed_business_decision: Option<HookBusinessDecisionV1>,
+}
+
 /// Protected proposal identity compared before and after every Transform.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -330,7 +419,7 @@ pub enum GateDecisionV1 {
     /// Explicit deny with a stable safe reason.
     Deny {
         /// Stable reason code.
-        reason_code: String,
+        reason_code: HookReasonCodeV1,
     },
     /// No opinion; never equivalent to required allow.
     Abstain {},
@@ -348,14 +437,14 @@ pub enum ObserverResultV1 {
     /// Safe warning.
     Warning {
         /// Stable warning reason.
-        reason_code: String,
+        reason_code: HookReasonCodeV1,
         /// Digest of the bounded, redacted annotation.
         annotation_digest: Digest,
     },
     /// Observer execution failed.
     Failure {
         /// Stable failure reason.
-        reason_code: String,
+        reason_code: HookReasonCodeV1,
     },
 }
 
@@ -391,6 +480,8 @@ pub enum HookExecutionStatusV1 {
 pub struct HookPairBindingV1 {
     /// Stable pair identity.
     pub pair_id: HookPairId,
+    /// Closed pair kind, preventing reserve/terminal cross-kind reuse.
+    pub pair_kind: HookPairKindV1,
     /// Canonical full-command fingerprint.
     pub pair_fingerprint: Digest,
     /// Counterpart Runtime Control Event.
@@ -501,7 +592,7 @@ pub struct HookInvocationTerminalPayloadV1 {
     /// Kernel-accounted usage.
     pub accounted_usage: Vec<BudgetVectorEntryV1>,
     /// Stable safe terminal reason.
-    pub reason_code: String,
+    pub reason_code: HookReasonCodeV1,
 }
 
 /// Canonical skipped invocation audit fact.
@@ -515,7 +606,7 @@ pub struct HookInvocationSkippedPayloadV1 {
     /// Kernel-derived phase.
     pub phase: HookPhaseV1,
     /// Stable skip reason.
-    pub reason_code: String,
+    pub reason_code: HookReasonCodeV1,
     /// Input digest that would have been delivered.
     pub input_digest: Digest,
 }
@@ -545,7 +636,7 @@ pub struct HookPointFinalizedPayloadV1 {
     /// Separate execution status.
     pub execution_status: HookExecutionStatusV1,
     /// Stable safe final reason.
-    pub reason_code: String,
+    pub reason_code: HookReasonCodeV1,
 }
 
 /// Safe late-result audit fact.
@@ -563,7 +654,7 @@ pub struct HookLateResultObservedPayloadV1 {
     /// Safe output digest only.
     pub output_digest: Digest,
     /// Stable late-result reason.
-    pub reason_code: String,
+    pub reason_code: HookReasonCodeV1,
     /// Applied redaction policy.
     pub redaction_policy_revision: RevisionId,
 }
@@ -581,7 +672,7 @@ pub struct HookMessageRejectedPayloadV1 {
     /// Hook revision when safely known.
     pub hook_revision: Option<RevisionId>,
     /// Stable rejection reason.
-    pub reason_code: String,
+    pub reason_code: HookReasonCodeV1,
     /// Safe proposal identity.
     pub safe_subject_id: ProposalId,
     /// Safe input digest.

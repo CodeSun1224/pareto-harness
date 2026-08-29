@@ -173,7 +173,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 61);
+    assert_eq!(first.len(), 63);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -923,6 +923,8 @@ fn hook_contract_schema_manifest_and_registration_are_closed() {
         "hook-message-rejected-payload",
         "hook-projection",
         "hook-projection-hash-view",
+        "hook-request-view",
+        "transform-field-value",
         "protected-proposal-hash-view",
     ] {
         member(required);
@@ -1037,6 +1039,11 @@ fn hook_contract_schema_manifest_and_registration_are_closed() {
         "unknown_policy":"allow"
     });
     assert!(serde_json::from_value::<HookRegistrationV1>(observer_json).is_err());
+    assert!(serde_json::from_value::<HookReasonCodeV1>(json!("future_reason")).is_err());
+    assert_eq!(
+        serde_json::from_value::<HookReasonCodeV1>(json!("gate_denied")).unwrap(),
+        HookReasonCodeV1::GateDenied
+    );
 }
 
 #[test]

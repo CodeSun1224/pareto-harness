@@ -31,17 +31,19 @@ const TIMEOUT_COMMAND_DOMAIN: &[u8] = b"pareto.runtime-timeout-recovery.command.
 const RUNTIME_REDUCER_REVISION: &str = "rev_runtime-control-reducer-v1";
 const RUNTIME_HISTORY_REVISION: &str = "rev_runtime-control-history-chain-v1";
 const RUNTIME_READER_REVISION: &str = "rev_runtime-control-projection-reader-v1";
-const FAKE_CONTRACT_REVISION: &str = "rev_fake-operation-v1";
-const FAKE_ADAPTER_REVISION: &str = "rev_fake-adapter-v1";
+pub(super) const FAKE_CONTRACT_REVISION: &str = "rev_fake-operation-v1";
+pub(super) const FAKE_ADAPTER_REVISION: &str = "rev_fake-adapter-v1";
 const FAKE_METER_REVISION: &str = "rev_kernel-meter-v1";
 const FAKE_METER_POLICY_REVISION: &str = "rev_kernel-meter-policy-v1";
-const FAKE_TIMEOUT_POLICY_REVISION: &str = "rev_timeout-policy";
-const FAKE_PRODUCER_REVISION: &str = "rev_fake-producer-v1";
-const FAKE_CALLBACK_NAMESPACE: &str = "callback_fake-";
+pub(super) const FAKE_TIMEOUT_POLICY_REVISION: &str = "rev_timeout-policy";
+pub(super) const FAKE_PRODUCER_REVISION: &str = "rev_fake-producer-v1";
+pub(super) const FAKE_CALLBACK_NAMESPACE: &str = "callback_fake-";
 // Updated only when the generated control-capable SchemaSet is deliberately published.
 const RETAINED_CONTROL_SCHEMA_SET_DIGEST: &str =
     "sha256:a95c824d3a47dbc891f884921811859dc2d132e1e39f6f781e833ea9b306a217";
 const HOOK_CAPABLE_SCHEMA_SET_DIGEST: &str =
+    "sha256:0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771";
+const RETAINED_HOOK_SCHEMA_SET_DIGEST: &str =
     "sha256:3a0c6e67a97675cf6bfcdc1fb9766b30a79ae62e662479d9ae1ef5d7b43ff99d";
 const CONTROL_EVENT_TYPES: [&str; 11] = [
     "budget-refunded",
@@ -2814,7 +2816,9 @@ fn retained_operation_contract(
 ) -> Result<TrustedOperationContractV1, RuntimeControlError> {
     if !matches!(
         source.manifest_digest.as_str(),
-        RETAINED_CONTROL_SCHEMA_SET_DIGEST | HOOK_CAPABLE_SCHEMA_SET_DIGEST
+        RETAINED_CONTROL_SCHEMA_SET_DIGEST
+            | RETAINED_HOOK_SCHEMA_SET_DIGEST
+            | HOOK_CAPABLE_SCHEMA_SET_DIGEST
     ) {
         return Err(RuntimeControlError::new(
             RuntimeControlErrorKind::ResourceEnvelopeUnavailable,
@@ -3562,6 +3566,338 @@ pub(super) struct HookControlEventContext<'a> {
     pub(super) event_id: &'a EventId,
     pub(super) occurred_at: &'a str,
     pub(super) correlation_id: &'a str,
+}
+
+pub(super) struct PlannedHookReservation {
+    pub(super) expected_cursor: EventCursor,
+    pub(super) payload: OperationReservedPayloadV1,
+    pub(super) lease: OperationLease,
+}
+
+pub(super) struct PlannedHookSettlement {
+    pub(super) expected_cursor: EventCursor,
+    pub(super) payload: OperationSettledPayloadV1,
+    pub(super) lease_fingerprint: Digest,
+}
+
+pub(super) struct PlannedHookTimeoutSettlement {
+    pub(super) expected_cursor: EventCursor,
+    pub(super) event_id: EventId,
+    pub(super) payload: OperationSettledPayloadV1,
+    pub(super) timeout_key: TimeoutKeyV1,
+}
+
+pub(super) async fn plan_hook_timeout_settlement(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    operation_id: &OperationId,
+    correlation_id: String,
+    sample: &ClockSample,
+) -> Result<PlannedHookTimeoutSettlement, RuntimeControlError> {
+    validate_clock_sample(sample)?;
+    let aggregate = load_control(connection, registry, target).await?;
+    let record = aggregate
+        .state
+        .operations
+        .get(operation_id)
+        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+    if record.settlement.is_some() {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::TerminalConflict,
+        ));
+    }
+    if sample.wall_millis < parse_utc_millis(&record.reservation.absolute_deadline_utc)? {
+        return Err(RuntimeControlError::new(RuntimeControlErrorKind::NotDue));
+    }
+    let evidence = TimeoutEvidence::Unknown {
+        evidence_fingerprint: safe_digest(
+            "hook-timeout-unknown-evidence",
+            &serde_json::json!({
+                "scope": target.scope,
+                "operation_id": operation_id,
+                "sample": sample,
+            }),
+        )?,
+    };
+    let command = TimeoutRecoveryCommand::build(
+        correlation_id,
+        record.reservation.timeout_key.clone(),
+        sample.clone(),
+        evidence,
+    )?;
+    let reserved = vector_map(&record.reservation.trusted_reservation)?;
+    let payload = OperationSettledPayloadV1 {
+        operation_id: record.reservation.operation_id.clone(),
+        reservation_id: record.reservation.reservation_id.clone(),
+        hook_pair: None,
+        callback_id: None,
+        callback_fingerprint: None,
+        callback_authority: None,
+        outcome: OperationOutcomeV1::TimedOut,
+        evidence_class: UsageEvidenceClassV1::Unknown,
+        kernel_meter_evidence: None,
+        observed_usage: Vec::new(),
+        accounted_usage: map_vector(&reserved),
+        released_usage: Vec::new(),
+        reason_code: "deadline_elapsed".to_owned(),
+        timeout_command_fingerprint: Some(command.command_fingerprint),
+        settled_at_utc: sample.canonical_utc.clone(),
+    };
+    Ok(PlannedHookTimeoutSettlement {
+        expected_cursor: EventCursor {
+            sequence: aggregate.state.sequence.to_string(),
+            event_id: aggregate.state.last_event_id.clone(),
+        },
+        event_id: command.event_id,
+        payload,
+        timeout_key: record.reservation.timeout_key.clone(),
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn plan_hook_settlement(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    lease: &OperationLease,
+    event_id: EventId,
+    callback_id: CallbackId,
+    correlation_id: String,
+    outcome: OperationOutcomeV1,
+    reason_code: String,
+    redacted_payload_digest: Digest,
+    sample: &ClockSample,
+) -> Result<PlannedHookSettlement, RuntimeControlError> {
+    validate_clock_sample(sample)?;
+    let aggregate = load_control(connection, registry, target).await?;
+    let record = aggregate
+        .state
+        .operations
+        .get(&lease.operation_id)
+        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+    if record.settlement.is_some() {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::TerminalConflict,
+        ));
+    }
+    verify_lease(
+        target,
+        lease,
+        &record.reservation,
+        &record.reservation.producer_revision,
+        sample,
+    )?;
+    let cancelled = cancellation_applies(
+        &aggregate.state,
+        record.reservation.task_id.as_ref(),
+        &record.reservation.operation_id,
+    );
+    if sample.monotonic_millis >= lease.deadline_monotonic_millis
+        || sample.canonical_utc >= record.reservation.absolute_deadline_utc
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::DeadlineExceeded,
+        ));
+    }
+    if (cancelled && outcome != OperationOutcomeV1::Cancelled)
+        || (!cancelled && outcome == OperationOutcomeV1::Cancelled)
+        || outcome == OperationOutcomeV1::TimedOut
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::CancellationPending,
+        ));
+    }
+    let contract = find_contract(
+        &aggregate.state,
+        &record.reservation.resource.kind,
+        &record.reservation.operation,
+    )?;
+    let mut meter = KernelMeter::new(contract, &sample.process_epoch)?;
+    meter.try_consume(BudgetDimensionV1::Tokens)?;
+    let meter_snapshot = meter.snapshot()?;
+    let command = SettlementCommand {
+        event_id,
+        correlation_id,
+        callback_id,
+        operation_id: record.reservation.operation_id.clone(),
+        reservation_id: record.reservation.reservation_id.clone(),
+        producer_revision: record.reservation.producer_revision.clone(),
+        outcome,
+        observed_usage: meter_snapshot.usage.clone(),
+        redacted_payload_digest,
+        reason_code,
+        decision_clock: sample.clone(),
+        meter_snapshot: Some(meter_snapshot),
+    };
+    let payload = settlement_payload(&record.reservation, lease, &command)?;
+    Ok(PlannedHookSettlement {
+        expected_cursor: EventCursor {
+            sequence: aggregate.state.sequence.to_string(),
+            event_id: aggregate.state.last_event_id.clone(),
+        },
+        payload,
+        lease_fingerprint: lease.seal.clone(),
+    })
+}
+
+/// Reconstructs and authorizes a Hook reservation from persisted Runtime Control facts without
+/// writing. The atomic pair path re-folds and admits the returned payload under the writer lock.
+pub(super) async fn plan_hook_reservation(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    proposal: &ProtectedOperationProposal,
+    sample: &ClockSample,
+) -> Result<PlannedHookReservation, RuntimeControlError> {
+    validate_clock_sample(sample)?;
+    let aggregate = load_control(connection, registry, target).await?;
+    if aggregate
+        .state
+        .operations
+        .contains_key(&proposal.operation_id)
+        || aggregate.state.denials.contains_key(&proposal.operation_id)
+        || matches!(
+            aggregate.lifecycle.state.manifest.execution_mode,
+            ExecutionMode::RecordedReplay { .. }
+        )
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::OperationConflict,
+        ));
+    }
+    ensure_reserve_lifecycle(&aggregate.lifecycle, proposal.task_id.as_ref())?;
+    if cancellation_applies(
+        &aggregate.state,
+        proposal.task_id.as_ref(),
+        &proposal.operation_id,
+    ) {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::CancellationPending,
+        ));
+    }
+    if sample.canonical_utc >= proposal.absolute_deadline_utc {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::DeadlineExceeded,
+        ));
+    }
+    let request_digest = safe_digest("protected-operation-request", proposal)?;
+    let grant = authorize(
+        &aggregate.state,
+        target,
+        proposal,
+        sample,
+        request_digest.clone(),
+    )
+    .map_err(|_| RuntimeControlError::new(RuntimeControlErrorKind::Unauthorized))?;
+    let contract = find_contract(
+        &aggregate.state,
+        &proposal.resource.kind,
+        &proposal.operation,
+    )?;
+    if proposal.adapter_revision != contract.adapter_revision
+        || proposal.timeout_policy_revision != contract.timeout_policy_revision
+        || proposal.callback_namespace != contract.callback_namespace
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::ProducerUnauthorized,
+        ));
+    }
+    let (allocations, warnings) = reserve_allocations(
+        &aggregate.state,
+        proposal.task_id.as_ref(),
+        &target.principal,
+        &contract.resource_envelope,
+        &proposal.resource.kind,
+        &proposal.operation,
+    )?;
+    let lifecycle_checkpoint = aggregate
+        .lifecycle
+        .checkpoints
+        .get(&aggregate.lifecycle.state.sequence)
+        .ok_or_else(corrupt_error)?;
+    let payload = OperationReservedPayloadV1 {
+        operation_id: proposal.operation_id.clone(),
+        reservation_id: proposal.reservation_id.clone(),
+        hook_pair: None,
+        subject_actor: target.principal.clone(),
+        task_id: proposal.task_id.clone(),
+        resource: proposal.resource.clone(),
+        operation: proposal.operation.clone(),
+        grant_id: grant.grant_id.clone(),
+        authorization_decision: AuthorizationDecisionV1 {
+            outcome: AuthorizationOutcomeV1::Allowed,
+            reason_code: "capability_allowed".to_owned(),
+            grant_id: Some(grant.grant_id),
+            request_digest,
+        },
+        requested_usage: canonical_vector(&proposal.requested_usage)?,
+        trusted_reservation: canonical_vector(&contract.resource_envelope)?,
+        allocations,
+        operation_contract_revision: contract.contract_revision.clone(),
+        adapter_revision: contract.adapter_revision.clone(),
+        lifecycle_admission: LifecycleAdmissionV1 {
+            cursor: EventCursor {
+                sequence: aggregate.lifecycle.state.sequence.to_string(),
+                event_id: lifecycle_checkpoint.event_id.clone(),
+            },
+            run_state: lifecycle_checkpoint.run_state,
+            task_state: proposal
+                .task_id
+                .as_ref()
+                .and_then(|task_id| lifecycle_checkpoint.tasks.get(task_id).copied()),
+        },
+        producer_revision: contract.producer_revision.clone(),
+        initial_process_epoch: sample.process_epoch.clone(),
+        callback_namespace: contract.callback_namespace.clone(),
+        interruptibility: proposal.interruptibility,
+        absolute_deadline_utc: proposal.absolute_deadline_utc.clone(),
+        timeout_key: TimeoutKeyV1 {
+            recovery_revision: aggregate
+                .state
+                .initialized
+                .clock_contract
+                .recovery_revision
+                .clone(),
+            scope: target.scope.clone(),
+            control_stream_id: aggregate.stream_id.clone(),
+            operation_id: proposal.operation_id.clone(),
+            reservation_id: proposal.reservation_id.clone(),
+            absolute_deadline_utc: proposal.absolute_deadline_utc.clone(),
+            timeout_policy_revision: contract.timeout_policy_revision.clone(),
+            clock_revision: aggregate
+                .state
+                .initialized
+                .clock_contract
+                .clock_revision
+                .clone(),
+            source_schema_set_ref: aggregate
+                .state
+                .initialized
+                .source_contract
+                .schema_set_ref
+                .clone(),
+            source_protocol_limits_ref: aggregate
+                .state
+                .initialized
+                .source_contract
+                .protocol_limits_ref
+                .clone(),
+            operation_contract_revision: contract.contract_revision.clone(),
+            meter_revision: contract.meter_revision.clone(),
+        },
+        warnings,
+        reserved_at_utc: sample.canonical_utc.clone(),
+    };
+    let lease = make_lease(target, &payload, sample)?;
+    Ok(PlannedHookReservation {
+        expected_cursor: EventCursor {
+            sequence: aggregate.state.sequence.to_string(),
+            event_id: aggregate.state.last_event_id.clone(),
+        },
+        payload,
+        lease,
+    })
 }
 
 pub(super) async fn prepare_hook_reservation_event(

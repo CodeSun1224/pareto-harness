@@ -779,7 +779,7 @@ async fn timeout_recovery() {
     let command = store.prepare_timeout_recovery(
         &fixture.registry(), &fixture.target(), timeout_request("operation_timeout", "corr-timeout", None, digest('e')), &at_deadline,
     ).await.unwrap();
-    assert_eq!(command.event_id.as_str(), "event_e78a2c9795d4c638d17d612bb4761d86830e678a18d37906bf9b56a0f414f0d8");
+    assert_eq!(command.event_id.as_str(), "event_43513f57daa1f284d94ae90c36e71a28376e84850df413386fe9b8d608a48e4e");
     let first = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     let retry = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     assert_eq!(append_identity(&first), append_identity(&retry));

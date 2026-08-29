@@ -202,7 +202,7 @@ impl KernelAuthority {
     }
 }
 
-struct AdmittedRead {
+pub(super) struct AdmittedRead {
     scope: IsolationScope,
     stream_id: Option<StreamId>,
     schema_set: Arc<SchemaSet>,
@@ -665,7 +665,7 @@ async fn check_prepared_idempotency(
     }
 }
 
-async fn insert_prepared(
+pub(super) async fn insert_prepared(
     connection: &mut SqliteConnection,
     prepared: &PreparedEvent,
 ) -> Result<AppendResult, EventStoreError> {
@@ -744,7 +744,7 @@ fn v2_migration_checksum() -> String {
     V2_MIGRATION_CHECKSUM.to_owned()
 }
 
-fn validate_row(
+pub(super) fn validate_row(
     row: &sqlx::sqlite::SqliteRow,
     admitted: &AdmittedRead,
 ) -> Result<ValidatedEvent, EventStoreError> {
