@@ -145,7 +145,8 @@ Fake executor由 Manifest-pinned compatibility identity解析，确定性模拟�
 | rejected-before-apply | failed；verified zero/partial meter | attempt-concluded / not_applied |
 | partial | failed；verified partial或unknown全额 | reconciliation-required / partial |
 | response loss/possible effect | failed；unknown全额 | reconciliation-required / unknown |
-| deadline winner | timed_out；verified partial或unknown全额 | reconciliation-required / unknown或partial |
+| deadline winner且尚未claim | timed_out；verified zero并release | attempt-concluded / not_applied |
+| deadline winner且已经claim | timed_out；verified partial或unknown全额 | reconciliation-required / unknown或partial |
 | effective cancellation before claim | cancelled；verified zero | attempt-concluded / not_applied |
 
 `EffectTerminalPairCommandV1`复用reserve pair的zero/two/one规则与相同writer serialization。Effect-bound operation禁止调用通用单stream Runtime Control settlement/timeout入口；callback和下节的recovery都必须生成Effect terminal pair。这样没有合法的control-only catch-up状态，budget gross/释放与Effect conclusion原子一致。
@@ -182,7 +183,7 @@ partial记录已确认components/result digest、未知components摘要、limita
 
 ## 9. Cancellation, concurrency, and lifecycle success
 
-新的Intent只允许Run `running`且exact Task（若有）`running`。取消/deadline在reserve pair和dispatch claim都重查。claim之前的取消可通过Effect terminal pair确定not-applied并释放；claim之后只能pending/unknown，直到返回、Effect timeout recovery或reconciliation，不虚假ack外部停止。
+新的Intent只允许Run `running`且exact Task（若有）`running`。取消/deadline在reserve pair和dispatch claim都重查。Intent已提交但claim之前，取消或deadline recovery由history唯一证明Kernel未交付executor lease，必须以not-applied terminal pair结清并释放；不得走unknown/reconciliation分支。claim之后取消/deadline只能partial/unknown，直到返回、Effect recovery或reconciliation，不虚假ack外部停止。
 
 callback、cancel、timeout、lifecycle transition与terminal pair都在writer transaction内重新fold。deadline equality由timeout获胜；deadline前有效取消与Receipt completion按首个合法commit决定。loser只能返回既有winner或追加late audit，不能双terminal。
 

@@ -53,7 +53,7 @@ Effect stream事件为：initialized；intended；dispatch-claimed；receipt-adm
 
 reserve/Intent和terminal都使用Event Store通用transaction-local `append_atomic_pair`：zero-existing时两个expected cursors都命中才依次insert并commit；two-existing只接受完整exact cross-binding；one-existing为`corrupt_partial_pair`且永不补写。same pair ID异bytes优先冲突。Effect-bound operation的通用单streamcallback/timeout settlement稳定拒绝。
 
-terminal映射：applied→Runtime succeeded；rejected-before-apply→failed/not-applied；partial或possible-effect→failed/reconciliation-required；deadline winner→timed_out/reconciliation-required；claim前有效取消→cancelled/not-applied。verified Kernel meter消费actual并释放差额；unknown全额消费reservation。Effect terminal和预算settlement同commit可见。
+terminal映射：applied→Runtime succeeded；rejected-before-apply→failed/not-applied；partial或possible-effect→failed/reconciliation-required；deadline winner且未claim→timed_out/not-applied并verified zero release；deadline winner且已claim→timed_out/reconciliation-required；claim前有效取消→cancelled/not-applied。未claim history禁止进入unknown，已claim history禁止伪装not-applied。verified Kernel meter消费actual并释放差额；unknown全额消费reservation。Effect terminal和预算settlement同commit可见。
 
 ## Dispatch and Receipt
 
@@ -139,7 +139,7 @@ SQLite保持`user_version=2`及accepted DDL/triggers/checksums。Effect/Control 
 | AC-10 | Focused recovery/model | Intent/claim/external/terminal各crash点；recovery key、not-eligible、exact/mutation、response-loss与new-sample ExistingTerminal | `cargo test -p pareto-kernel event_store::effect_runtime::crash_recovery --offline -- --exact` |
 | AC-11 | Focused security/integration | owner request非evidence、pinned query producer、exact/mutation/unresolved/closed对账 | `cargo test -p pareto-kernel event_store::effect_runtime::reconciliation --offline -- --exact` |
 | AC-12 | Focused integration/concurrency | Effect/control terminal pair、verified/unknown accounting、single-sided corruption、duplicate settlement | `cargo test -p pareto-kernel event_store::effect_runtime::atomic_settlement --offline -- --exact` |
-| AC-13 | Focused FakeClock/model | claim前/后cancel、deadline equality、timeout/callback reverse races、无sleep | `cargo test -p pareto-kernel event_store::effect_runtime::cancellation_timeout --offline -- --exact` |
+| AC-13 | Focused FakeClock/model | 未claim cancel/deadline唯一not-applied、已claim唯一partial/unknown、deadline equality与timeout/callback reverse races、无sleep | `cargo test -p pareto-kernel event_store::effect_runtime::cancellation_timeout --offline -- --exact` |
 | AC-14 | Focused security/integration | exact duplicate、late/out-of-order/conflicting Receipt、redaction/injection | `cargo test -p pareto-kernel event_store::effect_runtime::late_receipts --offline -- --exact` |
 | AC-15 | Focused fold/persistence | continuous stream pure fold、无mutable authority table、gap/illegal/double terminal fail closed | `cargo test -p pareto-kernel event_store::effect_runtime::fold_contract --offline -- --exact` |
 | AC-16 | Focused security/isolation | tenant/user presence/workspace/run/task/actor/effect/key/pair全矩阵 | `cargo test -p pareto-kernel event_store::effect_runtime::isolation --offline -- --exact` |
