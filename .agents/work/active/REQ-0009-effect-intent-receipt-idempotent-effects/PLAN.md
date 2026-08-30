@@ -18,6 +18,8 @@ REQ-0004、REQ-0007、REQ-0008均done。当前SQLite保持v2，REQ-0008最终Hoo
 
 # Plan
 
+开始任何Protocol、Schema、Runtime、测试或脚本行为编辑前，先把Requirement从`planned`推进为`implementing`，并同步TASKS/HANDOFF当前执行状态；设计Review只解除设计门禁，不代替实施状态或代码Review。
+
 1. 在`pareto-protocol`新增闭合Effect、executor descriptor、Intent/claim/Receipt/conclusion/reconciliation、Projection与Boundary Inventory/Record V2类型；发布Run Manifest v3和内容地址Effect-capable SchemaSet，保留全部旧Manifest、Inventory、SchemaSet、reader/reducer和历史字节。
 2. 在`pareto-kernel::event_store`新增crate-private Effect derived stream初始化、exact retained reader、连续pure fold、Projection和显式inclusive cursor/history digest读取；不改SQLite v2 DDL/trigger，不增加可写outbox/status/receipt表。
 3. 把REQ-0007 Runtime Control transaction-local helper扩展为互斥Hook/Effect binding；实现`control reserve + effect-intended`及`control terminal/settlement + effect conclusion`的双cursor/sequence/Event/fingerprint原子pair，覆盖zero/two exact、mutation、one-existing corruption、insert/commit fault与response-loss retry。
@@ -40,7 +42,7 @@ REQ-0004、REQ-0007、REQ-0008均done。当前SQLite保持v2，REQ-0008最终Hoo
 - Recovery/settlement：filters `effect_runtime::crash_recovery`、`effect_runtime::reconciliation`、`effect_runtime::atomic_settlement`、`effect_runtime::cancellation_timeout`、`effect_runtime::late_receipts`。
 - Persistence/replay/security：filters `effect_runtime::fold_contract`、`effect_runtime::isolation`、`effect_runtime::projection_recovery`、`effect_runtime::recorded_replay`、`effect_runtime::compatibility`、`effect_runtime::lifecycle_success_guard`；`cargo test -p pareto-kernel --doc --offline`证明外部无法构造authority、lease、Receipt admission或writer transaction。
 - Impacted regression：`cargo test -p pareto-kernel event_store --offline`；`cargo test -p pareto-kernel lifecycle:: --offline`；`cargo test -p pareto-kernel projection:: --offline`；`cargo test -p pareto-kernel runtime_control:: --offline`；`cargo test -p pareto-kernel hook_runtime:: --offline`；`cargo test -p pareto-kernel --all-targets --all-features --offline`。
-- Scope/compatibility：新增并运行`python scripts/check_req0009_scope.py`，断言SQLite `user_version=2`及v2 DDL/trigger、全部retained SchemaSet和旧Run reducers不变；断言没有真实network/process/sleep、mutable outbox/status表、background scanner、自动redispatch、REQ-0010后续能力或不必要依赖。
+- Scope/compatibility：新增并运行`python scripts/check_req0009_scope.py`，断言SQLite `user_version=2`及v2 DDL/trigger、全部retained SchemaSet和旧Run reducers不变；断言没有真实network/process/sleep、mutable outbox/status表、background scanner、自动redispatch或REQ-0010后续能力。运行`cargo tree --workspace --offline`记录完整依赖树，并以`git diff --exit-code 60cee6ed44d150185bf99ca3095a8ce803bcc0d3 -- Cargo.toml Cargo.lock ':(glob)**/Cargo.toml'`证明相对已接受设计基线没有manifest/lock依赖变化；任何依赖diff触发停止和重审。
 - Governance/Core：`python -m unittest discover -s scripts/tests -p "test_*.py"`；`python scripts/check_docs.py`；`cargo fmt --all -- --check`；`cargo clippy --workspace --all-targets --all-features --offline -- -D warnings`；`cargo test --workspace --all-targets --all-features --offline`。
 - Hygiene：`git diff --check`；`git status --short`，逐文件分类为预期源代码、生成Schema、测试、工作证据或Reviewer-owned记录，拒绝无关修改。
 
