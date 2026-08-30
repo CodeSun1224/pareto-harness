@@ -7,7 +7,7 @@ created: 2026-08-29
 updated: 2026-08-30
 links: [REQ-0008, SPEC-0007, RFC-0008, ADR-0009, REVIEW-0010, REQ-0004, REQ-0007]
 independence: independent
-reviewed_revision: 021b353d0efc923ef8739e3cb97d88f586c4fe06
+reviewed_revision: b7acbd82824d8410d432117c89be1bd56c8ce05c
 open_blockers: 0
 open_majors: 0
 ---
@@ -85,3 +85,4 @@ F-006的先前红测在exact revision上稳定转绿，且生产调用边界、�
 - 2026-08-29：closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。相对reviewer-approved runtime与其Review commit仅同步README/index/Epic/architecture/REQ-0008 done及active→archived证据；`crates/`、`schemas/`、Cargo和scripts零差异。归档证据准确引用exact `e4877834`、F-001至F-006 closed与0/0，且明确REQ-0009/真实外部Hook Runtime未实现。原findings/verdict不变，REVIEW-0011保持approved、0/0。
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选仅新增/修订REQ-0009 proposed/draft设计，Hook实现、Protocol/Schema、DB、Cargo、scripts与REQ-0008 accepted合同零变化；未来Effect不得把Hook handler/decision变成executor、producer或authority。REQ-0009未接受/实现，REVIEW-0012仍changes-requested。原findings/verdict不变，REVIEW-0011保持approved、0/0。
 - 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小设计修订未改Hook实现、Protocol/Schema、DB、Cargo、scripts或REQ-0008 accepted合同；REQ-0009仍changes-requested、未接受/实现。原findings/verdict不变，REVIEW-0011保持approved、0/0。
+- 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。仅proposed RFC一行变化，Hook实现/Schema/DB/Cargo/scripts零变化；REQ-0009尚未接受/实现。原verdict不变，REVIEW-0011保持approved、0/0。

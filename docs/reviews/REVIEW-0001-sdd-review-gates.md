@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-08-30
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 021b353d0efc923ef8739e3cb97d88f586c4fe06
+reviewed_revision: b7acbd82824d8410d432117c89be1bd56c8ce05c
 open_blockers: 0
 open_majors: 0
 ---
@@ -86,3 +86,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - 2026-08-29：exact REQ-0008 closure `84ce5a705edb20f268898938be4579f4946d5e4f` substantive freshness re-review。REQ-0008实现先经fresh independent REVIEW-0011多轮finding/整改/同Reviewer复审，exact `e4877834`达到approved 0/0；closure只同步README/index/Epic/architecture/Requirement done和work归档，AGENTS、skills、checker、CI及finding/open-count规则未改。REQ-0009仍未实现，治理门禁无绕过。REVIEW-0001保持approved、0/0。
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。`84ce5a7..aba3a33`只新增并修订REQ-0009 impact-analyzed/proposed/draft Requirement/RFC/Spec及独立REVIEW-0012；AGENTS、skills、templates、checker、CI和REQ-0002/SPEC-0001零变化。REVIEW-0012仍如实保留1 open Major，REQ-0009未接受、未实现，治理门禁无绕过。REVIEW-0001保持approved、0/0。
 - 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。`aba3a33..021b353`仅6+/5-修订REQ-0009 proposed/draft timeout文字与test trace；治理规则、checker、代码和Schema零变化。REVIEW-0012仍保留F-004 open，REQ-0009未接受/实现。REVIEW-0001保持approved、0/0。
+- 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。仅收紧proposed RFC recovery accounting；治理/代码/Schema零变化。REVIEW-0012独立关闭F-004至0/0，但REQ-0009仍未接受/实现。REVIEW-0001保持approved、0/0。
