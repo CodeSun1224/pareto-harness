@@ -7,14 +7,17 @@ created: 2026-08-30
 updated: 2026-08-30
 links: [REQ-0009, SPEC-0008, RFC-0009, ADR-0010, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: 60cee6ed44d150185bf99ca3095a8ce803bcc0d3
+reviewed_revision: 46772c7fbb30e82f0e8fd4fb50915e8414acaa65
 open_blockers: 0
 open_majors: 0
 ---
 
 # Verdict
 
-`approved` for exact revision `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`：0 Blocker、0 open Major。
+`approved` for exact revision `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`：0 Blocker、0 open Major。
+Focused planning re-review确认REQ-0009仅推进为`planned`并新增PLAN/TASKS/HANDOFF；`46772c7`已关闭
+`04a5613` planning Major，在任何行为编辑前强制`planned→implementing`，并为AC-21补齐`cargo tree`与相对
+`60cee6e`的Cargo manifest/lock exact diff命令。规划明确Runtime、Schema、测试均未实现，不替代后续fresh code review。
 `b7acbd8..60cee6e`仅完成设计接受闭环：ADR-0010忠实采用本Review在`b7acbd8`批准的合同，
 REQ/RFC/SPEC分别推进为approved/accepted/approved，导航、Epic、backlog与ARCH-0001/0003同步且明确尚未规划或实现。
 没有新增authority、state或replay语义，也没有代码、Schema、Runtime、测试或旧Requirement合同变化。
@@ -175,3 +178,8 @@ unclaimed/claimed recovery、fixed-horizon Recorded replay、兼容与rollback�
   against `b7acbd82824d8410d432117c89be1bd56c8ce05c`。九个文档只创建忠实的ADR-0010、接受REQ/RFC/SPEC
   并同步共享导航/架构/路线事实；所有批准声明准确引用`b7acbd8`的independent approved 0/0，且明确Schema、Runtime、
   代码与实现测试尚不存在。ADR未新增未评审authority/state/replay语义，旧REQ合同无变化；无新finding，保持approved 0/0。
+- 2026-08-30：focused planning re-review exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。初始planning
+  `04a5613`忠实承接AC-01至AC-22与设计边界，但遗漏AC-21的`cargo tree`/manifest diff具体命令及
+  `planned→implementing`启动门禁；本Reviewer将其作为planning Major退回。`46772c7`只修订PLAN/HANDOFF，
+  补齐两项exact proof与行为编辑前状态迁移；无Runtime、Schema、测试、旧合同或新设计语义变化。finding closed，
+  无新finding，保持approved 0/0；本轮仅为planning freshness，不是实现code review。

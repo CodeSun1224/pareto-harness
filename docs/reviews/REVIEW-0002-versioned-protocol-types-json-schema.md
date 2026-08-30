@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-30
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 60cee6ed44d150185bf99ca3095a8ce803bcc0d3
+reviewed_revision: 46772c7fbb30e82f0e8fd4fb50915e8414acaa65
 open_blockers: 0
 open_majors: 0
 ---
@@ -108,3 +108,4 @@ Remaining Notes/limitations:
 - 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小修订只澄清未来Effect timeout文本；Protocol/Schema/Cargo及现有Manifest/Inventory readers零变化。REQ-0009仍proposed/draft、F-004 open且未实现/接受。REQ-0003无回退，REVIEW-0002保持approved、0/0。
 - 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。只改proposed RFC一句，无Protocol/Schema/Cargo/reader变化；设计Review 0/0不等于实现或接受。REQ-0003无回退，REVIEW-0002保持approved、0/0。
 - 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已评审设计、创建ADR-0010并同步共享文档；Protocol/Schema/Cargo/reader及REQ-0003合同零变化，明确未实现。REVIEW-0002保持approved、0/0。
+- 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅规划未来Protocol/Schema并补齐依赖diff门禁；Protocol、Schema、Cargo、reader及REQ-0003合同零变化，未实现。REVIEW-0002保持approved、0/0。
