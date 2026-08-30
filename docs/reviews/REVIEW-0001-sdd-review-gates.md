@@ -4,10 +4,10 @@ title: REQ-0002 SDD 与独立评审门禁代码评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-22
-updated: 2026-08-29
+updated: 2026-08-30
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
+reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
 open_blockers: 0
 open_majors: 0
 ---
@@ -84,3 +84,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - exact REQ-0008 accepted-doc `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` substantive freshness re-review：`ea9633c..3318cbc`仅新增ADR-0009、接受REQ/SPEC/RFC并同步ARCH/index/Epic；接受发生在REVIEW-0010 exact `3aee02a`独立批准0/0之后，且明确Runtime未实现。AGENTS/checker/skills/CI零差异，finding/freshness/完成门禁未绕过。REVIEW-0001保持approved、0 open Blocker/Major。
 - exact REQ-0008 planning `e3d8d805b46fb4e1e25b23bc53bead71de730853` substantive freshness re-review：`5546d1f..e3d8d80`只在设计独立批准0/0与ADR接受后创建PLAN/TASKS/HANDOFF，并把REQ从approved推进planned；仅治理TASK-00完成，后续实现、fresh code Review、原Reviewer关闭Major/Blocker与REQ-0009禁启门禁均明确。AGENTS/checker/skills/CI和产品路径零差异，治理合同无回退。REVIEW-0001保持approved、0 open Blocker/Major。
 - 2026-08-29：exact REQ-0008 closure `84ce5a705edb20f268898938be4579f4946d5e4f` substantive freshness re-review。REQ-0008实现先经fresh independent REVIEW-0011多轮finding/整改/同Reviewer复审，exact `e4877834`达到approved 0/0；closure只同步README/index/Epic/architecture/Requirement done和work归档，AGENTS、skills、checker、CI及finding/open-count规则未改。REQ-0009仍未实现，治理门禁无绕过。REVIEW-0001保持approved、0/0。
+- 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。`84ce5a7..aba3a33`只新增并修订REQ-0009 impact-analyzed/proposed/draft Requirement/RFC/Spec及独立REVIEW-0012；AGENTS、skills、templates、checker、CI和REQ-0002/SPEC-0001零变化。REVIEW-0012仍如实保留1 open Major，REQ-0009未接受、未实现，治理门禁无绕过。REVIEW-0001保持approved、0/0。

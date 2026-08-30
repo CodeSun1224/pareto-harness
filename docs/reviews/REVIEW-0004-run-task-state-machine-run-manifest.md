@@ -4,10 +4,10 @@ title: REQ-0005 Run/Task 状态机与 Run Manifest 独立代码评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-24
-updated: 2026-08-29
+updated: 2026-08-30
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
+reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
 open_blockers: 0
 open_majors: 0
 ---
@@ -117,3 +117,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-28：exact REQ-0008 accepted-doc `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` substantive freshness re-review。`ea9633c..3318cbc`未修改lifecycle Runtime、Manifest、状态边、authority或wire Event；ADR-0009继续要求旧Run不升级且只接受未来设计。REQ-0005无回退，REVIEW-0004保持approved、0 open Blocker/Major。
 - 2026-08-28：exact REQ-0008 planning `e3d8d805b46fb4e1e25b23bc53bead71de730853` substantive freshness re-review。`5546d1f..e3d8d80`未修改lifecycle Runtime、Manifest、状态边、authority或wire Event；PLAN只安排未来Hook-capable Manifest新major/exact pin并保留旧Run解释，REQ仅planned且实现任务全未开始。REQ-0005无回退，REVIEW-0004保持approved、0 open Blocker/Major。
 - 2026-08-29：exact REQ-0008 closure `84ce5a705edb20f268898938be4579f4946d5e4f` substantive freshness re-review。Hook-capable Run使用新Manifest/RunCreated major并exact固定registry/config；旧major与retained reader保留，既有Run/Task状态边、parent/child guard和owner authority未放宽。Lifecycle与workspace回归通过；closure仅同步done/archive事实。REQ-0005合同无回退，REVIEW-0004保持approved、0/0。
+- 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选只设计未来Manifest v3与Effect success guard；lifecycle/Manifest代码、现有V1/V2 Schema、状态边、owner authority和Run/Task Event零变化，旧Run明确不后加Effect。REQ-0009仍未接受/实现且F-004阻塞其terminal矩阵，不重释REQ-0005。REVIEW-0004保持approved、0/0。

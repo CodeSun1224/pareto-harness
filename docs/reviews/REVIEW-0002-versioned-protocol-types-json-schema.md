@@ -4,10 +4,10 @@ title: REQ-0003 版本化协议类型和 JSON Schema 独立代码评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-23
-updated: 2026-08-29
+updated: 2026-08-30
 links: [REQ-0003, SPEC-0002, RFC-0002, ADR-0003]
 independence: independent
-reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
+reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
 open_blockers: 0
 open_majors: 0
 ---
@@ -104,3 +104,4 @@ Remaining Notes/limitations:
 - Exact REQ-0008 accepted-doc `3318cbc6fe8bc8c9717a5a2b4aea1153f0d281d6` substantive freshness re-review: `ea9633c..3318cbc`对protocol、schemas、Cargo、API、canonicalization、limits和retained readers零差异；ADR-0009只接受未来Hook Schema/reader合同且明确Runtime未实现。REQ-0003合同无回退，REVIEW-0002保持approved、0 open Blocker/Major。
 - Exact REQ-0008 planning `e3d8d805b46fb4e1e25b23bc53bead71de730853` substantive freshness re-review: `5546d1f..e3d8d80`对protocol、schemas、Cargo、API、canonicalization、limits和retained readers零差异；PLAN要求未来新内容地址set、Manifest新major/role、全部旧set byte-identical与每个Cargo filter非零，未发布Schema或实现reader。REQ-0003合同无回退，REVIEW-0002保持approved、0 open Blocker/Major。
 - 2026-08-29：exact REQ-0008 closure `84ce5a705edb20f268898938be4579f4946d5e4f` substantive freshness re-review。实现新增闭合Hook协议、RunManifest v2及内容地址set `0efc2ec…`，全部历史set保留；Protocol 9 unit + 24 contract、retained-reader/content-addressing/schema deterministic tests通过。closure相对approved runtime无protocol/schema/Cargo变化。REQ-0003 canonical/limits/isolation/compatibility合同无回退，REVIEW-0002保持approved、0/0。
+- 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选只提出未来Manifest v3、Effect/Executor和Boundary Inventory V2合同；`crates/pareto-protocol`、`schemas/`、Cargo、现有Manifest V1/V2与Inventory V1 bytes/readers零变化，且设计明确保留旧major。REQ-0009仍proposed/draft且REVIEW-0012有1 open Major，未实现或接受。REQ-0003合同无回退，REVIEW-0002保持approved、0/0。

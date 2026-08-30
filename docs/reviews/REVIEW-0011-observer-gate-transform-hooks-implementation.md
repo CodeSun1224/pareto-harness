@@ -4,10 +4,10 @@ title: REQ-0008 Observer、Gate 与 Transform Hook 独立实现评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-29
-updated: 2026-08-29
+updated: 2026-08-30
 links: [REQ-0008, SPEC-0007, RFC-0008, ADR-0009, REVIEW-0010, REQ-0004, REQ-0007]
 independence: independent
-reviewed_revision: 84ce5a705edb20f268898938be4579f4946d5e4f
+reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
 open_blockers: 0
 open_majors: 0
 ---
@@ -83,3 +83,4 @@ F-006的先前红测在exact revision上稳定转绿，且生产调用边界、�
 - 2026-08-29：复审 exact `8cf926a64c0e611aa6b357b0bfb93fb5bf9d6601`。按accepted recovery/safe-digest边界关闭F-001；逐字段代码与七类重封负例关闭F-002。独立完整Hook filter稳定暴露`isolation`红测，F-006保持Major。当前0 Blocker、1 Major，`changes-requested`。
 - 2026-08-29：最终复审 exact `e4877834fb54e3db936677f3b87c5fdf9e1d2d97`。task双payload绑定、registry-aware完整隔离矩阵和different-pair reverse-winner均经独立测试与调用图确认；关闭F-006。当前0 Blocker、0 Major，`approved`。
 - 2026-08-29：closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。相对reviewer-approved runtime与其Review commit仅同步README/index/Epic/architecture/REQ-0008 done及active→archived证据；`crates/`、`schemas/`、Cargo和scripts零差异。归档证据准确引用exact `e4877834`、F-001至F-006 closed与0/0，且明确REQ-0009/真实外部Hook Runtime未实现。原findings/verdict不变，REVIEW-0011保持approved、0/0。
+- 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选仅新增/修订REQ-0009 proposed/draft设计，Hook实现、Protocol/Schema、DB、Cargo、scripts与REQ-0008 accepted合同零变化；未来Effect不得把Hook handler/decision变成executor、producer或authority。REQ-0009未接受/实现，REVIEW-0012仍changes-requested。原findings/verdict不变，REVIEW-0011保持approved、0/0。
