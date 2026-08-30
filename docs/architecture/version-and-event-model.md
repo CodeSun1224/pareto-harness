@@ -4,8 +4,8 @@ title: 版本、事件与证据模型
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-25
-links: [RFC-0001, RFC-0002, RFC-0003, RFC-0004, RFC-0005, ADR-0001, ADR-0003, ADR-0004, ADR-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REQ-0006, SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0005, REVIEW-0004, REVIEW-0005]
+updated: 2026-08-30
+links: [RFC-0001, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0009, ADR-0001, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0010, REQ-0003, REQ-0004, REQ-0005, REQ-0006, REQ-0009, SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0005, SPEC-0008, REVIEW-0004, REVIEW-0005, REVIEW-0012]
 ---
 
 # 版本、事件与证据模型
@@ -64,7 +64,7 @@ ModelSnapshot          ToolSetRevision
 
 - 生命周期：已实现 `run-created`、`task-created`、`run-state-transitioned`、`task-state-transitioned` 1.0；Run/Task 状态集合与合法边由 RFC-0004/ADR-0005 冻结。Node lifecycle 留待后续 Requirement。
 - 决策：Plan proposed, context projected, model routed, retry selected。
-- 效果：Capability requested/granted/denied，Effect intended/received/failed。
+- 效果：Capability requested/granted/denied；REQ-0009已接受Effect intended/dispatch-claimed/receipt-admitted/attempt-concluded/reconciliation-required/reconciled的设计，但尚未实现Schema或Runtime。Effect/Executor/Boundary Inventory v2 identity、partial/unknown与fixed replay horizon由RFC-0009/ADR-0010冻结。
 - 证据：Evidence requested/recorded/verified/invalidated。
 - 资源：Budget reserved/consumed/exhausted/released。
 - 演化：Proposal created/evaluated，Candidate canaried，Behavior promoted/rolled back。

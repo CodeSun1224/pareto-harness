@@ -4,7 +4,7 @@ title: Pareto Harness Requirement Backlog
 status: active
 owners: [maintainers]
 created: 2026-08-22
-updated: 2026-08-27
+updated: 2026-08-30
 links: [EPIC-0001, EPIC-0002, EPIC-0003, EPIC-0004, EPIC-0005, EPIC-0006, RFC-0007, ADR-0008, ARCH-0004]
 ---
 
@@ -23,7 +23,7 @@ Planned ID 表示编号已保留但尚未进入 SDD 实施窗口。进入窗口�
 | 5 | REQ-0006 | EPIC-0002 | Projection、Snapshot 与 Replay | high | REQ-0004, REQ-0005 | recorded/simulated replay |
 | 6 | REQ-0007 | EPIC-0002 | Capability、预算、取消与超时 | high | REQ-0005 | 权限负例、预算和迟到结果 |
 | 7 | REQ-0008 | EPIC-0002 | Observer/Gate/Transform Hook 骨架 | high | REQ-0004, REQ-0007 | 顺序、超时、不可改写事件 |
-| 8 | REQ-0009 | EPIC-0002 | Effect Intent/Receipt 与幂等效果 | high | REQ-0004, REQ-0007 | 部分成功、重复提交、对账 |
+| 8 | REQ-0009 | EPIC-0002 | Effect Intent/Receipt 与幂等效果 | high | REQ-0004, REQ-0007, REQ-0008 | 部分成功、重复提交、对账 |
 | 9 | REQ-0010 | EPIC-0003 | OpenAI 兼容 Provider 与 Fake Provider | standard | REQ-0005, REQ-0007 | contract、stream、usage、错误 |
 | 10 | REQ-0011 | EPIC-0003 | Search/Read/Patch/Shell/Test Coding Tools | high | REQ-0007, REQ-0009 | 工具契约、路径和权限负例 |
 | 11 | REQ-0012 | EPIC-0003 | Git Workspace Revision 与 Artifact | high | REQ-0006, REQ-0011 | dirty patch、恢复、隔离 |

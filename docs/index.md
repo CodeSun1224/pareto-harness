@@ -1,6 +1,6 @@
 # 文档导航
 
-本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-29。
+本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-30。
 
 ## 产品
 
@@ -21,6 +21,8 @@
 - [SPEC-0006：Capability、预算、取消与超时规范](specs/SPEC-0006-capability-budget-cancellation-timeout.md)
 - [REQ-0008：Observer、Gate 与 Transform Hook 骨架](requirements/REQ-0008-observer-gate-transform-hooks.md)
 - [SPEC-0007：Observer、Gate 与 Transform Hook 骨架规范](specs/SPEC-0007-observer-gate-transform-hooks.md)
+- [REQ-0009：Effect Intent/Receipt 与幂等效果](requirements/REQ-0009-effect-intent-receipt-idempotent-effects.md)
+- [SPEC-0008：Effect Intent/Receipt 与幂等效果规范](specs/SPEC-0008-effect-intent-receipt-idempotent-effects.md)
 
 ## 研究
 
@@ -50,6 +52,8 @@
 - [ADR-0008：采用 Rust 权威控制面与多语言扩展边界](adrs/ADR-0008-rust-authority-polyglot-extension-boundary.md)
 - [RFC-0008：Kernel 治理的 Observer、Gate 与 Transform Hook 合同](rfcs/RFC-0008-kernel-governed-hook-contract.md)
 - [ADR-0009：采用 Kernel 治理的 Observer、Gate 与 Transform Hook 合同](adrs/ADR-0009-kernel-governed-observer-gate-transform-hooks.md)
+- [RFC-0009：Kernel 治理的 Effect Intent、Receipt 与对账合同](rfcs/RFC-0009-kernel-governed-effect-intent-receipt.md)
+- [ADR-0010：采用 Kernel 治理的 Effect Intent、Receipt 与对账边界](adrs/ADR-0010-kernel-governed-effect-boundary.md)
 
 ## 交付
 
@@ -65,6 +69,7 @@
 - [Rust 权威控制面与多语言扩展边界独立设计评审](reviews/REVIEW-0009-rust-authority-polyglot-extensions-design.md)
 - [REQ-0008 Observer/Gate/Transform Hook 独立设计评审](reviews/REVIEW-0010-observer-gate-transform-hooks-design.md)
 - [REQ-0008 Observer/Gate/Transform Hook 独立实现评审](reviews/REVIEW-0011-observer-gate-transform-hooks-implementation.md)
+- [REQ-0009 Effect Intent/Receipt 独立设计评审](reviews/REVIEW-0012-effect-intent-receipt-design.md)
 - [REQ-0007 Runtime Control 修复记录](fixes/FIX-0001-runtime-control-authority-and-replay-contract.md)
 
 ## 记录类型

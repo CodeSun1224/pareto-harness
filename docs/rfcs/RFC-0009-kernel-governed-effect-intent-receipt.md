@@ -1,11 +1,11 @@
 ---
 id: RFC-0009
 title: Kernel 治理的 Effect Intent、Receipt 与对账合同
-status: proposed
+status: accepted
 owners: [runtime-kernel]
 created: 2026-08-30
 updated: 2026-08-30
-links: [REQ-0009, SPEC-0008, EPIC-0002, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003, REVIEW-0012]
+links: [REQ-0009, SPEC-0008, EPIC-0002, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0009, ADR-0010, ARCH-0002, ARCH-0003, REVIEW-0012]
 ---
 
 # Summary
@@ -264,4 +264,4 @@ SQLite维持v2，不增加table/column/index/trigger，不改变migration checks
 - 质量：协议golden/compatibility、v1/v2/v3 Manifest、Inventory v1/v2、executor descriptor pin、default deny、Intent-before-dispatch、pair fault、幂等mutation、scope矩阵、lease/producer、Fake outcome矩阵、partial/response-loss、Intent/claim/external/pair各crash点、recovery exact/mutation/not-eligible/ExistingTerminal、cancel/deadline/timeout race、unknown/reconciliation、success guard、reopen/fold、fixed-horizon Recorded零执行全部通过；bounded model验证至多一个 terminal pair。
 - Token/费用：不调用真实模型/Provider/付费系统；分别记录Fake reserved/accounted usage和全套本地测试成本，不宣称优化。
 - 延迟：记录Intent pair、claim、terminal pair、reconciliation、1/10/100 Effect fold、writer竞争、inventory和Recorded replay；busy等待保持有限，无证据前不设收益阈值或新增Snapshot/background worker。
-- 设计批准：必须由未参与设计的fresh Agent对固定Git revision执行独立架构评审，逐项检查AC-01至AC-22、权限/隔离、pair原子性、unknown诚实性、成功准入、兼容/回滚和测试追踪。0 open Blocker/Major后才可接受RFC、创建ADR并进入planning；实现后另需fresh独立代码评审。
+- 设计批准：REVIEW-0012对初始fixed `9f8bf23`提出4个Major；经多轮同Reviewerfocused复审，fixed `b7acbd82824d8410d432117c89be1bd56c8ce05c`关闭F-001至F-004，最终independent approved、0 Blocker、0 Major。ADR-0010接受本RFC；实现后仍需fresh独立代码评审。

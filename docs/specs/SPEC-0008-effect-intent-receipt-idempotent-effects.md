@@ -1,11 +1,11 @@
 ---
 id: SPEC-0008
 title: Effect Intent/Receipt 与幂等效果规范
-status: draft
+status: approved
 owners: [runtime-kernel]
 created: 2026-08-30
 updated: 2026-08-30
-links: [REQ-0009, EPIC-0002, REQ-0004, REQ-0007, REQ-0008, RFC-0009, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003, REVIEW-0012]
+links: [REQ-0009, EPIC-0002, REQ-0004, REQ-0007, REQ-0008, RFC-0009, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0009, ADR-0010, ARCH-0002, ARCH-0003, REVIEW-0012]
 ---
 
 # Behavioral contract
@@ -153,4 +153,4 @@ SQLite保持`user_version=2`及accepted DDL/triggers/checksums。Effect/Control 
 
 # Open questions
 
-初次独立REVIEW-0012对fixed `9f8bf23`提出4个Major；本修订冻结fixed-horizon Recorded replay、Boundary Inventory/Effect Record v2、内容地址executor identity与stable Effect recovery command。仍无允许实施阶段自行决定的开放合同。原Reviewer必须逐项验证F-001至F-004 required proof；任何会改变持久Schema、authority、terminal、budget或replay的结论必须先修订REQ/RFC/SPEC并复审。
+初次独立REVIEW-0012对fixed `9f8bf23`提出4个Major；修订冻结fixed-horizon Recorded replay、Boundary Inventory/Effect Record v2、内容地址executor identity与stable Effect recovery command，并唯一化未claim/已claim recovery结论。原Reviewer在fixed `b7acbd82824d8410d432117c89be1bd56c8ce05c`关闭F-001至F-004，最终independent approved、0 Blocker、0 Major；ADR-0010接受合同。没有允许实施阶段自行决定的开放合同。
