@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-30
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REVIEW-0002, REVIEW-0003, REVIEW-0004]
 independence: independent
-reviewed_revision: b7acbd82824d8410d432117c89be1bd56c8ce05c
+reviewed_revision: 60cee6ed44d150185bf99ca3095a8ce803bcc0d3
 open_blockers: 0
 open_majors: 0
 ---
@@ -101,3 +101,4 @@ remediation产品代码限于Event Store v2 migration、Projection/Snapshot/Repl
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选仅提出未来Effect Projection、V2 inventory与fixed-horizon Recorded合同，并显式保留现有Projection/Snapshot/Replay、Inventory V1、Schema/reader与SQLite bytes；`crates/`和`schemas/`零变化。REQ-0009仍未接受/实现，REVIEW-0012 F-004保持open。REQ-0006合同无回退，REVIEW-0005保持approved、0/0。
 - 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小timeout文字修订不改Projection/Snapshot/Replay代码、Inventory、Schema/reader或SQLite；REQ-0009仍proposed/draft、F-004 open且未实现。REQ-0006无回退，REVIEW-0005保持approved、0/0。
 - 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。只改proposed recovery accounting；Projection/Snapshot/Replay/Inventory/Schema零变化，REQ-0009未实现。REQ-0006无回退，REVIEW-0005保持approved、0/0。
+- 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受fixed-horizon Effect设计、创建ADR-0010并同步共享文档；现有Projection/Snapshot/Replay/Inventory/Schema及REQ-0006合同零变化，未声称实现。REVIEW-0005保持approved、0/0。

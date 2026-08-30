@@ -5,16 +5,19 @@ status: approved
 owners: [independent-reviewer]
 created: 2026-08-30
 updated: 2026-08-30
-links: [REQ-0009, SPEC-0008, RFC-0009, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003]
+links: [REQ-0009, SPEC-0008, RFC-0009, ADR-0010, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: b7acbd82824d8410d432117c89be1bd56c8ce05c
+reviewed_revision: 60cee6ed44d150185bf99ca3095a8ce803bcc0d3
 open_blockers: 0
 open_majors: 0
 ---
 
 # Verdict
 
-`approved` for exact revision `b7acbd82824d8410d432117c89be1bd56c8ce05c`：0 Blocker、0 open Major。
+`approved` for exact revision `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`：0 Blocker、0 open Major。
+`b7acbd8..60cee6e`仅完成设计接受闭环：ADR-0010忠实采用本Review在`b7acbd8`批准的合同，
+REQ/RFC/SPEC分别推进为approved/accepted/approved，导航、Epic、backlog与ARCH-0001/0003同步且明确尚未规划或实现。
+没有新增authority、state或replay语义，也没有代码、Schema、Runtime、测试或旧Requirement合同变化。
 最终一行RFC修订强制未claim old-epoch/deadline/cancel recovery只能`not_applied + verified zero usage + full
 reservation release`并禁止partial/unknown；已claim仍只能partial/unknown + reconciliation。该规则与REQ AC-10/13、
 terminal table、SPEC Explicit recovery/terminal mapping和stable command eligibility/priority完全一致，关闭F-004且无新finding。
@@ -135,9 +138,14 @@ focused exact `9f8bf23..b7acbd8`只修订上述同三份REQ-0009 proposed/impact
 没有修改REQ-0002..0008 accepted/implemented Requirement、Spec、RFC、ADR或其产品代码、Schema、SQLite、Cargo、测试与依赖。
 因此本Reviewer可对REVIEW-0001..0007、0010、0011做限定freshness前移；这不接受或实现REQ-0009，也不改变这些Review的原findings/verdict。
 
+design-acceptance closure exact `b7acbd8..60cee6e`只新增ADR-0010，推进REQ-0009/RFC-0009/SPEC-0008状态，
+并同步index、EPIC-0002、backlog、ARCH-0001和ARCH-0003。ADR逐项保持已评审Kernel authority、atomic pair、
+unclaimed/claimed recovery、fixed-horizon Recorded replay、兼容与rollback边界；共享文本明确REQ-0009尚未规划或实现。
+`crates/`、`schemas/`、Cargo、scripts、REQ-0002..0008合同均无差异。
+
 # Re-review conditions
 
-设计门禁现为0 open Blocker、0 open Major，可进入RFC接受、ADR创建、Spec/Requirement批准与planning。
+设计门禁现为0 open Blocker、0 open Major；RFC/ADR/Spec/Requirement已完成接受闭环，可进入planning。
 后续实现必须逐项兑现F-001至F-004 required proof、所有命名filter非零、完整completion gates和fresh independent code review；
 本设计批准不得被表述为REQ-0009已实现或Runtime测试已通过。
 
@@ -163,3 +171,7 @@ focused exact `9f8bf23..b7acbd8`只修订上述同三份REQ-0009 proposed/impact
   recovery以not_applied、verified zero usage结清并full release，禁止partial/unknown；与REQ AC-10/13、terminal table、
   SPEC recovery/mapping和stable command priority一致，无新finding。F-004 closed，当前0 Blocker、0 Major，`approved`；
   仅解除设计门禁，REQ-0009仍未接受、规划或实现。
+- 2026-08-30：design-acceptance closure freshness re-review exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`
+  against `b7acbd82824d8410d432117c89be1bd56c8ce05c`。九个文档只创建忠实的ADR-0010、接受REQ/RFC/SPEC
+  并同步共享导航/架构/路线事实；所有批准声明准确引用`b7acbd8`的independent approved 0/0，且明确Schema、Runtime、
+  代码与实现测试尚不存在。ADR未新增未评审authority/state/replay语义，旧REQ合同无变化；无新finding，保持approved 0/0。

@@ -7,7 +7,7 @@ created: 2026-08-28
 updated: 2026-08-30
 links: [REQ-0008, SPEC-0007, RFC-0008, RFC-0007, ADR-0008, REQ-0004, REQ-0007, REVIEW-0006, REVIEW-0007, REVIEW-0009, FIX-0001]
 independence: independent
-reviewed_revision: b7acbd82824d8410d432117c89be1bd56c8ce05c
+reviewed_revision: 60cee6ed44d150185bf99ca3095a8ce803bcc0d3
 open_blockers: 0
 open_majors: 0
 ---
@@ -142,3 +142,4 @@ Focused planning freshness re-review 在 Windows/PowerShell、2026-08-28 对 exa
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选只新增未来Effect设计，未修改REQ/SPEC/RFC/ADR-0009、Hook Runtime/Schema/tests；Hook decision仍不是Effect/Receipt authority，`hook_pair`与未来`effect_pair`互斥且single-stream terminal拒绝不变。REQ-0009未接受/实现，REVIEW-0012仍有1 open Major。REVIEW-0010保持approved、0/0。
 - 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小timeout修订未改REQ-0008合同、Hook Runtime/Schema/tests、pair互斥或authority边界；REQ-0009仍未接受/实现且F-004 open。REVIEW-0010保持approved、0/0。
 - 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。只改proposed Effect RFC；Hook合同/Runtime/Schema/tests与authority边界零变化，REQ-0009未接受/实现。REVIEW-0010保持approved、0/0。
+- 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已评审Effect设计、创建ADR-0010并同步共享文档；Hook合同/Runtime/Schema/tests与authority边界零变化，REQ-0009未实现。REVIEW-0010保持approved、0/0。

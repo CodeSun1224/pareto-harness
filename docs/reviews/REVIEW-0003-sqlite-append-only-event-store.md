@@ -7,7 +7,7 @@ created: 2026-08-23
 updated: 2026-08-30
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: b7acbd82824d8410d432117c89be1bd56c8ce05c
+reviewed_revision: 60cee6ed44d150185bf99ca3095a8ce803bcc0d3
 open_blockers: 0
 open_majors: 0
 ---
@@ -94,3 +94,4 @@ open_majors: 0
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选仅设计未来Effect复用SQLite v2 events与private atomic pair；Event Store代码、DDL/trigger/user_version、Schema、Cargo和public API零变化，并明确禁止DB v3、第二authority表和单边补写。REQ-0009仍未接受/实现且REVIEW-0012保留1 open Major。REQ-0004合同无回退，REVIEW-0003保持approved、0/0。
 - 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小修订不改Event Store、SQLite v2、DDL/trigger、Schema、Cargo或atomic pair实现，只澄清未来Effect timeout设计；REQ-0009仍被F-004阻塞且未实现。REQ-0004无回退，REVIEW-0003保持approved、0/0。
 - 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。仅收紧未来recovery accounting；Event Store/SQLite/DDL/Schema/Cargo零变化，REQ-0009未实现。REQ-0004无回退，REVIEW-0003保持approved、0/0。
+- 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已评审设计、创建ADR-0010并同步共享文档；Event Store/SQLite/DDL/Schema/Cargo及REQ-0004合同零变化，未声称Runtime已实现。REVIEW-0003保持approved、0/0。

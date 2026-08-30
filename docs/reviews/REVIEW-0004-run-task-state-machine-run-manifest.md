@@ -7,7 +7,7 @@ created: 2026-08-24
 updated: 2026-08-30
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: b7acbd82824d8410d432117c89be1bd56c8ce05c
+reviewed_revision: 60cee6ed44d150185bf99ca3095a8ce803bcc0d3
 open_blockers: 0
 open_majors: 0
 ---
@@ -120,3 +120,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选只设计未来Manifest v3与Effect success guard；lifecycle/Manifest代码、现有V1/V2 Schema、状态边、owner authority和Run/Task Event零变化，旧Run明确不后加Effect。REQ-0009仍未接受/实现且F-004阻塞其terminal矩阵，不重释REQ-0005。REVIEW-0004保持approved、0/0。
 - 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小修订只澄清未来Effect pre/post-claim timeout；lifecycle/Manifest代码、状态边、Schema和owner authority零变化。REQ-0009仍未接受/实现，F-004继续阻塞budget映射。REQ-0005无回退，REVIEW-0004保持approved、0/0。
 - 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。只改future Effect RFC accounting；lifecycle/Manifest代码、状态边、Schema零变化，REQ-0009未接受/实现。REQ-0005无回退，REVIEW-0004保持approved、0/0。
+- 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受未来Manifest v3/Effect设计、创建ADR-0010并同步共享文档；现有Manifest/lifecycle代码、Schema、状态边及REQ-0005合同零变化，REQ-0009未实现。REVIEW-0004保持approved、0/0。

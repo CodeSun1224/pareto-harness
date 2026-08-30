@@ -7,7 +7,7 @@ created: 2026-08-26
 updated: 2026-08-30
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: b7acbd82824d8410d432117c89be1bd56c8ce05c
+reviewed_revision: 60cee6ed44d150185bf99ca3095a8ce803bcc0d3
 open_blockers: 0
 open_majors: 0
 ---
@@ -172,3 +172,4 @@ REQ-0008未实现。后续若改变callback authority、meter evidence epoch、d
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。`9f8bf23..aba3a33`及完整候选均未修改Runtime Control、Protocol、Schema、DB、Cargo或测试；未来Effect terminal pair/recovery只是未批准设计。REVIEW-0012 F-004继续阻塞timeout结论歧义，未把设计冒充现有实现或放宽single-stream terminal、budget、cancel/deadline authority。REVIEW-0007保持approved、0/0。
 - 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小设计修订对Runtime Control、Protocol、Schema、DB、Cargo和测试零变化；未来Effect accounting仍由F-004阻塞，没有冒充实现或放宽现有authority。REVIEW-0007保持approved、0/0。
 - 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。只收紧未实现的Effect RFC；Runtime Control/Protocol/Schema/DB/Cargo/tests零变化。设计批准不冒充实现，REVIEW-0007保持approved、0/0。
+- 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已评审设计、创建ADR-0010并同步共享文档；Runtime Control/Protocol/Schema/DB/Cargo/tests及旧合同零变化，明确未实现。REVIEW-0007保持approved、0/0。
