@@ -7,7 +7,7 @@ created: 2026-08-28
 updated: 2026-08-30
 links: [REQ-0008, SPEC-0007, RFC-0008, RFC-0007, ADR-0008, REQ-0004, REQ-0007, REVIEW-0006, REVIEW-0007, REVIEW-0009, FIX-0001]
 independence: independent
-reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
+reviewed_revision: 021b353d0efc923ef8739e3cb97d88f586c4fe06
 open_blockers: 0
 open_majors: 0
 ---
@@ -140,3 +140,4 @@ Focused planning freshness re-review 在 Windows/PowerShell、2026-08-28 对 exa
   `5546d1fc638785f8db8eac111853f8fbe951f0cd`。REQ只从approved推进planned；PLAN/TASKS/HANDOFF在设计批准0/0和ADR接受后创建，完整承接AC-01至AC-20及F-001至F-004 proof，只有治理TASK-00完成。新的fresh code Review、原代码Reviewer关闭Major/Blocker和REQ-0009禁启门禁明确；产品路径零差异。无新finding，保持approved、0/0。
 - 2026-08-29：focused implementation/closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。REVIEW-0011独立确认实现遵守fixed phase/input lineage、Gate empty-required deny、atomic pair/single-stream terminal拒绝及Transform reject-whole，并在exact `e4877834`关闭全部实现finding。closure只同步done/archive且明确真实Runtime/REQ-0009未实现。设计合同无漂移，REVIEW-0010保持approved、0/0。
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选只新增未来Effect设计，未修改REQ/SPEC/RFC/ADR-0009、Hook Runtime/Schema/tests；Hook decision仍不是Effect/Receipt authority，`hook_pair`与未来`effect_pair`互斥且single-stream terminal拒绝不变。REQ-0009未接受/实现，REVIEW-0012仍有1 open Major。REVIEW-0010保持approved、0/0。
+- 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小timeout修订未改REQ-0008合同、Hook Runtime/Schema/tests、pair互斥或authority边界；REQ-0009仍未接受/实现且F-004 open。REVIEW-0010保持approved、0/0。

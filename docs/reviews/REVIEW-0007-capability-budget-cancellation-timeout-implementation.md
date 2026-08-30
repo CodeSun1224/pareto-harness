@@ -7,7 +7,7 @@ created: 2026-08-26
 updated: 2026-08-30
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
+reviewed_revision: 021b353d0efc923ef8739e3cb97d88f586c4fe06
 open_blockers: 0
 open_majors: 0
 ---
@@ -170,3 +170,4 @@ REQ-0008未实现。后续若改变callback authority、meter evidence epoch、d
 - 2026-08-28：focused REQ-0008 planning freshness re-review exact `e3d8d805b46fb4e1e25b23bc53bead71de730853`。`5546d1f..e3d8d80`对Runtime、Protocol、Schema、DB、Cargo及REQ-0007 authority/accounting实现零差异；计划准确把现有self-commit helper的private transaction-local重构、atomic pair fault/response-loss/concurrency与FakeClock proof列为未来TASK，未冒充现成能力。REQ-0007实现无回退，REVIEW-0007保持approved、0 open Blocker/Major。
 - 2026-08-29：focused REQ-0008 closure freshness re-review exact `84ce5a705edb20f268898938be4579f4946d5e4f`。Runtime Control admission重构为可由Hook writer transaction调用的private helper，同时普通single-stream terminal对Hook-bound operation fail closed；既有Capability、账户预算、取消传播、deadline/timeout、callback/late与Recorded合同保持，workspace Kernel 160/1 ignored通过。closure无runtime差异。REVIEW-0007保持approved、0/0。
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。`9f8bf23..aba3a33`及完整候选均未修改Runtime Control、Protocol、Schema、DB、Cargo或测试；未来Effect terminal pair/recovery只是未批准设计。REVIEW-0012 F-004继续阻塞timeout结论歧义，未把设计冒充现有实现或放宽single-stream terminal、budget、cancel/deadline authority。REVIEW-0007保持approved、0/0。
+- 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小设计修订对Runtime Control、Protocol、Schema、DB、Cargo和测试零变化；未来Effect accounting仍由F-004阻塞，没有冒充实现或放宽现有authority。REVIEW-0007保持approved、0/0。

@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-30
 links: [REQ-0006, SPEC-0005, RFC-0005, ADR-0006, REQ-0003, REQ-0004, REQ-0005, REVIEW-0002, REVIEW-0003, REVIEW-0004]
 independence: independent
-reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
+reviewed_revision: 021b353d0efc923ef8739e3cb97d88f586c4fe06
 open_blockers: 0
 open_majors: 0
 ---
@@ -99,3 +99,4 @@ remediation产品代码限于Event Store v2 migration、Projection/Snapshot/Repl
 - 2026-08-28：substantive freshness confirmation exact `e3d8d805b46fb4e1e25b23bc53bead71de730853`。`5546d1f..e3d8d80`对Projection/Snapshot/Replay、Schema、golden、reader和DB零差异；PLAN把Hook pure fold/recovery与Recorded零handler/append/accounting逐字段不变列为未开始任务和命名非零测试，且禁止writer/recovery authority。REQ-0006无回退，REVIEW-0005保持approved、0 open Blocker/Major。
 - 2026-08-29：substantive freshness confirmation exact `84ce5a705edb20f268898938be4579f4946d5e4f`。新增Hook Projection由exact Event range pure fold并与Control同一MVCC horizon核对；Recorded入口类型上无handler/writer/timeout authority，测试证明零执行、零append、零核算。既有RunTask Projection/Snapshot/Replay合同与DDL未改，workspace回归通过；closure仅文档归档。REVIEW-0005保持approved、0/0。
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选仅提出未来Effect Projection、V2 inventory与fixed-horizon Recorded合同，并显式保留现有Projection/Snapshot/Replay、Inventory V1、Schema/reader与SQLite bytes；`crates/`和`schemas/`零变化。REQ-0009仍未接受/实现，REVIEW-0012 F-004保持open。REQ-0006合同无回退，REVIEW-0005保持approved、0/0。
+- 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小timeout文字修订不改Projection/Snapshot/Replay代码、Inventory、Schema/reader或SQLite；REQ-0009仍proposed/draft、F-004 open且未实现。REQ-0006无回退，REVIEW-0005保持approved、0/0。

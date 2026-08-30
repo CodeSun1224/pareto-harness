@@ -7,7 +7,7 @@ created: 2026-08-25
 updated: 2026-08-30
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REQ-0003, REQ-0004, REQ-0005, REQ-0006, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
+reviewed_revision: 021b353d0efc923ef8739e3cb97d88f586c4fe06
 open_blockers: 0
 open_majors: 0
 ---
@@ -166,3 +166,4 @@ preimage或冲突优先级。实现仍需fresh independent code review和新的R
 - 2026-08-28：exact REQ-0008 planning `e3d8d805b46fb4e1e25b23bc53bead71de730853` substantive freshness re-review。`5546d1f..e3d8d80`未修改REQ-0007合同、Runtime或Schema；PLAN把bounded lease、全账户预算、防超卖、FakeClock cancel/deadline/timeout、late隔离与terminal pair守恒列为未开始任务及命名proof，未扩大authority。REVIEW-0006保持approved、0 open Blocker/Major。
 - 2026-08-29：exact REQ-0008 closure `84ce5a705edb20f268898938be4579f4946d5e4f` substantive freshness re-review。Hook只复用REQ-0007 trusted contract、opaque narrowed lease、transaction-local budget/cancel/deadline/timeout admission；handler不能构造authority，complete/cancel/timeout由唯一terminal pair裁决，late仅安全摘要。REQ-0007设计边界未放宽，相关Hook/Runtime Control回归通过；closure无runtime变化。REVIEW-0006保持approved、0/0。
 - 2026-08-30：focused REQ-0009 design freshness re-review exact `aba3a33703e681c542fd58b32f3d0ae41cff369d`。候选只设计未来Effect调用REQ-0007 Capability、trusted envelope、budget、cancel/deadline和Kernel recovery；REQ-0007 Requirement/Spec/RFC/ADR、Runtime/Schema/API零变化。REVIEW-0012保留F-004以阻塞pre/post-claim timeout映射不一致，未放宽既有verified/unknown或terminal authority。REQ-0009未接受/实现，REVIEW-0006保持approved、0/0。
+- 2026-08-30：final REQ-0009 design freshness re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06`。最小修订未改REQ-0007合同/Runtime/Schema/API；REVIEW-0012继续以F-004阻塞未来Effect未claim accounting的zero/partial冲突，未放宽既有budget、deadline或recovery authority。REQ-0009未接受/实现，REVIEW-0006保持approved、0/0。

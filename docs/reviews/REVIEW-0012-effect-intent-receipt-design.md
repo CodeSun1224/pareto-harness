@@ -7,20 +7,19 @@ created: 2026-08-30
 updated: 2026-08-30
 links: [REQ-0009, SPEC-0008, RFC-0009, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: aba3a33703e681c542fd58b32f3d0ae41cff369d
+reviewed_revision: 021b353d0efc923ef8739e3cb97d88f586c4fe06
 open_blockers: 0
 open_majors: 1
 ---
 
 # Verdict
 
-Focused substantive re-review of exact revision `aba3a33703e681c542fd58b32f3d0ae41cff369d`
-against initial candidate `9f8bf23f8a5737e3c6744662dbcd15ecabbca16f`：`changes-requested`，
-0 Blocker、1 open Major。F-001 fixed replay horizon、F-002 Boundary Inventory/Effect Record V2与F-003
-content-addressed executor identity已由一致的Requirement/RFC/SPEC合同和命名proof计划关闭。F-004的stable
-Kernel recovery key/authority/fingerprint/pair identity/retry顺序大部分闭合，但terminal mapping仍把所有
-`deadline winner`定义为`reconciliation-required/unknown|partial`，而recovery段又把未claim的`deadline_due`
-确定为`not_applied`。同一pre-dispatch timeout仍可能产生两种权威Effect结论，因此不能批准。
+Final focused substantive re-review of exact revision `021b353d0efc923ef8739e3cb97d88f586c4fe06`
+against `aba3a33703e681c542fd58b32f3d0ae41cff369d`：`changes-requested`，0 Blocker、1 open Major。
+最小修订已统一未claim deadline/cancel为`not_applied`、已claim为partial/unknown + reconciliation，并使
+terminal table、SPEC与REQ的Effect结论一致；stable recovery eligibility/priority也无新绕过。但RFC recovery段
+仍允许未claim recovery以“verified zero/partial meter”结清，而terminal table/SPEC要求verified zero并release。
+同一未dispatch history的budget consume/release仍不唯一，因此F-004不能关闭。
 
 本评审只评价固定 revision 的三份新增设计文档及其引用的 accepted 合同和实际代码基线；没有评价或采纳
 提交后的未提交工作区结论，也没有把当前不存在的 Effect Runtime、Schema 或测试当作证据。
@@ -32,7 +31,7 @@ Kernel recovery key/authority/fingerprint/pair identity/retry顺序大部分闭�
 | F-001 | Major | `RFC-0009:181,193,195-208`；`SPEC-0008:82-86`；REQ-0009 AC-17/18/19 | Remediation新增V2 inventory固定exact Effect inclusive cursor/history digest；projection API只能读取显式horizon，Recorded逐项核对该range，horizon后late/reconciliation facts不参与同一pin，alternate/current/unpinned cursor/digest拒绝。相同Manifest/inventory在追加后事实前后必须byte-identical。 | 原required proof已进入`recorded_replay`与`projection_recovery`命名计划；实现仍须提交source-late-after-pin golden/negative证据。 | closed |
 | F-002 | Major | `RFC-0009:195-208,253-255`；`SPEC-0008:84-86,98,122`；REQ-0009 AC-09/18/19 | Remediation保留Boundary Inventory/Record V1 bytes/reader，新增V2 inventory与Effect record；record固定effect/request/attempt/external/executor/operation identity，并分别表达applied、not_applied、cancelled-before-claim、partial confirmed/unknown digests、limitations和reconciliation binding，禁止用V1 Failed承载partial/unknown。 | 原required proof已进入Inventory V1/V2 compatibility与Recorded逐项等价计划；实现仍须证明旧bytes不变及partial/unknown不能降格。 | closed |
 | F-003 | Major | `RFC-0009:34-48,81-89,120,128-138,193`；`SPEC-0008:23-33,52,60-62,82`；REQ-0009 AC-01/05/19 | Remediation新增独立内容地址`EffectExecutorDescriptorV1`，registration exact绑定revision/content/config；compatibility digest仅证明实现匹配而不替代identity。executor identity进入Effect/request ID、Intent、claim、recovery key、lease、Receipt admission、Projection及reopen；same-key executor替换稳定冲突。 | 原required proof已进入protocol golden、wrong-executor/substitution、lease与compatibility命名计划；实现仍须证明descriptor/current substitution fail closed。 | closed |
-| F-004 | Major | REQ-0009 AC-08/10/12/13/20；`RFC-0009:140-173`；`SPEC-0008:54-70` | Remediation已冻结Kernel-private recovery authority、base/full key、epoch/Clock/evidence、domain-separated fingerprint、pair/Event IDs、锁内exact/mutation/ExistingTerminal/eligibility顺序及response-loss retry。但terminal矩阵仍规定所有`deadline winner`产生`reconciliation-required / unknown或partial`，recovery合同却规定未claim的`deadline_due`由history证明未交付lease并结论`not_applied`。这会让同一pre-dispatch timeout按入口不同形成open reconciliation或确定未执行，破坏唯一terminal/预算/lifecycle fold。 | 在Requirement/RFC/SPEC统一按claim boundary冻结cause→Runtime outcome/accounting→Effect conclusion矩阵：pre-claim deadline必须唯一映射`timed_out + verified not_applied`且不打开reconciliation；post-claim deadline才是`timed_out + partial/unknown + reconciliation-required`。同样显式冻结process-loss/cancellation的pre/post-claim映射。`crash_recovery`、`cancellation_timeout`和bounded reverse-race测试须覆盖deadline equality与两个入口并证明同一唯一pair。 | open |
+| F-004 | Major | REQ-0009 AC-10/12/13/20；`RFC-0009:142-173,186-188`；`SPEC-0008:54-74` | `021b353`已把未claim deadline/cancel唯一映射为not_applied、已claim唯一映射partial/unknown + reconciliation，关闭Effect conclusion分歧；recovery authority/key/fingerprint/pair/retry顺序保持一致。残余矛盾在budget accounting：RFC terminal table的未claim deadline与SPEC明确要求`verified zero`并release，RFC recovery段却仍允许未claim old-epoch/deadline/cancel以“verified zero/partial meter”结清。由于history证明Kernel从未交付executor lease，同一入口不能一处保证零消费、另一处允许partial consume。 | 统一Requirement/RFC/SPEC为所有未claim recovery cause只允许verified zero accounted usage并full release reservation；若确需对pre-dispatch内部工作收费，必须另立不伪装成Effect usage的版本化budget合同。`crash_recovery`、`atomic_settlement`与`cancellation_timeout`计划须断言未claim deadline/cancel/process-loss零consume、full release，已claim才允许verified partial或unknown全额。 | open |
 
 # Constitutional effect trace
 
@@ -40,10 +39,10 @@ Kernel recovery key/authority/fingerprint/pair identity/retry顺序大部分闭�
 |---|---|---|
 | Proposal and admission | principal + persisted v3 Manifest/Task + exact registry/executor/history + Capability/trusted envelope + cancel/deadline → atomic reserve/Intent pair | 默认拒绝、executor pin、scope与预算authority均留在Kernel，F-003 closed。 |
 | Dispatch | committed Intent → writer内refold → claim/recovery key → executor-bound opaque lease → Fake executor | Intent-before-dispatch、executor exact与already-claimed不重发lease闭合；crash recovery identity已持久化。 |
-| Receipt and settlement | bounded untrusted observation → executor/producer/adapter/lease/schema/meter admission → atomic control settlement/Effect conclusion | Receipt不是authority、unknown保守核算与pair零/二方向满足；pre-claim deadline mapping仍受F-004阻塞。 |
+| Receipt and settlement | bounded untrusted observation → executor/producer/adapter/lease/schema/meter admission → atomic control settlement/Effect conclusion | pre/post-claim Effect结论已唯一；未claim recovery accounting仍受F-004阻塞。 |
 | Partial/unknown and reconciliation | partial/unknown terminal pair → V2 record保留confirmed/unknown/limitations → pinned query producer → append-only resolution | live Event与finalized V2 inventory均不再降格partial/unknown，F-002 closed。 |
-| Lifecycle | success transaction fold control/effect，拒绝reserved、pending、partial/unknown/open reconciliation；failed/cancelled在operation settle后可保留对账 | authority方向满足；F-004需统一pre/post-claim timeout结论以确保所有入口fold一致。 |
-| Projection/recovery | explicit inclusive cursor + retained identities → pure Projection；persisted key → Kernel recovery command → atomic terminal pair | fixed horizon和stable recovery大体闭合；terminal cause matrix仅剩F-004。 |
+| Lifecycle | success transaction fold control/effect，拒绝reserved、pending、partial/unknown/open reconciliation；failed/cancelled在operation settle后可保留对账 | pre/post-claim reconciliation状态已一致；budget fold仍需F-004唯一化。 |
+| Projection/recovery | explicit inclusive cursor + retained identities → pure Projection；persisted key → Kernel recovery command → atomic terminal pair | stable recovery identity/priority闭合；未claim zero/full-release accounting仍不一致。 |
 | Recorded replay | V2 inventory-fixed cursor/history → source Effect fold/read only；horizon后facts排除；API无live authority | 相同pin byte-identical、无executor/writer/settlement authority，F-001/F-002 closed。 |
 
 # Acceptance trace
@@ -57,21 +56,21 @@ Kernel recovery key/authority/fingerprint/pair identity/retry顺序大部分闭�
 | AC-05 | design-satisfied at plan level | opaque lease exact绑定executor/scope/effect/attempt/operation/reservation/epoch/claim/recovery key。 |
 | AC-06 | design-satisfied at plan level | outcome矩阵仅使用进程内Fake且禁止真实I/O；实现测试尚不存在。 |
 | AC-07 | design-satisfied at plan level | Receipt observation经过producer/adapter/lease/schema/limits/meter admission，非法受信producer输出走unknown保守结算。 |
-| AC-08 | not satisfied | 三轴与唯一pair方向正确，但pre-claim deadline在terminal矩阵和recovery段有两种结论，F-004。 |
+| AC-08 | design-satisfied | 未claim明确not_applied且无reconciliation，已claim明确partial/unknown并打开reconciliation。 |
 | AC-09 | design-satisfied at plan level | Event与V2 record都保留partial confirmed/unknown摘要、limitations和reconciliation binding，不自动retry。 |
-| AC-10 | not satisfied | stable recovery authority/key/identity/retry已闭合；pre-claim deadline/process-loss/cancel terminal映射仍须统一，F-004。 |
+| AC-10 | design-satisfied subject to F-004 | stable recovery authority/key/identity/eligibility/retry与pre/post-claim结论已闭合；accounting仍不唯一。 |
 | AC-11 | design-satisfied at plan level | pinned reconciliation producer、exact/mutation、append-only及inventory fixed horizon均闭合。 |
-| AC-12 | not satisfied | pair与核算原子性明确，但pre-claim timeout究竟是not_applied还是unknown会改变release/consume与reconciliation，F-004。 |
-| AC-13 | not satisfied | writer priority、deadline equality与recovery identity明确；pre/post-claim deadline outcome矩阵矛盾，F-004。 |
+| AC-12 | not satisfied | pair原子性明确，但未claim recovery仍可按RFC文字选择zero或partial accounted usage，F-004。 |
+| AC-13 | not satisfied | deadline/cancel的Effect结论与writer priority已统一；未claim零consume/full-release仍与recovery段冲突，F-004。 |
 | AC-14 | design-satisfied at plan level | terminal后late/audit不反转control/lifecycle/budget，horizon后facts不改变同一Recorded pin。 |
 | AC-15 | design-satisfied at plan level | 单append-only Effect stream、无第二mutable authority table、纯fold和cross-pair验证方向明确。 |
 | AC-16 | design-satisfied at plan level | tenant/user presence-value/workspace/run/task/actor及业务ID exact矩阵已计划，跨域错误不写目标。 |
-| AC-17 | design-satisfied subject to F-004 | explicit cursor/history、executor/recovery identity和fail-closed矩阵明确；terminal cause fold仍须唯一。 |
+| AC-17 | design-satisfied subject to F-004 | explicit cursor/history、executor/recovery identity和Effect terminal fold明确；budget projection必须拒绝不一致accounting。 |
 | AC-18 | design-satisfied at plan level | V2 inventory固定cursor/history，horizon后facts不参与，Recorded类型上无live authority。 |
 | AC-19 | design-satisfied at plan level | Manifest v3、Executor V1、Inventory/Record V2均新major/type并保留v1/v2、SQLite v2及旧bytes/readers。 |
-| AC-20 | not satisfied at design gate | F-001至F-003 proof已进入命名计划；F-004仍缺pre/post-claim cause matrix及两入口一致性的明确测试。 |
+| AC-20 | not satisfied at design gate | pre/post-claim state测试已补；F-004仍缺未claim zero-consume/full-release在recovery/settlement/race三组测试的一致断言。 |
 | AC-21 | design-satisfied at plan level | proposal/intent/dispatch/receipt/reconciliation接口保持Kernel-private且不提前授予Provider/Tool/Sandbox/Loop authority。 |
-| AC-22 | design-satisfied subject to F-004 | success同事务fold并拒绝未决/open reconciliation；F-004必须保证timeout入口不会对同一history产生不同open-reconciliation状态。 |
+| AC-22 | design-satisfied | success同事务fold并拒绝未决/open reconciliation；021b353已统一pre/post-claim reconciliation状态。 |
 
 # Compatibility, permission, and isolation review
 
@@ -100,6 +99,14 @@ Focused re-review在Windows/PowerShell、2026-08-30独立执行：
 - `python scripts/check_docs.py`：`Document validation passed: 190 Markdown files, 65 formal IDs.`，exit 0；仅在确认REQ-0002..0008 accepted/implemented事实与代码零漂移后，才把REVIEW-0001..0007、0010、0011做限定freshness前移。
 - `git diff --check`及仅Review staged diff检查在提交前通过；没有修改REQ-0009设计、Requirement/Spec/RFC/ADR、代码、Schema或测试。
 
+Final focused candidate `aba3a33..021b353`仅对三份REQ-0009设计做6 insertions、5 deletions：REQ AC-13、
+RFC terminal/lifecycle文本与SPEC terminal/test trace。没有代码、Schema、Runtime、旧合同或依赖变化。门禁将在本轮Review
+和限定freshness前移后重新执行；F-004保持open依据是上述固定文本中的accounting冲突，而非缺少实现测试。
+
+Final focused re-review独立执行：24 governance tests passed；`python scripts/check_docs.py`通过
+（190 Markdown files、65 formal IDs）；`git diff --check`和仅`docs/reviews/` scope检查通过。不存在的Effect
+Runtime tests仍未被虚构为实现证据。
+
 Initial independent Reviewer 在Windows/PowerShell、2026-08-30执行：
 
 - `python -m unittest discover -s scripts/tests -p "test_*.py"`：24 tests passed，exit 0；这些是治理脚本测试，不是Effect行为证据。
@@ -121,15 +128,15 @@ initial exact `d2de39e..9f8bf23` diff仅新增：
 - `docs/rfcs/RFC-0009-kernel-governed-effect-intent-receipt.md`
 - `docs/specs/SPEC-0008-effect-intent-receipt-idempotent-effects.md`
 
-focused exact `9f8bf23..aba3a33`只修订上述同三份REQ-0009 proposed/impact-analyzed/draft设计并链接本Review；
+focused exact `9f8bf23..021b353`只修订上述同三份REQ-0009 proposed/impact-analyzed/draft设计并链接本Review；
 没有修改REQ-0002..0008 accepted/implemented Requirement、Spec、RFC、ADR或其产品代码、Schema、SQLite、Cargo、测试与依赖。
 因此本Reviewer可对REVIEW-0001..0007、0010、0011做限定freshness前移；这不接受或实现REQ-0009，也不改变这些Review的原findings/verdict。
 
 # Re-review conditions
 
-同一独立Reviewer应在新的固定revision上确认F-004的pre/post-claim recovery cause矩阵在Requirement/RFC/SPEC完全一致，
-尤其deadline equality从callback/timeout/recovery任一入口只能产生同一Runtime outcome、Effect conclusion、budget accounting和
-reconciliation状态；命名bounded race计划同步。只有0 open Blocker、0 open Major时才可把本Review改为`approved`并进入
+同一独立Reviewer应在新的固定revision上确认F-004的未claim accounting在Requirement/RFC/SPEC完全一致：所有未claim
+deadline/cancel/process-loss都只能zero consume并full release，不得由recovery段重新允许partial meter；命名recovery、settlement、
+timeout race计划同步。只有0 open Blocker、0 open Major时才可把本Review改为`approved`并进入
 RFC接受/ADR/Spec批准与planning，设计批准仍不等于实现证据。
 
 # Re-review history
@@ -144,3 +151,8 @@ RFC接受/ADR/Spec批准与planning，设计批准仍不等于实现证据。
   descriptor贯穿identity/admission/reopen关闭F-003。stable recovery key/authority/fingerprint/pair/retry已补齐，
   但pre-claim `deadline_due`在terminal table与recovery段仍分别为unknown/reconciliation与not_applied，F-004保持open。
   当前0 Blocker、1 open Major，`changes-requested`；没有Runtime/Schema/测试实现可被本设计复审宣称通过。
+- 2026-08-30：final focused re-review exact `021b353d0efc923ef8739e3cb97d88f586c4fe06` against
+  `aba3a33703e681c542fd58b32f3d0ae41cff369d`。6+/5-修订已把未claim deadline/cancel统一为not_applied、
+  已claim统一为partial/unknown + reconciliation，Effect结论与recovery eligibility/priority无新冲突；但RFC recovery
+  仍允许未claim“verified zero/partial meter”，与terminal table/SPEC的verified zero + release冲突。F-004保持open，
+  当前0 Blocker、1 open Major，`changes-requested`；REQ-0009仍不得接受或进入实现。
