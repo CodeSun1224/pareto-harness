@@ -5,7 +5,7 @@ status: proposed
 owners: [runtime-kernel]
 created: 2026-08-30
 updated: 2026-08-30
-links: [REQ-0009, SPEC-0008, EPIC-0002, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003]
+links: [REQ-0009, SPEC-0008, EPIC-0002, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003, REVIEW-0012]
 ---
 
 # Summary
@@ -34,13 +34,18 @@ v1 禁止 Hook/Effect pins；v2 要求 Hook、禁止 Effect；v3 同时要求 Ho
 `EffectRegistryRevisionV1` 由 `RevisionMetadata(revision_kind=effect_registry)`、`config_digest` 与按 `effect_kind` 排序唯一的 registrations 组成。每个 `EffectRegistrationV1` 固定：
 
 ```text
-effect_kind, effect_revision, adapter_revision, producer_revision,
+effect_kind, effect_revision, executor_revision, executor_descriptor_digest,
+adapter_revision, producer_revision,
 operation_contract_revision, request_schema_ref, receipt_schema_ref,
 idempotency_policy, unknown_outcome_policy, reconciliation_policy_revision,
-redaction_policy_revision, limits, handler_compatibility_digest
+redaction_policy_revision, limits
 ```
 
 首片策略闭合为：external idempotency `unsupported | keyed`；unknown outcome 一律 `reconcile_only`。`keyed` 只证明外部系统按同一 key 去重，不自动授权 Kernel 重试；首片不实现 redispatch。真实 adapter/producer/transport 必须由后续 Requirement 注册。
+
+`EffectExecutorDescriptorV1` 是独立内容地址revision：metadata的`revision_kind=effect_executor`，content包含executor/adapter/producer revisions、request/receipt Schema、config digest、resource/meter/recovery contracts和reference implementation compatibility digest。registration的`executor_revision`必须等于descriptor metadata revision，`executor_descriptor_digest`必须等于descriptor canonical content digest；Fake binding再同时匹配descriptor内implementation compatibility digest。compatibility digest只证明某个进程内实现符合该exact descriptor，不能替代revision或content identity。
+
+executor revision/digest/config是Effect ID与request digest的一部分，并逐事件绑定到Intent、dispatch claim、recovery key、opaque lease、Receipt admission、Projection和reopen resolver。registry不变但executor bytes/descriptor替换必须fail closed；same client key切换executor为idempotency mutation。
 
 ## 2. Aggregate, events, and state
 
@@ -77,7 +82,8 @@ Kernel 从以下 preimage 派生 `EffectIdV1`：
 
 ```text
 domain, full isolation scope, effect registry revision, effect kind,
-effect revision, idempotency-key digest
+effect revision, executor revision/descriptor/config digests,
+idempotency-key digest
 ```
 
 `request_digest` 覆盖 exact request Schema/value、subject/Task、operation contract、deadline policy和registry identity。相同 Effect ID 与 exact digest 返回原 Intent/Projection；相同 key 但任一语义字段不同为稳定 `idempotency_conflict`。跨 scope/kind/revision 的相同客户 key 既不去重也不泄漏另一 Effect。
@@ -94,7 +100,7 @@ untrusted Effect proposal
   -> exact Effect registry + lifecycle/control/effect histories
   -> default-deny Capability + trusted resource envelope + cancellation/deadline
   -> atomic reserve/Intent pair
-  -> atomic Effect dispatch claim
+  -> atomic Effect dispatch claim + persisted recovery key
   -> opaque single-attempt EffectDispatchLease + redacted Fake request view
   -> Fake executor returns untrusted observation
   -> receipt/producer/lease/schema/limits/meter admission
@@ -103,7 +109,7 @@ untrusted Effect proposal
   -> Recorded replay/inventory (read/fold only)
 ```
 
-公开协议对象、validated request、Effect ID、Receipt bytes或同scope Actor都不构成 authority。`EffectAuthority`、`EffectDispatchLease`、producer handle与reconciliation authority均为 crate-private、不可序列化、用途受限的值。Fake executor无 Event Store、raw SQLite、Capability constructor、budget state、Hook authority、filesystem、network、process或secret访问。
+公开协议对象、validated request、Effect ID、Receipt bytes或同scope Actor都不构成 authority。`EffectAuthority`、`EffectDispatchLease`、producer handle、recovery authority与reconciliation authority均为 crate-private、不可序列化、用途受限的值。Fake executor无 Event Store、raw SQLite、Capability constructor、budget state、Hook authority、filesystem、network、process或secret访问。
 
 Hook decision既不是 Effect authority也不是 Receipt evidence。后续 Loop可在提交 Effect proposal前执行REQ-0008 Gate；本切片不把 Hook handler变成executor、producer或reconciler。
 
@@ -111,7 +117,7 @@ Hook decision既不是 Effect authority也不是 Receipt evidence。后续 Loop�
 
 Runtime Control `OperationReservedPayloadV1` 新增可选 `effect_pair: EffectPairBindingV1`，与既有 `hook_pair` 互斥。retained旧Schema reader仍读取旧payload；新Effect-capable set使用新增optional binding并保持非Effect操作两者皆空。
 
-`EffectReservePairCommandV1` 固定 pair ID/kind/fingerprint、完整scope/owner、control/effect stream及expected cursor、两个确定性Event ID/sequence和完整prepared bytes。control payload绑定operation/reservation/trusted envelope；Effect payload绑定Effect/attempt/idempotency/request/registry/policy及counterpart event。
+`EffectReservePairCommandV1` 固定 pair ID/kind/fingerprint、完整scope/owner、control/effect stream及expected cursor、两个确定性Event ID/sequence和完整prepared bytes。control payload绑定operation/reservation/trusted envelope；Effect payload绑定Effect/attempt/idempotency/request/registry/executor/policy、initial process epoch、deadline及`EffectRecoveryBaseKeyV1`。base key同时固定source SchemaSet/limits、operation/reservation/meter/recovery contract，供Intent尚未claim时的确定未执行恢复；counterpart Event交叉绑定。
 
 在单一 `BEGIN IMMEDIATE` 内按 integrity → pair exact/mutation → zero/one/two presence → expected cursor/domain admission → insert control → insert Effect → commit。zero 才写两个；two 只允许双方bytes/fingerprint/cross-reference全等的 exact retry；one 一律 `corrupt_partial_pair`，不得补写、dispatch或自动settle。第二insert和commit fault injection必须证明rollback后两边均无事实。
 
@@ -121,7 +127,7 @@ Intent提交才表示已获准尝试，不表示已执行。pair成功返回后�
 
 Kernel-owned orchestration在调用executor前以单stream `effect-dispatch-claimed` 命令重新fold lifecycle/control/effect，验证 live mode、operation仍reserved、无effective cancellation、deadline未到、attempt未claim且registry/lease source exact。claim commit失败绝不调用 executor。
 
-claim成功后 Kernel在同一进程调用 Fake executor一次。lease绑定scope/effect/attempt/operation/reservation/external key digest、producer/adapter、process epoch、deadline、request digest与claim Event；executor不能保存或委托它。对已经claim的 command，exact retry只返回 `already_claimed/reconciliation_required`，不再次发放可执行 lease。因此 crash 发生在claim与调用之间会保守地产生unknown，而不是猜测未执行。
+claim event扩展base key为完整`EffectRecoveryKeyV1`，增加claim Event ID/digest、claim process epoch/Clock sample、executor revision/descriptor/config、external key digest和claim policy。claim成功后 Kernel在同一进程调用 Fake executor一次。lease绑定scope/effect/attempt/operation/reservation/external key digest、executor/producer/adapter、process epoch、deadline、request digest、claim Event与完整recovery key；executor不能保存或委托它。对已经claim的 command，exact retry只返回 `already_claimed/recovery_required`，不再次发放可执行 lease。因此 crash 发生在claim与调用之间会保守地产生unknown，而不是猜测未执行。
 
 Fake executor由 Manifest-pinned compatibility identity解析，确定性模拟：applied receipt、rejected-before-apply、partial、accepted-with-response-loss、timeout、malformed/oversized receipt及return-before-terminal crash。调用计数与按external key的应用计数用于证明Kernel重试和Recorded replay不重复效果，但计数不是权威状态。
 
@@ -129,7 +135,7 @@ Fake executor由 Manifest-pinned compatibility identity解析，确定性模拟�
 
 `EffectReceiptObservationV1` 固定Effect/attempt/external key digest、producer/adapter revision、outcome class、observed-at、safe receipt digest、bounded result摘要、observed usage与limitations。允许的外部 outcome为 `applied | rejected_before_apply | partial | unknown`。它始终是不可信输入。
 
-只有持有exact live dispatch lease与registered producer handle的返回路径可触发terminal admission。Kernel在decode前执行bytes/depth/count上限，再验证Schema、scope、request/external key digest、producer/adapter、Clock/deadline与Kernel meter。错误producer或跨域消息不写目标；正确producer的非法输出形成安全rejected observation并按unknown规则结清。
+只有持有exact live dispatch lease与registered producer handle的返回路径可触发terminal admission。Kernel在decode前执行bytes/depth/count上限，再验证Schema、scope、request/external key digest、executor/producer/adapter、Clock/deadline与Kernel meter。错误executor/producer或跨域消息不写目标；正确producer的非法输出形成安全rejected observation并按unknown规则结清。
 
 `OperationSettledPayloadV1` 同样新增与 Hook 互斥的 `effect_pair`。terminal pair根据结论固定：
 
@@ -142,7 +148,29 @@ Fake executor由 Manifest-pinned compatibility identity解析，确定性模拟�
 | deadline winner | timed_out；verified partial或unknown全额 | reconciliation-required / unknown或partial |
 | effective cancellation before claim | cancelled；verified zero | attempt-concluded / not_applied |
 
-`EffectTerminalPairCommandV1`复用reserve pair的zero/two/one规则与相同writer serialization。Effect-bound operation禁止调用通用单stream Runtime Control settlement/timeout入口；timeout recovery必须走Effect terminal pair。这样没有合法的control-only catch-up状态，budget gross/释放与Effect conclusion原子一致。
+`EffectTerminalPairCommandV1`复用reserve pair的zero/two/one规则与相同writer serialization。Effect-bound operation禁止调用通用单stream Runtime Control settlement/timeout入口；callback和下节的recovery都必须生成Effect terminal pair。这样没有合法的control-only catch-up状态，budget gross/释放与Effect conclusion原子一致。
+
+## 7.1 Crash and timeout recovery command
+
+Kernel提供显式、无background scanner的`EffectRecoveryCommandV1`。它只能由crate-private recovery authority从persisted Effect projection构造；临时caller、owner、executor或Receipt不能创建。command固定：base/full recovery key、recovery cause、canonical Clock sample、current process epoch observation、Kernel meter snapshot或`unknown` evidence fingerprint、expected control/effect cursors、terminal pair kind及双方prepared Event preimage。
+
+recovery cause闭合为：`process_epoch_lost | deadline_due | cancellation_effective`。Kernel认证的process epoch observation证明Intent/claim所属旧epoch不再拥有live executor lease；普通字符串不构成证明。domain-separated canonical preimage `pareto.effect-recovery.command.v1` 的SHA-256形成command fingerprint，并确定性派生pair ID、control settlement Event ID和Effect conclusion Event ID。
+
+锁内顺序不可交换：
+
+```text
+integrity/source/schema/isolation/recovery-key exact
+  -> same command/pair/Event ID exact bytes = AlreadyApplied
+  -> same ID mutation = idempotency_conflict
+  -> different ID but operation already terminal = ExistingTerminal no-op
+  -> eligibility/due/cancellation/process-epoch proof
+  -> control/effect expected cursors + domain state
+  -> append terminal pair + commit
+```
+
+`not_eligible`不append也不消费identity；新Clock/process observation可形成新ID。Intent尚未claim且旧epoch失效、deadline due或取消生效时，history证明Kernel从未交付executor lease，recovery以`not_applied`结清并按verified zero/partial meter释放。存在claim时任何process loss/cancel/timeout都不能证明外部未执行，必须以`unknown`或persisted verified partial结清并打开reconciliation。claim所属同一live epoch且deadline未到、无cancel时not-eligible。
+
+terminal pair commit响应丢失必须exact重试同command bytes；若command bytes随进程丢失，reopen以新sample/epoch产生新ID并命中ExistingTerminal no-op。claim-before-call、external-applied-before-response和return-before-terminal-pair在history上都落入同一保守unknown语义；recovery不能redispatch、refund或制造Receipt。
 
 ## 8. Partial, unknown, late Receipt, and reconciliation
 
@@ -150,7 +178,7 @@ partial记录已确认components/result digest、未知components摘要、limita
 
 普通迟到Receipt即使producer正确，也只追加`effect-late-receipt-observed`安全摘要，不能直接关闭reconciliation。关闭必须经`EffectReconciliationCommandV1`：owner只能request；实际结论必须来自registry固定的Fake query adapter/reconciliation producer、绑定原Effect/attempt/external key、包含source observation IDs和canonical evidence fingerprint。首片无人工自证、自动refund、补偿或redispatch。
 
-对账结果为 `confirmed_applied | confirmed_not_applied | confirmed_partial | unresolved`。前三者追加`effect-reconciled`并关闭；unresolved追加observation但保持open。exact command retry幂等，same ID mutation冲突。任何结果都不修改control settlement、budget、lifecycle或已finalized Boundary Inventory；Run terminal后的新事实进入 `BoundaryReconciliationRevision` lineage。
+对账结果为 `confirmed_applied | confirmed_not_applied | confirmed_partial | unresolved`。前三者追加`effect-reconciled`并关闭；unresolved追加observation但保持open。exact command retry幂等，same ID mutation冲突。任何结果都不修改control settlement、budget、lifecycle或已finalized Boundary Inventory；Run terminal后的新事实进入 `BoundaryReconciliationRevision` lineage，但不会改变已finalized inventory固定的source horizon，也不会被只pin该inventory的Recorded replay读取。
 
 ## 9. Cancellation, concurrency, and lifecycle success
 
@@ -162,11 +190,22 @@ callback、cancel、timeout、lifecycle transition与terminal pair都在writer t
 
 ## 10. Projection, inventory, and replay
 
-`EffectProjectionV1`绑定store ID、完整scope/owner/effect stream/cursor、Manifest source SchemaSet/limits、registry/config/policy、exact reducer/output reader/history digest，按Effect ID排序保存request digest、idempotency digest、attempt/claim/receipt、operation/reservation/pair、dispatch/external/reconciliation状态与audit counters。pure fold无Clock、executor、I/O或global mutable state。
+`EffectProjectionV1`绑定store ID、完整scope/owner/effect stream/cursor、Manifest source SchemaSet/limits、registry/config/policy、executor revision/descriptor/config、exact reducer/output reader/history digest，按Effect ID排序保存request digest、idempotency digest、attempt/claim/recovery/receipt、operation/reservation/pair、dispatch/external/reconciliation状态与audit counters。projection API必须接受显式inclusive cursor并只读取该horizon；pure fold无Clock、executor、I/O或global mutable state。
 
-Kernel-private finalizer可在source Run terminal后从完整validated Effect range与Manifest recording policy构建`BoundaryInventoryRevision`：applied映射Received(receipt digest)，not-applied映射Failed(reason)，cancelled映射Cancelled，partial/unknown映射Failed(`reconciliation_required`或`partial_reconciliation_required`)。空Effect必须生成显式空inventory而非自报确定性。finalizer不写回source Event、不覆盖inventory；late facts生成新的`BoundaryReconciliationRevision`。
+既有`BoundaryInventoryRevision`/`BoundaryRecord` 1.0明确把`Failed`定义为receipt前失败，不能承载partial/unknown。REQ-0009因此发布`BoundaryInventoryRevisionV2`和`EffectBoundaryRecordV2`，不原位改变V1：inventory固定source Run、SchemaSet/policy、exact Effect stream inclusive cursor、该horizon的history digest及规范排序records。每个record固定Effect/request/attempt/external key/executor/operation identity，结论闭合为：
 
-Recorded Effect replay要求derived Manifest mode与validated source inventory exact匹配，完整读取source Effect stream、重建Projection并核对Boundary records。API类型图中不存在executor、dispatch lease、Clock、writer、reserve/settle或reconciliation producer；source/derived event count、budget与Fake counters前后不变。Simulated/Reexecute入口稳定拒绝。
+```text
+applied { receipt_digest, result_digest, limitations }
+not_applied { reason_code, limitations }
+partial { receipt_digest?, confirmed_components_digest,
+          unknown_components_digest, limitations, reconciliation_binding }
+unknown { limitations, reconciliation_binding }
+cancelled_before_claim { reason_code }
+```
+
+`reconciliation_binding`固定inventory finalization时`open | resolved`状态、source reconciliation Event ID（若有）和evidence digest；它不能把partial/unknown编码为V1 Failed。空Effect生成显式空V2 inventory。V2 finalizer只读取指定Effect cursor并验证history digest，不写回source Event、不覆盖inventory。horizon后的late/reconciliation facts只能产生独立`BoundaryReconciliationRevision`，不扩展或替换V2 inventory。
+
+Run Manifest v3的Recorded Effect replay只接受validated V2 inventory；`ExecutionMode`仍pin其immutable revision ID，Kernel按v3 SchemaSet解析V2 reader。replay只读取V2固定inclusive cursor内的source Effect stream，验证history digest、重建Projection并逐项核对Effect records。horizon后追加late/reconciliation Event前后，相同Manifest/inventory pin的projection digest与records必须byte-identical；alternate/current/unpinned inventory或cursor/digest拒绝。API类型图中不存在executor、dispatch lease、Clock、writer、reserve/settle/recovery或reconciliation producer；source/derived event count、budget与Fake counters前后不变。Simulated/Reexecute入口稳定拒绝。
 
 # Interfaces, data flow, and invariants
 
@@ -184,7 +223,8 @@ Recorded Effect replay要求derived Manifest mode与validated source inventory e
 | pair响应丢失 | exact bytes重试返回two-existing；不生成新ID/Clock/attempt |
 | 单边pair/resealed counterpart | aggregate corrupt；不补写、不执行、不settle |
 | claim前crash | Intent保持；显式恢复可判定未claim，不自动执行 |
-| claim后、调用前或返回前crash | possible effect；reconciliation-required；默认不redispatch |
+| Intent后claim前crash | persisted base recovery key + old epoch proof；terminal pair确定not-applied，不调用executor |
+| claim后、调用前或返回前crash | persisted full recovery key；process-loss command保守unknown/reconciliation-required；默认不redispatch |
 | external accepted但无响应 | operation保守settle，Effect unknown；对账 |
 | partial | 保留confirmed/unknown摘要和partial usage；不整体重试 |
 | malformed/oversized/injected Receipt | predecode limits；安全拒绝摘要；unknown保守结算 |
@@ -192,7 +232,8 @@ Recorded Effect replay要求derived Manifest mode与validated source inventory e
 | cancel/timeout/Receipt race | writer内refold；唯一operation terminal/Effect pair；late只audit |
 | reconciliation伪造 | owner request不是evidence；仅pinned producer可关闭；不改budget/lifecycle |
 | Run success与unknown Effect竞争 | 同writer fold；至多一个合法顺序，unknown阻止success |
-| Recorded replay调用live路径 | API无executor/lease/writer类型；counter/event/budget断言不变 |
+| recovery exact/mutation/response loss | stable key+Clock/epoch/evidence fingerprint；not-eligible不消费；exact pair retry/ExistingTerminal no-op |
+| Recorded replay调用live路径或读取horizon后facts | API无executor/lease/writer类型且cursor固定；counter/event/budget/digest断言不变 |
 | sensitive request/receipt/error | Event只存safe ID、digest、reason、bounded摘要与redaction revision |
 | raw DB owner篡改 | 沿用REQ-0004威胁边界；open/read/fold检测定义内fingerprint/row/pair drift |
 
@@ -211,7 +252,7 @@ Recorded Effect replay要求derived Manifest mode与validated source inventory e
 
 # Compatibility, migration, and rollback
 
-发布新的content-addressed Effect-capable SchemaSet与Run Manifest 3.0，保留全部历史sets、Run Manifest 1.0/2.0、RunTask/RuntimeControl/Hook reducer和output readers。新Runtime Control payload set允许mutually-exclusive `hook_pair | effect_pair`；旧set bytes与reader不变。新增Effect bindings对既有reducers是无关成员，任何旧reducer identity变化均为实现阻断项。
+发布新的content-addressed Effect-capable SchemaSet、Run Manifest 3.0、Executor Descriptor 1.0与Boundary Inventory/Effect Record 2.0，保留全部历史sets、Run Manifest 1.0/2.0、Boundary Inventory/Record 1.0、RunTask/RuntimeControl/Hook reducer和output readers。新Runtime Control payload set允许mutually-exclusive `hook_pair | effect_pair`；旧set bytes与reader不变。新增Effect bindings对既有reducers是无关成员，任何旧reducer identity变化均为实现阻断项。
 
 SQLite维持v2，不增加table/column/index/trigger，不改变migration checksum、snapshot bytes或Event Store actor规则。若实现发现需要DB v3、多signer actor、mutable outbox或current reader substitution，必须退回Requirement/RFC和独立评审，不得在实施中顺带加入。
 
@@ -219,7 +260,7 @@ SQLite维持v2，不增加table/column/index/trigger，不改变migration checks
 
 # Evaluation and acceptance
 
-- 质量：协议golden/compatibility、v1/v2/v3 Manifest、default deny、Intent-before-dispatch、pair fault、幂等mutation、scope矩阵、lease/producer、Fake outcome矩阵、partial/response-loss/crash、cancel/deadline/timeout race、unknown/reconciliation、success guard、reopen/fold、inventory与Recorded零执行全部通过；bounded model验证至多一个 terminal pair。
+- 质量：协议golden/compatibility、v1/v2/v3 Manifest、Inventory v1/v2、executor descriptor pin、default deny、Intent-before-dispatch、pair fault、幂等mutation、scope矩阵、lease/producer、Fake outcome矩阵、partial/response-loss、Intent/claim/external/pair各crash点、recovery exact/mutation/not-eligible/ExistingTerminal、cancel/deadline/timeout race、unknown/reconciliation、success guard、reopen/fold、fixed-horizon Recorded零执行全部通过；bounded model验证至多一个 terminal pair。
 - Token/费用：不调用真实模型/Provider/付费系统；分别记录Fake reserved/accounted usage和全套本地测试成本，不宣称优化。
 - 延迟：记录Intent pair、claim、terminal pair、reconciliation、1/10/100 Effect fold、writer竞争、inventory和Recorded replay；busy等待保持有限，无证据前不设收益阈值或新增Snapshot/background worker。
 - 设计批准：必须由未参与设计的fresh Agent对固定Git revision执行独立架构评审，逐项检查AC-01至AC-22、权限/隔离、pair原子性、unknown诚实性、成功准入、兼容/回滚和测试追踪。0 open Blocker/Major后才可接受RFC、创建ADR并进入planning；实现后另需fresh独立代码评审。
