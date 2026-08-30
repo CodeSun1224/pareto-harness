@@ -169,7 +169,7 @@ integrity/source/schema/isolation/recovery-key exact
   -> append terminal pair + commit
 ```
 
-`not_eligible`不append也不消费identity；新Clock/process observation可形成新ID。Intent尚未claim且旧epoch失效、deadline due或取消生效时，history证明Kernel从未交付executor lease，recovery以`not_applied`结清并按verified zero/partial meter释放。存在claim时任何process loss/cancel/timeout都不能证明外部未执行，必须以`unknown`或persisted verified partial结清并打开reconciliation。claim所属同一live epoch且deadline未到、无cancel时not-eligible。
+`not_eligible`不append也不消费identity；新Clock/process observation可形成新ID。Intent尚未claim且旧epoch失效、deadline due或取消生效时，history证明Kernel从未交付executor lease，recovery必须以`not_applied`和verified zero usage结清并释放全部reservation，禁止partial/unknown分支。存在claim时任何process loss/cancel/timeout都不能证明外部未执行，必须以`unknown`或persisted verified partial结清并打开reconciliation。claim所属同一live epoch且deadline未到、无cancel时not-eligible。
 
 terminal pair commit响应丢失必须exact重试同command bytes；若command bytes随进程丢失，reopen以新sample/epoch产生新ID并命中ExistingTerminal no-op。claim-before-call、external-applied-before-response和return-before-terminal-pair在history上都落入同一保守unknown语义；recovery不能redispatch、refund或制造Receipt。
 
