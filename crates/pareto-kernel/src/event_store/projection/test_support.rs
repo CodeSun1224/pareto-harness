@@ -184,45 +184,13 @@ impl Fixture {
     pub(super) fn retained_lifecycle_set(&self) -> Arc<SchemaSet> {
         const RETAINED_LIFECYCLE_SET: &str =
             "sha256-dae028a86b31c5ab341240a0768e5166ac36cd4104bfa7e8c759230add368a71";
-        let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../schemas/sets")
-            .join(RETAINED_LIFECYCLE_SET);
-        let manifest: SchemaSetManifest = serde_json::from_slice(
-            &std::fs::read(directory.join("schema-set-v1.0.manifest.json")).unwrap(),
-        )
-        .unwrap();
-        let reference: SchemaSetRef = serde_json::from_slice(
-            &std::fs::read(directory.join("schema-set-v1.0.ref.json")).unwrap(),
-        )
-        .unwrap();
-        let documents = manifest
-            .schemas
-            .iter()
-            .map(|schema| {
-                let filename = format!(
-                    "{}-v{}.{}.schema.json",
-                    schema.r#type, schema.major, schema.minor
-                );
-                SchemaDocument {
-                    document: serde_json::from_slice(
-                        &std::fs::read(directory.join(&filename)).unwrap(),
-                    )
-                    .unwrap(),
-                    filename,
-                }
-            })
-            .collect();
-        Arc::new(
-            SchemaSet::admit_with(
-                &TestEvolutionAuthorizer,
-                None,
-                manifest,
-                documents,
-                &reference,
-                Vec::new(),
-            )
-            .unwrap(),
-        )
+        retained_set(RETAINED_LIFECYCLE_SET)
+    }
+
+    pub(super) fn retained_hook_set(&self) -> Arc<SchemaSet> {
+        const RETAINED_HOOK_SET: &str =
+            "sha256-0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771";
+        retained_set(RETAINED_HOOK_SET)
     }
 
     pub(super) fn retained_projection_output_set(&self) -> Arc<SchemaSet> {
@@ -344,6 +312,47 @@ impl Fixture {
             .unwrap();
         store
     }
+}
+
+fn retained_set(directory_name: &str) -> Arc<SchemaSet> {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../schemas/sets")
+        .join(directory_name);
+    let manifest: SchemaSetManifest = serde_json::from_slice(
+        &std::fs::read(directory.join("schema-set-v1.0.manifest.json")).unwrap(),
+    )
+    .unwrap();
+    let reference: SchemaSetRef =
+        serde_json::from_slice(&std::fs::read(directory.join("schema-set-v1.0.ref.json")).unwrap())
+            .unwrap();
+    let documents = manifest
+        .schemas
+        .iter()
+        .map(|schema| {
+            let filename = format!(
+                "{}-v{}.{}.schema.json",
+                schema.r#type, schema.major, schema.minor
+            );
+            SchemaDocument {
+                document: serde_json::from_slice(
+                    &std::fs::read(directory.join(&filename)).unwrap(),
+                )
+                .unwrap(),
+                filename,
+            }
+        })
+        .collect();
+    Arc::new(
+        SchemaSet::admit_with(
+            &TestEvolutionAuthorizer,
+            None,
+            manifest,
+            documents,
+            &reference,
+            Vec::new(),
+        )
+        .unwrap(),
+    )
 }
 
 fn revision_pins() -> BTreeMap<String, RevisionId> {

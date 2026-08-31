@@ -47,7 +47,7 @@ const HOOK_CAPABLE_SCHEMA_SET_DIGEST: &str =
 const RETAINED_HOOK_SCHEMA_SET_DIGEST: &str =
     "sha256:3a0c6e67a97675cf6bfcdc1fb9766b30a79ae62e662479d9ae1ef5d7b43ff99d";
 const EFFECT_CAPABLE_SCHEMA_SET_DIGEST: &str =
-    "sha256:ed5482a4ce2e593782f8909cf3a11e75759aa656ce3673eac1a18b7e2d3ec241";
+    "sha256:70389ae3f20ce4428ee0a8b1ecd6ddf1b6c48474982d6372ffea69e6fc7ba390";
 const CONTROL_EVENT_TYPES: [&str; 11] = [
     "budget-refunded",
     "capability-issued",
@@ -1807,6 +1807,14 @@ impl EventStore {
     ) -> Result<RuntimeControlProjectionV1, RuntimeControlError> {
         let mut connection = self.pool.acquire().await?;
         let aggregate = load_control(&mut connection, registry, target).await?;
+        validate_control_effect_pair_presence(&mut connection, &aggregate).await?;
+        super::effect_runtime::validate_effect_history_for_control(
+            &mut connection,
+            registry,
+            &target.scope,
+        )
+        .await
+        .map_err(|_| RuntimeControlError::new(RuntimeControlErrorKind::AggregateCorrupt))?;
         project_control(&self.store_id, target, &aggregate)
     }
 
@@ -4363,7 +4371,75 @@ pub(super) async fn validate_runtime_control_history(
     registry: &SchemaRegistry,
     target: &RuntimeControlTarget,
 ) -> Result<(), RuntimeControlError> {
-    load_control(connection, registry, target).await.map(|_| ())
+    let aggregate = load_control(connection, registry, target).await?;
+    validate_control_effect_pair_presence(connection, &aggregate).await?;
+    super::effect_runtime::validate_effect_history_for_control(connection, registry, &target.scope)
+        .await
+        .map_err(|_| RuntimeControlError::new(RuntimeControlErrorKind::AggregateCorrupt))
+}
+
+async fn validate_control_effect_pair_presence(
+    connection: &mut SqliteConnection,
+    aggregate: &EstablishedControl,
+) -> Result<(), RuntimeControlError> {
+    if aggregate.lifecycle.state.manifest.schema_ref.major != 3 {
+        return Ok(());
+    }
+    let suffix = aggregate
+        .lifecycle
+        .state
+        .manifest
+        .scope
+        .run_id
+        .as_str()
+        .strip_prefix("run_")
+        .ok_or_else(corrupt_error)?;
+    let effect_stream =
+        StreamId::parse(format!("stream_effect-{suffix}")).map_err(|_| corrupt_error())?;
+    let read = AdmittedRead {
+        scope: aggregate.lifecycle.state.manifest.scope.clone(),
+        stream_id: Some(effect_stream),
+        schema_set: aggregate.lifecycle.schema_set.clone(),
+        limits: aggregate.lifecycle.limits.clone(),
+    };
+    for operation in aggregate.state.operations.values() {
+        let pairs = operation.reservation.effect_pair.iter().chain(
+            operation
+                .settlement
+                .iter()
+                .filter_map(|(_, settlement)| settlement.effect_pair.as_ref()),
+        );
+        for pair in pairs {
+            let row = sqlx::query(&format!(
+                "SELECT {ROW_COLUMNS} FROM events WHERE event_id=?"
+            ))
+            .bind(pair.effect_event_id.as_str())
+            .fetch_optional(&mut *connection)
+            .await?
+            .ok_or_else(corrupt_error)?;
+            let event = validate_row(&row, &read).map_err(|_| corrupt_error())?;
+            let counterpart = match event.envelope().event_type.as_str() {
+                "effect-intended" => event
+                    .downcast_payload::<pareto_protocol::EffectIntendedPayloadV1>()
+                    .map(|payload| &payload.pair),
+                "effect-attempt-concluded" => event
+                    .downcast_payload::<pareto_protocol::EffectAttemptConcludedPayloadV1>()
+                    .map(|payload| &payload.pair),
+                "effect-receipt-admitted" => event
+                    .downcast_payload::<pareto_protocol::EffectReceiptAdmittedPayloadV1>()
+                    .map(|payload| &payload.pair),
+                "effect-reconciliation-required" => event
+                    .downcast_payload::<pareto_protocol::EffectReconciliationRequiredPayloadV1>()
+                    .map(|payload| &payload.pair),
+                _ => None,
+            }
+            .ok_or_else(corrupt_error)?;
+            if counterpart != pair {
+                return Err(corrupt_error());
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(super) async fn effect_cancellation_is_effective(
@@ -4383,6 +4459,50 @@ pub(super) async fn effect_cancellation_is_effective(
         record.reservation.task_id.as_ref(),
         operation_id,
     ))
+}
+
+/// Revalidates every mutable authority used to dispatch an Effect while the caller holds the
+/// Effect writer transaction. A reservation is authority to account for an Effect, not a durable
+/// permission to dispatch it after lifecycle, cancellation, or deadline state has changed.
+pub(super) async fn ensure_effect_dispatch_admissible(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    operation_id: &OperationId,
+    reservation_id: &ReservationId,
+    task_id: Option<&TaskId>,
+    sample: &ClockSample,
+) -> Result<(), RuntimeControlError> {
+    validate_clock_sample(sample)?;
+    let aggregate = load_control(connection, registry, target).await?;
+    ensure_reserve_lifecycle(&aggregate.lifecycle, task_id)?;
+    let record = aggregate
+        .state
+        .operations
+        .get(operation_id)
+        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+    if record.settlement.is_some()
+        || record.reservation.reservation_id != *reservation_id
+        || record.reservation.task_id.as_ref() != task_id
+        || record.reservation.subject_actor != target.principal
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::OperationConflict,
+        ));
+    }
+    if cancellation_applies(&aggregate.state, task_id, operation_id) {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::CancellationPending,
+        ));
+    }
+    if sample.canonical_utc >= record.reservation.absolute_deadline_utc
+        || sample.wall_millis >= parse_utc_millis(&record.reservation.absolute_deadline_utc)?
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::DeadlineExceeded,
+        ));
+    }
+    Ok(())
 }
 
 async fn append_control<T: Serialize>(

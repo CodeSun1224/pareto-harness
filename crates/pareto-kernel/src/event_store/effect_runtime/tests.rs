@@ -228,6 +228,102 @@ async fn projection_recovery() {
 }
 
 #[tokio::test]
+async fn projection_reopens_losslessly_for_unclaimed_and_partial_effects() {
+    let (fixture, store, target, registry, _) =
+        admission_harness("run_effect-projection-unclaimed").await;
+    let request = request_command(&fixture);
+    let admitted = store
+        .request_effect(
+            &fixture.registry(),
+            &registry,
+            &target,
+            &fixture.target(),
+            &request,
+        )
+        .await
+        .unwrap();
+    let before = store
+        .effect_projection_at(&fixture.registry(), &target, &admitted.cursor)
+        .await
+        .unwrap();
+    let entry = &before.effects[0];
+    assert_eq!(entry.subject_actor, fixture.scope.agent_id);
+    assert_eq!(entry.task_id.as_ref(), Some(&fixture.task_id));
+    assert_eq!(entry.recovery_base_key.effect_id, request.effect_id);
+    assert!(entry.recovery_key.is_none());
+    assert_eq!(
+        entry.intent_pair.operation_id,
+        request.proposal.operation_id
+    );
+    assert!(!entry.reserved_usage.is_empty());
+    assert_eq!(
+        before.source_protocol_limits_ref,
+        fixture.manifest.protocol_limits_ref
+    );
+    let store_id = store.store_id.clone();
+    store.pool.close().await;
+    let reopened = EventStore::open_pinned(&fixture.path, &store_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        before,
+        reopened
+            .effect_projection_at(&fixture.registry(), &target, &admitted.cursor)
+            .await
+            .unwrap()
+    );
+
+    let harness = receipt_harness(
+        "run_effect-projection-partial",
+        EffectReceiptOutcomeClassV1::Partial,
+    )
+    .await;
+    harness
+        .store
+        .admit_effect_receipt(
+            &harness.fixture.registry(),
+            &harness.registry,
+            &harness.descriptor,
+            &harness.target,
+            &harness.fixture.target(),
+            &harness.operation_lease,
+            &harness.dispatch_lease,
+            &harness.observation,
+            &harness.command,
+        )
+        .await
+        .unwrap();
+    let cursor = EventCursor {
+        sequence: "4".to_owned(),
+        event_id: harness.command.effect_event_id.clone(),
+    };
+    let before = harness
+        .store
+        .effect_projection_at(&harness.fixture.registry(), &harness.target, &cursor)
+        .await
+        .unwrap();
+    assert_eq!(before.effects[0].limitations, ["fake-limitation"]);
+    assert!(before.effects[0].confirmed_components_digest.is_some());
+    assert!(before.effects[0].unknown_components_digest.is_some());
+    assert_eq!(
+        before.effects[0].accounted_usage,
+        before.effects[0].reserved_usage
+    );
+    let store_id = harness.store.store_id.clone();
+    harness.store.pool.close().await;
+    let reopened = EventStore::open_pinned(&harness.fixture.path, &store_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        before,
+        reopened
+            .effect_projection_at(&harness.fixture.registry(), &harness.target, &cursor)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
 async fn compatibility() {
     let fixture = Fixture::new("run_effect-compatibility");
     let store = fixture.created_store().await;
@@ -453,6 +549,142 @@ async fn intent_before_dispatch() {
             .unwrap_err()
             .kind,
         EffectErrorKind::IdempotencyConflict
+    );
+}
+
+#[tokio::test]
+async fn pair_counterpart_loss_fails_effect_and_control_reads_closed() {
+    let (fixture, store, target, command) =
+        reserve_intent_harness("run_effect-pair-missing-control").await;
+    store
+        .append_effect_reserve_intent_pair(
+            &fixture.registry(),
+            &target,
+            &fixture.target(),
+            command.clone(),
+            AtomicPairFault::None,
+        )
+        .await
+        .unwrap();
+    sqlx::query("DROP TRIGGER events_no_delete")
+        .execute(&store.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM events WHERE event_id=?")
+        .bind(command.pair.control_event_id.as_str())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+    let cursor = EventCursor {
+        sequence: "2".to_owned(),
+        event_id: command.pair.effect_event_id,
+    };
+    assert_eq!(
+        store
+            .effect_projection_at(&fixture.registry(), &target, &cursor)
+            .await
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::PartialPair
+    );
+
+    let (fixture, store, target, command) =
+        reserve_intent_harness("run_effect-pair-missing-effect").await;
+    store
+        .append_effect_reserve_intent_pair(
+            &fixture.registry(),
+            &target,
+            &fixture.target(),
+            command.clone(),
+            AtomicPairFault::None,
+        )
+        .await
+        .unwrap();
+    sqlx::query("DROP TRIGGER events_no_delete")
+        .execute(&store.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM events WHERE event_id=?")
+        .bind(command.pair.effect_event_id.as_str())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .runtime_control_projection(&fixture.registry(), &fixture.target())
+            .await
+            .unwrap_err()
+            .kind,
+        control::RuntimeControlErrorKind::AggregateCorrupt
+    );
+
+    let (fixture, store, target, command) =
+        reserve_intent_harness("run_effect-pair-resealed-effect").await;
+    store
+        .append_effect_reserve_intent_pair(
+            &fixture.registry(),
+            &target,
+            &fixture.target(),
+            command.clone(),
+            AtomicPairFault::None,
+        )
+        .await
+        .unwrap();
+    let envelope_json: String =
+        sqlx::query_scalar("SELECT envelope_json FROM events WHERE event_id=?")
+            .bind(command.pair.effect_event_id.as_str())
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&envelope_json).unwrap();
+    let mut payload: EffectIntendedPayloadV1 =
+        serde_json::from_value(envelope["payload"].clone()).unwrap();
+    payload.pair.pair_fingerprint = digest('f');
+    let resealed = lifecycle_event(
+        &fixture.set,
+        &fixture.manifest.protocol_limits_ref,
+        &fixture.scope,
+        &fixture.scope.agent_id,
+        &effect_stream_id(&fixture.scope).unwrap(),
+        &command.pair.effect_event_id,
+        2,
+        &command.occurred_at,
+        &command.correlation_id,
+        "effect-intended",
+        &payload,
+    )
+    .unwrap();
+    let prepared = PreparedEvent::new(
+        &resealed,
+        &fixture.set,
+        &fixture.manifest.protocol_limits_ref,
+    )
+    .unwrap();
+    sqlx::query("DROP TRIGGER events_no_update")
+        .execute(&store.pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE events SET envelope_json=?,envelope_fingerprint=? WHERE event_id=?")
+        .bind(&prepared.envelope_json)
+        .bind(&prepared.envelope_fingerprint)
+        .bind(command.pair.effect_event_id.as_str())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .effect_projection_at(
+                &fixture.registry(),
+                &target,
+                &EventCursor {
+                    sequence: "2".to_owned(),
+                    event_id: command.pair.effect_event_id,
+                },
+            )
+            .await
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::AggregateCorrupt
     );
 }
 
@@ -737,6 +969,11 @@ fn request_command(fixture: &control::Fixture) -> RequestEffectCommandV1 {
     let effect_id = expected_effect_id(
         &fixture.scope,
         &registry_revision,
+        fixture
+            .manifest
+            .effect_registry_config_digest
+            .as_ref()
+            .unwrap(),
         &effect_revision,
         &request.effect_kind,
         &request.client_idempotency_key_digest,
@@ -962,7 +1199,7 @@ async fn dispatch_lease() {
         .unwrap();
     assert!(!first.already_committed);
     assert_eq!(first.cursor.sequence, "3");
-    assert_eq!(first.lease.effect_id, request.effect_id);
+    assert_eq!(first.lease.as_ref().unwrap().effect_id, request.effect_id);
     let projection = store
         .effect_projection_at(&fixture.registry(), &target, &first.cursor)
         .await
@@ -972,12 +1209,31 @@ async fn dispatch_lease() {
         EffectDispatchStateV1::Claimed
     );
     assert!(projection.effects[0].recovery_key.is_some());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let wrong_implementation = CountingFakeExecutor {
+        mode: FakeMode::Applied,
+        calls: calls.clone(),
+        producer_revision: descriptor.content.producer_revision.clone(),
+        adapter_revision: descriptor.content.adapter_revision.clone(),
+        implementation_compatibility_digest: digest('f'),
+    };
+    assert_eq!(
+        execute_fake_effect(
+            &descriptor,
+            first.lease.as_ref().unwrap(),
+            &wrong_implementation,
+        )
+        .unwrap_err()
+        .kind,
+        EffectErrorKind::Unauthorized
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
     let retry = store
         .claim_effect_dispatch(&fixture.registry(), &descriptor, &target, &claim)
         .await
         .unwrap();
     assert!(retry.already_committed);
-    assert_eq!(retry.lease, first.lease);
+    assert!(retry.lease.is_none());
     let mut forged = descriptor;
     forged.content.config_digest = digest('f');
     assert_eq!(
@@ -987,6 +1243,117 @@ async fn dispatch_lease() {
             .unwrap_err()
             .kind,
         EffectErrorKind::Unauthorized
+    );
+}
+
+fn claim_command(
+    request: &RequestEffectCommandV1,
+    cursor: EventCursor,
+    suffix: &str,
+    clock: ClockSample,
+) -> ClaimEffectCommandV1 {
+    ClaimEffectCommandV1 {
+        event_id: EventId::parse(format!("event_effect-claim-{suffix}")).unwrap(),
+        effect_id: request.effect_id.clone(),
+        attempt_id: request.attempt_id.clone(),
+        expected_effect_cursor: cursor,
+        occurred_at: clock.canonical_utc.clone(),
+        correlation_id: format!("corr-effect-claim-{suffix}"),
+        clock,
+        claim_policy_revision: RevisionId::parse("rev_effect-claim-v1").unwrap(),
+    }
+}
+
+#[tokio::test]
+async fn claim_revalidates_cancellation_and_deadline_under_writer_lock() {
+    let (fixture, store, target, registry, descriptor) =
+        admission_harness("run_effect-claim-cancelled").await;
+    let request = request_command(&fixture);
+    let admitted = store
+        .request_effect(
+            &fixture.registry(),
+            &registry,
+            &target,
+            &fixture.target(),
+            &request,
+        )
+        .await
+        .unwrap();
+    store
+        .request_cancellation(
+            &fixture.registry(),
+            &fixture.target(),
+            &control::CancellationCommand {
+                event_id: EventId::parse("event_effect-claim-cancel").unwrap(),
+                occurred_at: "2026-08-26T00:00:11.000Z".to_owned(),
+                correlation_id: "corr-effect-claim-cancel".to_owned(),
+                cancellation_id: CancellationId::parse("cancel_effect-claim").unwrap(),
+                target: CancellationTargetV1::Operation {
+                    operation_id: request.proposal.operation_id.clone(),
+                },
+                reason_code: "cancel-before-dispatch".to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+    let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap();
+    let cancelled_claim = claim_command(
+        &request,
+        admitted.cursor.clone(),
+        "cancelled",
+        control::FakeClock::at("2026-08-26T00:00:12.000Z", 3_000, "epoch-a").sample(),
+    );
+    assert_eq!(
+        store
+            .claim_effect_dispatch(&fixture.registry(), &descriptor, &target, &cancelled_claim)
+            .await
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::Unauthorized
+    );
+    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
+
+    let (fixture, store, target, registry, descriptor) =
+        admission_harness("run_effect-claim-deadline").await;
+    let request = request_command(&fixture);
+    let admitted = store
+        .request_effect(
+            &fixture.registry(),
+            &registry,
+            &target,
+            &fixture.target(),
+            &request,
+        )
+        .await
+        .unwrap();
+    let deadline_claim = claim_command(
+        &request,
+        admitted.cursor.clone(),
+        "at-deadline",
+        control::FakeClock::at("2026-08-26T00:01:00.000Z", 51_000, "epoch-a").sample(),
+    );
+    assert_eq!(
+        store
+            .claim_effect_dispatch(&fixture.registry(), &descriptor, &target, &deadline_claim)
+            .await
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::Unauthorized
+    );
+    let projection = store
+        .effect_projection_at(&fixture.registry(), &target, &admitted.cursor)
+        .await
+        .unwrap();
+    assert_eq!(
+        projection.effects[0].dispatch_state,
+        EffectDispatchStateV1::Intended
     );
 }
 
@@ -1005,9 +1372,14 @@ struct CountingFakeExecutor {
     calls: Arc<AtomicUsize>,
     producer_revision: RevisionId,
     adapter_revision: RevisionId,
+    implementation_compatibility_digest: Digest,
 }
 
 impl FakeEffectExecutor for CountingFakeExecutor {
+    fn implementation_compatibility_digest(&self) -> &Digest {
+        &self.implementation_compatibility_digest
+    }
+
     fn invoke(&self, lease: &EffectDispatchLease) -> FakeEffectExecution {
         self.calls.fetch_add(1, Ordering::SeqCst);
         let observation = |outcome_class| EffectReceiptObservationV1 {
@@ -1020,6 +1392,7 @@ impl FakeEffectExecutor for CountingFakeExecutor {
             observed_at: "2026-08-26T00:00:12.000Z".to_owned(),
             receipt_digest: digest('c'),
             result_digest: digest('d'),
+            result_summary_bytes: 32,
             observed_usage: Vec::new(),
             limitations: Vec::new(),
         };
@@ -1068,6 +1441,7 @@ async fn fake_outcomes() {
             )
             .await
             .unwrap();
+        let operation_lease = admitted.lease.unwrap();
         let claim = ClaimEffectCommandV1 {
             event_id: EventId::parse(format!("event_effect-claim-{suffix}")).unwrap(),
             effect_id: request.effect_id.clone(),
@@ -1084,22 +1458,86 @@ async fn fake_outcomes() {
             calls: calls.clone(),
             producer_revision: descriptor.content.producer_revision.clone(),
             adapter_revision: descriptor.content.adapter_revision.clone(),
+            implementation_compatibility_digest: descriptor
+                .content
+                .implementation_compatibility_digest
+                .clone(),
+        };
+        let receipt_command = AdmitEffectReceiptCommandV1 {
+            control_event_id: EventId::parse(format!("event_effect-settled-{suffix}")).unwrap(),
+            effect_event_id: EventId::parse(format!("event_effect-terminal-{suffix}")).unwrap(),
+            pair_id: EffectPairId::parse(format!("effect_pair_terminal-{suffix}")).unwrap(),
+            callback_id: CallbackId::parse(format!("callback_fake-effect-{suffix}")).unwrap(),
+            occurred_at: "2026-08-26T00:00:12.000Z".to_owned(),
+            correlation_id: format!("corr-effect-terminal-{suffix}"),
+            clock: control::FakeClock::at("2026-08-26T00:00:12.000Z", 3_000, "epoch-a").sample(),
         };
         let first = store
-            .dispatch_effect(&fixture.registry(), &descriptor, &target, &claim, &executor)
+            .execute_effect_to_terminal(
+                &fixture.registry(),
+                &registry,
+                &descriptor,
+                &target,
+                &fixture.target(),
+                &operation_lease,
+                &claim,
+                &receipt_command,
+                &executor,
+            )
             .await
             .unwrap();
-        assert!(!first.already_claimed);
-        assert!(first.execution.is_some());
-        assert_eq!(first.cursor.sequence, "3");
+        match first {
+            EffectOrchestrationResult::Terminal(result) => {
+                assert!(!result.already_committed);
+            }
+            EffectOrchestrationResult::AlreadyClaimed { .. } => panic!("first claim was reused"),
+        }
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         let retry = store
-            .dispatch_effect(&fixture.registry(), &descriptor, &target, &claim, &executor)
+            .execute_effect_to_terminal(
+                &fixture.registry(),
+                &registry,
+                &descriptor,
+                &target,
+                &fixture.target(),
+                &operation_lease,
+                &claim,
+                &receipt_command,
+                &executor,
+            )
             .await
             .unwrap();
-        assert!(retry.already_claimed);
-        assert!(retry.execution.is_none());
+        match retry {
+            EffectOrchestrationResult::AlreadyClaimed { cursor } => {
+                assert_eq!(cursor.sequence, "4");
+            }
+            EffectOrchestrationResult::Terminal(_) => panic!("retry executed"),
+        }
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let projection = store
+            .effect_projection_at(
+                &fixture.registry(),
+                &target,
+                &EventCursor {
+                    sequence: "4".to_owned(),
+                    event_id: receipt_command.effect_event_id,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            projection.effects[0].dispatch_state,
+            EffectDispatchStateV1::Concluded
+        );
+        assert!(
+            store
+                .runtime_control_projection(&fixture.registry(), &fixture.target())
+                .await
+                .unwrap()
+                .operations[0]
+                .settlement
+                .is_some()
+        );
     }
 }
 
@@ -1151,13 +1589,14 @@ async fn receipt_harness(run: &str, outcome_class: EffectReceiptOutcomeClassV1) 
     let observation = EffectReceiptObservationV1 {
         effect_id: request.effect_id,
         attempt_id: request.attempt_id,
-        external_key_digest: claimed.lease.external_key_digest.clone(),
+        external_key_digest: claimed.lease.as_ref().unwrap().external_key_digest.clone(),
         producer_revision: descriptor.content.producer_revision.clone(),
         adapter_revision: descriptor.content.adapter_revision.clone(),
         outcome_class,
         observed_at: "2026-08-26T00:00:12.000Z".to_owned(),
         receipt_digest: digest('c'),
         result_digest: digest('d'),
+        result_summary_bytes: 32,
         observed_usage: Vec::new(),
         limitations: vec!["fake-limitation".to_owned()],
     };
@@ -1168,7 +1607,7 @@ async fn receipt_harness(run: &str, outcome_class: EffectReceiptOutcomeClassV1) 
         registry,
         descriptor,
         operation_lease,
-        dispatch_lease: claimed.lease,
+        dispatch_lease: claimed.lease.unwrap(),
         observation,
         command: AdmitEffectReceiptCommandV1 {
             control_event_id: EventId::parse("event_effect-receipt-settled").unwrap(),
@@ -1194,6 +1633,10 @@ async fn receipt_admission() {
     let mut rejected_command = harness.command.clone();
     rejected_command.effect_event_id =
         EventId::parse("event_effect-receipt-message-rejected").unwrap();
+    let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&harness.store.pool)
+        .await
+        .unwrap();
     assert_eq!(
         harness
             .store
@@ -1213,19 +1656,11 @@ async fn receipt_admission() {
             .kind,
         EffectErrorKind::Unauthorized
     );
-    let rejected = harness
-        .store
-        .effect_projection_at(
-            &harness.fixture.registry(),
-            &harness.target,
-            &EventCursor {
-                sequence: "4".to_owned(),
-                event_id: rejected_command.effect_event_id,
-            },
-        )
+    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&harness.store.pool)
         .await
         .unwrap();
-    assert_eq!(rejected.rejected_count, 1);
+    assert_eq!(before, after);
     harness
         .store
         .admit_effect_receipt(
@@ -1241,6 +1676,81 @@ async fn receipt_admission() {
         )
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn authenticated_invalid_receipt_settles_unknown_and_is_audited() {
+    let harness = receipt_harness(
+        "run_effect-invalid-receipt",
+        EffectReceiptOutcomeClassV1::Applied,
+    )
+    .await;
+    let mut invalid = harness.observation.clone();
+    invalid.result_summary_bytes = harness.registry.registrations[0]
+        .limits
+        .max_result_summary_bytes
+        + 1;
+    let input_bytes = canonical(&invalid).unwrap();
+    let input_digest = digest_bytes(
+        "pareto.effect-receipt-rejected-input.v1",
+        input_bytes.as_bytes(),
+    )
+    .unwrap();
+    harness
+        .store
+        .admit_effect_receipt(
+            &harness.fixture.registry(),
+            &harness.registry,
+            &harness.descriptor,
+            &harness.target,
+            &harness.fixture.target(),
+            &harness.operation_lease,
+            &harness.dispatch_lease,
+            &invalid,
+            &harness.command,
+        )
+        .await
+        .unwrap();
+    let audit_id = EventId::parse(format!(
+        "event_effect-rejected-{}",
+        &input_digest.as_str()[7..39]
+    ))
+    .unwrap();
+    let projection = harness
+        .store
+        .effect_projection_at(
+            &harness.fixture.registry(),
+            &harness.target,
+            &EventCursor {
+                sequence: "5".to_owned(),
+                event_id: audit_id,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(projection.rejected_count, 1);
+    assert_eq!(
+        projection.effects[0].external_conclusion,
+        EffectExternalConclusionV1::Unknown
+    );
+    assert_eq!(
+        projection.effects[0].reconciliation_state,
+        EffectReconciliationStateV1::Required
+    );
+    assert_eq!(
+        projection.effects[0].accounted_usage,
+        projection.effects[0].reserved_usage
+    );
+    assert_eq!(
+        projection.effects[0].limitations,
+        ["receipt-admission-rejected"]
+    );
+    let control = harness
+        .store
+        .runtime_control_projection(&harness.fixture.registry(), &harness.fixture.target())
+        .await
+        .unwrap();
+    assert!(control.operations[0].settlement.is_some());
 }
 
 #[tokio::test]
@@ -1418,6 +1928,11 @@ async fn late_receipts() {
 }
 
 fn seal_recovery(mut command: RecoverEffectCommandV1) -> RecoverEffectCommandV1 {
+    command.current_process_epoch_digest = digest_bytes(
+        "effect-current-process-epoch-v1",
+        command.clock.process_epoch.as_bytes(),
+    )
+    .unwrap();
     command.command_fingerprint = recovery_command_fingerprint(&command).unwrap();
     command
 }
@@ -1468,7 +1983,7 @@ async fn crash_recovery() {
             .already_committed
     );
     let mut mutation = command.clone();
-    mutation.current_process_epoch_digest = digest('e');
+    mutation.clock.process_epoch = "epoch-c".to_owned();
     let mutation = seal_recovery(mutation);
     assert_eq!(
         store
@@ -1477,6 +1992,24 @@ async fn crash_recovery() {
             .unwrap_err()
             .kind,
         EffectErrorKind::IdempotencyConflict
+    );
+    let mut new_sample = command.clone();
+    new_sample.control_event_id =
+        EventId::parse("event_effect-recovery-unclaimed-control-new-sample").unwrap();
+    new_sample.effect_event_id =
+        EventId::parse("event_effect-recovery-unclaimed-effect-new-sample").unwrap();
+    new_sample.pair_id = EffectPairId::parse("effect_pair_recovery-unclaimed-new-sample").unwrap();
+    new_sample.clock.process_epoch = "epoch-c".to_owned();
+    new_sample.occurred_at = "2026-08-26T00:00:21.000Z".to_owned();
+    new_sample.clock =
+        control::FakeClock::at("2026-08-26T00:00:21.000Z", 11_000, "epoch-c").sample();
+    let new_sample = seal_recovery(new_sample);
+    assert!(
+        store
+            .recover_effect(&fixture.registry(), &target, &fixture.target(), &new_sample,)
+            .await
+            .unwrap()
+            .already_committed
     );
     let projection = store
         .effect_projection_at(
@@ -1680,6 +2213,38 @@ async fn reconciliation() {
         correlation_id: "corr-effect-reconciliation".to_owned(),
         command_fingerprint: digest('0'),
     });
+    let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&harness.store.pool)
+        .await
+        .unwrap();
+    let mut wrong_source = command.clone();
+    wrong_source.source_observation_event_ids =
+        vec![EventId::parse("event_effect-nonexistent-observation").unwrap()];
+    wrong_source.observation_event_id =
+        EventId::parse("event_effect-wrong-source-observed").unwrap();
+    wrong_source.reconciled_event_id =
+        EventId::parse("event_effect-wrong-source-reconciled").unwrap();
+    let wrong_source = seal_reconciliation(wrong_source);
+    assert_eq!(
+        harness
+            .store
+            .reconcile_effect(
+                &harness.fixture.registry(),
+                &harness.registry,
+                &harness.target,
+                &wrong_source,
+                AtomicPairFault::None,
+            )
+            .await
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::Unauthorized
+    );
+    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&harness.store.pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
     assert_eq!(
         harness
             .store
@@ -1765,28 +2330,45 @@ async fn lifecycle_success_guard() {
         )
         .await
         .unwrap();
+    let mut connection = harness.store.pool.acquire().await.unwrap();
+    assert!(
+        ensure_effects_complete_for_task(
+            &mut connection,
+            &harness.fixture.registry(),
+            &harness.fixture.scope,
+            &TaskId::parse("task_unrelated").unwrap(),
+        )
+        .await
+        .is_ok()
+    );
+    drop(connection);
     let lifecycle_target = LifecycleTarget {
         scope: harness.fixture.scope.clone(),
         actor: harness.fixture.scope.agent_id.clone(),
     };
-    harness
-        .store
-        .transition_task(
-            &harness.fixture.registry(),
-            &lifecycle_target,
-            &TransitionTaskCommand {
-                event_id: EventId::parse("event_effect-guard-task-succeeded").unwrap(),
-                occurred_at: "2026-08-26T00:00:20.000Z".to_owned(),
-                correlation_id: "corr-effect-guard-task".to_owned(),
-                expected_sequence: 5,
-                task_id: harness.fixture.task_id.clone(),
-                expected_state: TaskState::Running,
-                target_state: TaskState::Succeeded,
-                reason_code: "effect-work-finished".to_owned(),
-            },
-        )
-        .await
-        .unwrap();
+    let task_success = TransitionTaskCommand {
+        event_id: EventId::parse("event_effect-guard-task-succeeded").unwrap(),
+        occurred_at: "2026-08-26T00:00:20.000Z".to_owned(),
+        correlation_id: "corr-effect-guard-task".to_owned(),
+        expected_sequence: 5,
+        task_id: harness.fixture.task_id.clone(),
+        expected_state: TaskState::Running,
+        target_state: TaskState::Succeeded,
+        reason_code: "effect-work-finished".to_owned(),
+    };
+    assert_eq!(
+        harness
+            .store
+            .transition_task(
+                &harness.fixture.registry(),
+                &lifecycle_target,
+                &task_success,
+            )
+            .await
+            .unwrap_err()
+            .kind,
+        LifecycleErrorKind::ParentStateConflict
+    );
     let success = TransitionRunCommand {
         event_id: EventId::parse("event_effect-guard-run-succeeded").unwrap(),
         occurred_at: "2026-08-26T00:00:21.000Z".to_owned(),
@@ -1796,15 +2378,6 @@ async fn lifecycle_success_guard() {
         target_state: RunState::Succeeded,
         reason_code: "complete".to_owned(),
     };
-    assert_eq!(
-        harness
-            .store
-            .transition_run(&harness.fixture.registry(), &lifecycle_target, &success)
-            .await
-            .unwrap_err()
-            .kind,
-        LifecycleErrorKind::ParentStateConflict
-    );
     let reconcile = seal_reconciliation(ReconcileEffectCommandV1 {
         effect_id: harness.observation.effect_id.clone(),
         attempt_id: harness.observation.attempt_id.clone(),
@@ -1831,6 +2404,15 @@ async fn lifecycle_success_guard() {
             &harness.target,
             &reconcile,
             AtomicPairFault::None,
+        )
+        .await
+        .unwrap();
+    harness
+        .store
+        .transition_task(
+            &harness.fixture.registry(),
+            &lifecycle_target,
+            &task_success,
         )
         .await
         .unwrap();

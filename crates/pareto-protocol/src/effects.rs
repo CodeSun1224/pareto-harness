@@ -4,8 +4,8 @@ use serde_json::Value;
 
 use crate::{
     AgentId, BudgetVectorEntryV1, Digest, EffectAttemptId, EffectId, EffectPairId, EventCursor,
-    EventId, IsolationScope, OperationId, ReservationId, RevisionId, RevisionMetadata, RunId,
-    SchemaRef, SchemaSetRef, StreamId, TaskId,
+    EventId, IsolationScope, OperationId, ProtocolLimitsRef, ReservationId, RevisionId,
+    RevisionMetadata, RunId, SchemaRef, SchemaSetRef, StreamId, TaskId,
 };
 
 /// Closed external idempotency behavior declared by an Effect registration.
@@ -492,6 +492,8 @@ pub struct EffectReceiptObservationV1 {
     pub receipt_digest: Digest,
     /// Digest of the bounded safe result summary.
     pub result_digest: Digest,
+    /// Canonical byte length of the bounded result summary represented by `result_digest`.
+    pub result_summary_bytes: u64,
     /// Externally observed, non-authoritative usage.
     pub observed_usage: Vec<BudgetVectorEntryV1>,
     /// Sorted stable limitation codes.
@@ -510,12 +512,16 @@ pub struct EffectReceiptAdmittedPayloadV1 {
     pub producer_revision: RevisionId,
     /// Exact adapter revision.
     pub adapter_revision: RevisionId,
+    /// Canonical observation time admitted by the Kernel.
+    pub observed_at: String,
     /// Closed admitted external conclusion.
     pub external_conclusion: EffectExternalConclusionV1,
     /// Safe Receipt digest.
     pub receipt_digest: Digest,
     /// Safe result digest.
     pub result_digest: Digest,
+    /// Non-authoritative usage retained exactly for audit.
+    pub observed_usage: Vec<BudgetVectorEntryV1>,
     /// Kernel-accounted usage.
     pub accounted_usage: Vec<BudgetVectorEntryV1>,
     /// Sorted stable limitations.
@@ -559,6 +565,20 @@ pub struct EffectReconciliationRequiredPayloadV1 {
     /// Safe admitted Receipt digest when the conclusion came from an observation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt_digest: Option<Digest>,
+    /// Safe admitted result digest when the conclusion came from an observation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_digest: Option<Digest>,
+    /// Manifest-pinned Receipt producer when the conclusion came from an observation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub producer_revision: Option<RevisionId>,
+    /// Manifest-pinned Receipt adapter when the conclusion came from an observation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter_revision: Option<RevisionId>,
+    /// Canonical admitted observation time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_at: Option<String>,
+    /// Non-authoritative observed usage retained exactly for audit.
+    pub observed_usage: Vec<BudgetVectorEntryV1>,
     /// Sorted stable limitation codes retained for inventory and reconciliation.
     pub limitations: Vec<String>,
     /// Digest of confirmed external components when known.
@@ -654,10 +674,16 @@ pub struct EffectProjectionEntryV1 {
     pub attempt_id: EffectAttemptId,
     /// Safe Effect kind.
     pub effect_kind: String,
+    /// Exact subject admitted by the Kernel.
+    pub subject_actor: AgentId,
+    /// Exact Task when Task-scoped.
+    pub task_id: Option<TaskId>,
     /// Canonical request digest.
     pub request_digest: Digest,
     /// Kernel-admitted client key digest.
     pub idempotency_key_digest: Digest,
+    /// Exact Effect behavior revision.
+    pub effect_revision: RevisionId,
     /// Protected operation identity.
     pub operation_id: OperationId,
     /// Budget reservation identity.
@@ -666,6 +692,22 @@ pub struct EffectProjectionEntryV1 {
     pub executor_revision: RevisionId,
     /// Exact executor descriptor digest.
     pub executor_descriptor_digest: Digest,
+    /// Exact executor configuration digest.
+    pub executor_config_digest: Digest,
+    /// Complete recovery identity available before claim.
+    pub recovery_base_key: EffectRecoveryBaseKeyV1,
+    /// External idempotency identity after claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_key_digest: Option<Digest>,
+    /// Original atomic reserve/Intent binding.
+    pub intent_pair: EffectPairBindingV1,
+    /// Terminal atomic binding when concluded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_pair: Option<EffectPairBindingV1>,
+    /// Full trusted reservation vector.
+    pub reserved_usage: Vec<BudgetVectorEntryV1>,
+    /// Kernel-accounted terminal usage.
+    pub accounted_usage: Vec<BudgetVectorEntryV1>,
     /// Dispatch axis.
     pub dispatch_state: EffectDispatchStateV1,
     /// External conclusion axis.
@@ -678,6 +720,39 @@ pub struct EffectProjectionEntryV1 {
     /// Admitted Receipt digest when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt_digest: Option<Digest>,
+    /// Safe result digest when an admitted Receipt exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_digest: Option<Digest>,
+    /// Manifest-pinned Receipt producer when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_producer_revision: Option<RevisionId>,
+    /// Manifest-pinned Receipt adapter when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_adapter_revision: Option<RevisionId>,
+    /// Canonical admitted Receipt observation time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_observed_at: Option<String>,
+    /// Non-authoritative observed usage retained exactly.
+    pub observed_usage: Vec<BudgetVectorEntryV1>,
+    /// Sorted safe terminal limitations.
+    pub limitations: Vec<String>,
+    /// Confirmed external components for partial application.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmed_components_digest: Option<Digest>,
+    /// Unknown external components for partial/unknown application.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unknown_components_digest: Option<Digest>,
+    /// Admitted reconciliation observation Event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconciliation_observation_event_id: Option<EventId>,
+    /// Source observation Events supporting reconciliation.
+    pub reconciliation_source_event_ids: Vec<EventId>,
+    /// Canonical reconciliation evidence fingerprint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconciliation_evidence_fingerprint: Option<Digest>,
+    /// Resolution Event when reconciliation is closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconciled_event_id: Option<EventId>,
 }
 
 /// Pure-folded Effect stream projection.
@@ -696,12 +771,18 @@ pub struct EffectProjectionV1 {
     pub inclusive_cursor: EventCursor,
     /// Manifest-pinned source SchemaSet.
     pub source_schema_set_ref: SchemaSetRef,
+    /// Exact source protocol-limits contract.
+    pub source_protocol_limits_ref: ProtocolLimitsRef,
     /// Manifest-pinned Effect registry revision.
     pub effect_registry_revision: RevisionId,
     /// Exact registry configuration digest.
     pub effect_registry_config_digest: Digest,
     /// Exact reducer revision.
     pub reducer_revision: RevisionId,
+    /// Exact output reader revision.
+    pub output_reader_revision: RevisionId,
+    /// Exact history-chain revision.
+    pub history_digest_revision: RevisionId,
     /// Continuous history digest.
     pub history_digest: Digest,
     /// Effect entries sorted by stable identity.
@@ -730,12 +811,18 @@ pub struct EffectProjectionHashViewV1 {
     pub inclusive_cursor: EventCursor,
     /// Manifest-pinned source SchemaSet.
     pub source_schema_set_ref: SchemaSetRef,
+    /// Exact source protocol-limits contract.
+    pub source_protocol_limits_ref: ProtocolLimitsRef,
     /// Manifest-pinned Effect registry revision.
     pub effect_registry_revision: RevisionId,
     /// Exact registry configuration digest.
     pub effect_registry_config_digest: Digest,
     /// Exact reducer revision.
     pub reducer_revision: RevisionId,
+    /// Exact output reader revision.
+    pub output_reader_revision: RevisionId,
+    /// Exact history-chain revision.
+    pub history_digest_revision: RevisionId,
     /// Continuous history digest.
     pub history_digest: Digest,
     /// Effect entries sorted by stable identity.

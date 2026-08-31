@@ -414,6 +414,18 @@ impl EventStore {
             .await
             .map_err(|_| LifecycleError::new(LifecycleErrorKind::ParentStateConflict))?;
         }
+        if command.target_state == TaskState::Succeeded
+            && aggregate.state.manifest.schema_ref.major == 3
+        {
+            super::effect_runtime::ensure_effects_complete_for_task(
+                &mut transaction,
+                registry,
+                &target.scope,
+                &command.task_id,
+            )
+            .await
+            .map_err(|_| LifecycleError::new(LifecycleErrorKind::ParentStateConflict))?;
+        }
         validate_task_transition(
             &aggregate.state,
             &command.task_id,

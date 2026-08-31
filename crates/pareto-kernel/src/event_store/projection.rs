@@ -26,7 +26,7 @@ const RETAINED_OUTPUT_MANIFEST_DIGEST: &str =
 const HOOK_OUTPUT_MANIFEST_DIGEST: &str =
     "sha256:0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771";
 const EFFECT_OUTPUT_MANIFEST_DIGEST: &str =
-    "sha256:ed5482a4ce2e593782f8909cf3a11e75759aa656ce3673eac1a18b7e2d3ec241";
+    "sha256:70389ae3f20ce4428ee0a8b1ecd6ddf1b6c48474982d6372ffea69e6fc7ba390";
 const SCHEMA_SET_MANIFEST_DIGEST: &str =
     "sha256:e534c2d587c2813a97f0bb1abf992d29585c3b1ddd04d9c73ee0eda5d83b0f4b";
 const RUN_MANIFEST_DIGEST: &str =
@@ -1530,7 +1530,13 @@ async fn reducer_resolution() {
 #[cfg(test)]
 #[tokio::test]
 async fn digest_golden() {
-    let fixture = test_support::Fixture::new("run_projection-golden");
+    let mut fixture = test_support::Fixture::new("run_projection-golden");
+    let retained_source = fixture.retained_hook_set();
+    fixture.set = retained_source.clone();
+    fixture.manifest.schema_ref = retained_source.schema_ref("run-manifest").unwrap().clone();
+    fixture.manifest.schema_set_ref = retained_source.reference().clone();
+    fixture.manifest.revisions.remove("effect_registry");
+    fixture.manifest.effect_registry_config_digest = None;
     let store = fixture.open_created().await;
     let registry = fixture.projection_registry();
     let mut transaction = store.pool.begin().await.unwrap();
@@ -1554,7 +1560,7 @@ async fn digest_golden() {
     let snapshot = build_snapshot(&projection, reducer, &output).unwrap();
     assert_eq!(
         reducer.reducer_ref.contract_digest.as_str(),
-        "sha256:5549c75b6f9d0fb9b5a20d7d7c0a55998d25ee07cd8becb15217bfc0105ae1d1"
+        "sha256:898790b7188270dfa4f7ff5a5b664509aa33ffb3ec714be5ee7ec77551dc3424"
     );
     assert_eq!(
         seed.as_str(),
@@ -1562,11 +1568,11 @@ async fn digest_golden() {
     );
     assert_eq!(
         projection.projection_digest.as_str(),
-        "sha256:cf5585e6dabe99a1dae3ec558c3bdcf19346a94e2020eac78dc5d65f66aea27b"
+        "sha256:1902d00ecc7d61357f22dc195fee81c7870109698b3f4c0cd0f441be25717ce0"
     );
     assert_eq!(
         snapshot.snapshot_digest.as_str(),
-        "sha256:ccd58e409811c40fcda415a33b7767aa2b9b414465211a957807e52a56f48c1d"
+        "sha256:72af2cb2249a91ba1188ab0417a070e9c01c96da06043bc325a76843abbb3bc2"
     );
     transaction.rollback().await.unwrap();
 
@@ -1614,20 +1620,59 @@ async fn digest_golden() {
     );
     assert_eq!(
         one.as_str(),
-        "sha256:1579542b5d41d02907781aabea07529eeb3fc2d1ff74f45c30953d9e00353608"
+        "sha256:be0d9f4f0abc1d1fed36ce6f95a9cfb10aaf291af87808a327900455bf19b977"
     );
     assert_eq!(
         two.as_str(),
-        "sha256:9afee1d6eb8b2e5f6e208afc42c21e53c49bfba98b025ebc77a6f1945e75a4db"
+        "sha256:5fda2b1581dcf6c5c91aae3a870c6ba28ccd190b8612934eaf1b24760c0adf71"
     );
     assert_eq!(
         projection_n.projection_digest.as_str(),
-        "sha256:6e2e1a74127052920e8f3a85d25ed9a6fedbfe63243f36a04ccb96338bff77ee"
+        "sha256:36bc5f74adeea792e2b4c6d122d47c1c719edb8a2d56cb0d2e40c57d207504c4"
     );
     assert_eq!(
         snapshot_n.snapshot_digest.as_str(),
-        "sha256:32d80a32ca33f890f6919af5675f23ec39c1d8081eb07822fae4444dcec34b8f"
+        "sha256:54797ce933ca2c39b35bd7c84e71a5d70513b2351a25d30901ae80a1826c57d7"
     );
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn effect_v3_digest_golden() {
+    let fixture = test_support::Fixture::new("run_projection-effect-v3-golden");
+    let store = fixture.open_created().await;
+    let registry = fixture.projection_registry();
+    let mut transaction = store.pool.begin().await.unwrap();
+    let source = load_source(
+        &mut transaction,
+        &registry.sources,
+        &fixture.projection_target(),
+    )
+    .await
+    .unwrap();
+    let reducer = registry.resolve_reducer(&source.schema_set).unwrap();
+    let projection =
+        full_projection("00000000000000000000000000000000", &registry, &source).unwrap();
+    let output = registry
+        .resolve_output(
+            &reducer.descriptor.output_schema_set_ref,
+            &reducer.descriptor.output_protocol_limits_ref,
+        )
+        .unwrap();
+    let snapshot = build_snapshot(&projection, reducer, &output).unwrap();
+    assert_eq!(
+        reducer.reducer_ref.contract_digest.as_str(),
+        "sha256:11bf2448899ffc72437b99d819c669104ef08522272e1c316a1d45bd015a411e"
+    );
+    assert_eq!(
+        projection.projection_digest.as_str(),
+        "sha256:3a7769d9b4284664fd8d2cabfae6952ee7a1a48eaf23c90a3ecd1afd5fe2558e"
+    );
+    assert_eq!(
+        snapshot.snapshot_digest.as_str(),
+        "sha256:7a28f5a91e95f9c24649cc290128d5e257a117a4a7075c39970cf5a20f29b27b"
+    );
+    transaction.rollback().await.unwrap();
 }
 
 #[cfg(test)]
