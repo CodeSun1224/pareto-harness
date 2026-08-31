@@ -88,6 +88,17 @@ wire_id!(
     "pair_",
     "Atomic control and Hook pair identifier."
 );
+wire_id!(EffectId, "effect_", "Stable Effect identity.");
+wire_id!(
+    EffectAttemptId,
+    "effect_attempt_",
+    "Stable Effect dispatch attempt identity."
+);
+wire_id!(
+    EffectPairId,
+    "effect_pair_",
+    "Atomic control and Effect pair identifier."
+);
 wire_id!(
     CancellationId,
     "cancel_",
@@ -689,6 +700,34 @@ impl ExecutionMode {
             })
         }
     }
+
+    /// Binds Effect replay to the exact immutable Boundary Inventory V2 supplied by the Kernel.
+    pub fn validate_inventory_v2(
+        &self,
+        inventory: &crate::Validated<crate::BoundaryInventoryRevisionV2>,
+    ) -> Result<(), crate::ValidationError> {
+        let inventory = inventory.get();
+        let matches = match self {
+            Self::RecordedReplay {
+                source_run_id,
+                boundary_inventory_revision,
+            } => {
+                source_run_id == &inventory.source_run_id
+                    && boundary_inventory_revision == &inventory.metadata.revision_id
+            }
+            Self::Live {} | Self::Simulated { .. } | Self::Reexecute { .. } => false,
+        };
+        if matches {
+            Ok(())
+        } else {
+            Err(crate::ValidationError {
+                code: crate::ErrorCode::InvariantViolation,
+                path: "/execution_mode/boundary_inventory_revision".to_owned(),
+                contract: "effect_execution_lineage_v2".to_owned(),
+                detail: "Recorded replay does not pin the exact Effect inventory V2".to_owned(),
+            })
+        }
+    }
 }
 
 /// Immutable event envelope validated before kernel admission.
@@ -751,6 +790,13 @@ pub struct RunManifest {
         deserialize_with = "deserialize_present_option"
     )]
     pub hook_registry_config_digest: Option<Digest>,
+    /// Exact digest of the Manifest-pinned Effect registry configuration for V3 manifests.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub effect_registry_config_digest: Option<Digest>,
     /// Optional plan revision.
     #[serde(
         default,

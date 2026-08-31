@@ -1,7 +1,7 @@
 ---
 id: REQ-0009
 title: Effect Intent/Receipt 与幂等效果
-status: planned
+status: reviewing
 owners: [runtime-kernel]
 created: 2026-08-30
 updated: 2026-08-30

@@ -63,6 +63,9 @@ impl Fixture {
             hook_registry_config_digest: Some(
                 Digest::parse(format!("sha256:{}", "e".repeat(64))).unwrap(),
             ),
+            effect_registry_config_digest: Some(
+                Digest::parse(format!("sha256:{}", "d".repeat(64))).unwrap(),
+            ),
             plan_revision: None,
             schema_set_ref: set.reference().clone(),
             budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -93,6 +96,7 @@ impl Fixture {
             protocol_limits_ref: self.limits.clone(),
             revisions: self.manifest.revisions.clone(),
             hook_registry_config_digest: self.manifest.hook_registry_config_digest.clone(),
+            effect_registry_config_digest: self.manifest.effect_registry_config_digest.clone(),
             plan_revision: self.manifest.plan_revision.clone(),
             budget_revision: self.manifest.budget_revision.clone(),
             boundary_recording_policy_ref: self.manifest.boundary_recording_policy_ref.clone(),
@@ -353,6 +357,7 @@ fn revision_pins() -> BTreeMap<String, RevisionId> {
         "tool_set",
         "kernel",
         "hook_registry",
+        "effect_registry",
     ]
     .into_iter()
     .map(|role| {

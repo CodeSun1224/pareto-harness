@@ -3,8 +3,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    ArtifactManifest, BoundaryInventoryHashView, BoundaryInventoryRevision,
-    BoundaryReconciliationHashView, BoundaryReconciliationRevision, BudgetPlanV1,
+    ArtifactManifest, BoundaryReconciliationHashView, BoundaryReconciliationRevision, BudgetPlanV1,
     BudgetRefundedPayloadV1, CallbackAuthorityV1, CancellationAcknowledgedPayloadV1,
     CancellationRequestedPayloadV1, CapabilityGrantV1, CapabilityIssuedPayloadV1,
     CapabilityRevokedPayloadV1, ControlMessageRejectedPayloadV1, EventCursor, EventEnvelope,
@@ -24,6 +23,17 @@ use crate::{
     RuntimeControlProjectionV1, SchemaRef, SchemaSetManifest, SchemaSetRef, SourceReducerKeyV1,
     TaskCreatedPayload, TaskStateTransitionedPayload, TimeoutKeyV1, TransformFieldValueV1,
     TransformProposalV1, TrustedOperationContractV1, ValidationError, digest_json, digest_schema,
+};
+use crate::{
+    BoundaryInventoryHashViewV2, BoundaryInventoryRevisionV2, EffectAttemptConcludedPayloadV1,
+    EffectBoundaryRecordV2, EffectDispatchClaimedPayloadV1, EffectExecutorDescriptorHashViewV1,
+    EffectExecutorDescriptorV1, EffectIntendedPayloadV1, EffectLateReceiptObservedPayloadV1,
+    EffectLimitsV1, EffectMessageRejectedPayloadV1, EffectPairBindingV1,
+    EffectProjectionHashViewV1, EffectProjectionV1, EffectReceiptAdmittedPayloadV1,
+    EffectReceiptObservationV1, EffectReconciledPayloadV1, EffectReconciliationObservedPayloadV1,
+    EffectReconciliationRequiredPayloadV1, EffectRecoveryBaseKeyV1, EffectRecoveryKeyV1,
+    EffectRegistrationV1, EffectRegistryRevisionV1, EffectRequestV1,
+    EffectStreamInitializedPayloadV1,
 };
 
 /// A generated public JSON Schema and its stable filename.
@@ -52,8 +62,6 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<ArtifactManifest>("artifact-manifest", 1, 0)?,
         generate::<BudgetPlanV1>("budget-plan", 1, 0)?,
         generate::<BudgetRefundedPayloadV1>("budget-refunded-payload", 1, 0)?,
-        generate::<BoundaryInventoryHashView>("boundary-inventory-hash-view", 1, 0)?,
-        generate::<BoundaryInventoryRevision>("boundary-inventory-revision", 1, 0)?,
         generate::<BoundaryReconciliationHashView>("boundary-reconciliation-hash-view", 1, 0)?,
         generate::<BoundaryReconciliationRevision>("boundary-reconciliation-revision", 1, 0)?,
         generate::<CallbackAuthorityV1>("callback-authority", 1, 0)?,
@@ -66,6 +74,45 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<EventEnvelope>("event-envelope", 1, 0)?,
         generate::<EventCursor>("event-cursor", 1, 0)?,
         generate::<EvidenceRecord>("evidence-record", 1, 0)?,
+        generate::<EffectAttemptConcludedPayloadV1>("effect-attempt-concluded-payload", 1, 0)?,
+        generate::<EffectBoundaryRecordV2>("effect-boundary-record", 2, 0)?,
+        generate::<EffectDispatchClaimedPayloadV1>("effect-dispatch-claimed-payload", 1, 0)?,
+        generate::<EffectExecutorDescriptorV1>("effect-executor-descriptor", 1, 0)?,
+        generate::<EffectExecutorDescriptorHashViewV1>(
+            "effect-executor-descriptor-hash-view",
+            1,
+            0,
+        )?,
+        generate::<EffectIntendedPayloadV1>("effect-intended-payload", 1, 0)?,
+        generate::<EffectLateReceiptObservedPayloadV1>(
+            "effect-late-receipt-observed-payload",
+            1,
+            0,
+        )?,
+        generate::<EffectLimitsV1>("effect-limits", 1, 0)?,
+        generate::<EffectMessageRejectedPayloadV1>("effect-message-rejected-payload", 1, 0)?,
+        generate::<EffectPairBindingV1>("effect-pair-binding", 1, 0)?,
+        generate::<EffectProjectionV1>("effect-projection", 1, 0)?,
+        generate::<EffectProjectionHashViewV1>("effect-projection-hash-view", 1, 0)?,
+        generate::<EffectReceiptAdmittedPayloadV1>("effect-receipt-admitted-payload", 1, 0)?,
+        generate::<EffectReceiptObservationV1>("effect-receipt-observation", 1, 0)?,
+        generate::<EffectReconciledPayloadV1>("effect-reconciled-payload", 1, 0)?,
+        generate::<EffectReconciliationObservedPayloadV1>(
+            "effect-reconciliation-observed-payload",
+            1,
+            0,
+        )?,
+        generate::<EffectReconciliationRequiredPayloadV1>(
+            "effect-reconciliation-required-payload",
+            1,
+            0,
+        )?,
+        generate::<EffectRecoveryBaseKeyV1>("effect-recovery-base-key", 1, 0)?,
+        generate::<EffectRecoveryKeyV1>("effect-recovery-key", 1, 0)?,
+        generate::<EffectRegistrationV1>("effect-registration", 1, 0)?,
+        generate::<EffectRegistryRevisionV1>("effect-registry-revision", 1, 0)?,
+        generate::<EffectRequestV1>("effect-request", 1, 0)?,
+        generate::<EffectStreamInitializedPayloadV1>("effect-stream-initialized-payload", 1, 0)?,
         generate::<GateDecisionV1>("gate-decision", 1, 0)?,
         generate::<KernelMeterEvidenceV1>("kernel-meter-evidence", 1, 0)?,
         generate::<HookInvocationReservedPayloadV1>("hook-invocation-reserved-payload", 1, 0)?,
@@ -94,8 +141,8 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<RevisionHashView>("revision-hash-view", 1, 0)?,
         generate::<RevisionMetadata>("revision-metadata", 1, 0)?,
         generate::<ProtectedProposalHashViewV1>("protected-proposal-hash-view", 1, 0)?,
-        generate::<RunCreatedPayload>("run-created-payload", 2, 0)?,
-        generate::<RunManifest>("run-manifest", 2, 0)?,
+        generate::<RunCreatedPayload>("run-created-payload", 3, 0)?,
+        generate::<RunManifest>("run-manifest", 3, 0)?,
         generate::<RunStateTransitionedPayload>("run-state-transitioned-payload", 1, 0)?,
         generate::<RunTaskProjection>("run-task-projection", 1, 0)?,
         generate::<RunTaskProjectionHashViewV1>("run-task-projection-hash-view", 1, 0)?,
@@ -124,6 +171,8 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<TransformFieldValueV1>("transform-field-value", 1, 0)?,
         generate::<TransformProposalV1>("transform-proposal", 1, 0)?,
         generate::<TrustedOperationContractV1>("trusted-operation-contract", 1, 0)?,
+        generate::<BoundaryInventoryHashViewV2>("boundary-inventory-hash-view", 2, 0)?,
+        generate::<BoundaryInventoryRevisionV2>("boundary-inventory-revision", 2, 0)?,
     ];
     schemas.sort_by(|left, right| left.filename.cmp(&right.filename));
     Ok(schemas)
@@ -159,6 +208,76 @@ pub fn generate_schema_bundle() -> Result<GeneratedSchemaBundle, ValidationError
             .expect("lifecycle payload schema is generated")
     };
     let mut event_bindings = vec![
+        EventTypeBinding {
+            event_type: "effect-attempt-concluded".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-attempt-concluded-payload"),
+            variant_id: "effect-attempt-concluded-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-dispatch-claimed".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-dispatch-claimed-payload"),
+            variant_id: "effect-dispatch-claimed-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-intended".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-intended-payload"),
+            variant_id: "effect-intended-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-late-receipt-observed".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-late-receipt-observed-payload"),
+            variant_id: "effect-late-receipt-observed-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-message-rejected".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-message-rejected-payload"),
+            variant_id: "effect-message-rejected-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-receipt-admitted".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-receipt-admitted-payload"),
+            variant_id: "effect-receipt-admitted-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-reconciled".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-reconciled-payload"),
+            variant_id: "effect-reconciled-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-reconciliation-observed".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-reconciliation-observed-payload"),
+            variant_id: "effect-reconciliation-observed-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-reconciliation-required".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-reconciliation-required-payload"),
+            variant_id: "effect-reconciliation-required-v1".to_owned(),
+        },
+        EventTypeBinding {
+            event_type: "effect-stream-initialized".to_owned(),
+            major: 1,
+            minor: 0,
+            payload_schema_ref: payload("effect-stream-initialized-payload"),
+            variant_id: "effect-stream-initialized-v1".to_owned(),
+        },
         EventTypeBinding {
             event_type: "hook-invocation-reserved".to_owned(),
             major: 1,
@@ -287,10 +406,10 @@ pub fn generate_schema_bundle() -> Result<GeneratedSchemaBundle, ValidationError
         },
         EventTypeBinding {
             event_type: "run-created".to_owned(),
-            major: 2,
+            major: 3,
             minor: 0,
             payload_schema_ref: payload("run-created-payload"),
-            variant_id: "run-created-v2".to_owned(),
+            variant_id: "run-created-v3".to_owned(),
         },
         EventTypeBinding {
             event_type: "run-state-transitioned".to_owned(),
@@ -453,6 +572,7 @@ fn harden_schema(name: &str, document: &mut Value) {
                 "tool_set",
                 "kernel",
                 "hook_registry",
+                "effect_registry",
             ];
             revisions.clear();
             revisions.insert("type".to_owned(), Value::String("object".to_owned()));
@@ -482,6 +602,13 @@ fn harden_schema(name: &str, document: &mut Value) {
                 .any(|item| item == "hook_registry_config_digest")
             {
                 required.push(Value::String("hook_registry_config_digest".to_owned()));
+                required.sort_by(|left, right| left.as_str().cmp(&right.as_str()));
+            }
+            if !required
+                .iter()
+                .any(|item| item == "effect_registry_config_digest")
+            {
+                required.push(Value::String("effect_registry_config_digest".to_owned()));
                 required.sort_by(|left, right| left.as_str().cmp(&right.as_str()));
             }
         }

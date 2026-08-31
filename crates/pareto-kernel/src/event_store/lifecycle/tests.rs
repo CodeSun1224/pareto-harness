@@ -6,6 +6,7 @@ use std::str::FromStr;
 use tempfile::TempDir;
 
 use super::{canonical, fingerprint};
+use crate::event_store::effect_runtime::{EffectTarget, InitializeEffectStream};
 
 struct Fixture {
     _temp: TempDir,
@@ -40,6 +41,7 @@ impl Fixture {
             scope: scope.clone(),
             revisions,
             hook_registry_config_digest: Some(Digest::parse(format!("sha256:{}", "e".repeat(64))).unwrap()),
+            effect_registry_config_digest: Some(Digest::parse(format!("sha256:{}", "d".repeat(64))).unwrap()),
             plan_revision: None,
             schema_set_ref: set.reference().clone(),
             budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -70,6 +72,7 @@ impl Fixture {
             protocol_limits_ref: self.limits.clone(),
             revisions: self.manifest.revisions.clone(),
             hook_registry_config_digest: self.manifest.hook_registry_config_digest.clone(),
+            effect_registry_config_digest: self.manifest.effect_registry_config_digest.clone(),
             plan_revision: self.manifest.plan_revision.clone(),
             budget_revision: self.manifest.budget_revision.clone(),
             boundary_recording_policy_ref: self.manifest.boundary_recording_policy_ref.clone(),
@@ -164,6 +167,7 @@ fn revision_pins() -> BTreeMap<String, RevisionId> {
         "tool_set",
         "kernel",
         "hook_registry",
+        "effect_registry",
     ]
     .into_iter()
     .map(|role| {
@@ -539,6 +543,27 @@ async fn hierarchy() {
         .await
         .unwrap();
     store
+        .initialize_effect_stream(
+            &fixture.registry(),
+            &EffectTarget {
+                scope: fixture.scope.clone(),
+                actor: fixture.scope.agent_id.clone(),
+            },
+            &InitializeEffectStream {
+                event_id: EventId::parse("event_hierarchy-effect-stream-init").unwrap(),
+                occurred_at: "2026-08-24T01:00:03.500Z".to_owned(),
+                correlation_id: "corr-hierarchy-effect-stream-init".to_owned(),
+                effect_registry_revision: fixture.manifest.revisions["effect_registry"].clone(),
+                effect_registry_config_digest: fixture
+                    .manifest
+                    .effect_registry_config_digest
+                    .clone()
+                    .unwrap(),
+            },
+        )
+        .await
+        .unwrap();
+    store
         .transition_run(
             &fixture.registry(),
             &fixture.target(),
@@ -656,7 +681,7 @@ async fn hierarchy() {
         )
         .await
         .unwrap();
-    assert_eq!(event_count(&store).await, 11);
+    assert_eq!(event_count(&store).await, 12);
 }
 
 #[tokio::test]

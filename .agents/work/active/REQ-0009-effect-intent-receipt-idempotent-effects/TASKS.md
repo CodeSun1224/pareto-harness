@@ -1,17 +1,17 @@
 # Requirement Tasks
 
-Current execution: planned / TASK-REQ-0009-01。设计exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`及接受闭环exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`已由fresh independent REVIEW-0012批准，0 open Blocker/Major；产品实现尚未开始。
+Current execution: reviewing / TASK-REQ-0009-11。设计exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`、接受闭环exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`及规划exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`已由fresh independent REVIEW-0012批准，0 open Blocker/Major；实现、分层测试与VALIDATION证据已完成，正在固定实现候选并交由新的fresh independent Agent执行code review。
 
 - [x] TASK-REQ-0009-00: 完成Requirement、直接/间接影响分析、SPEC、RFC、AC→测试矩阵、fresh independent设计Review、finding整改复审、ADR接受和设计freshness门禁。Validation: REVIEW-0012 `approved`、independent、0 open Blocker/Major；设计接受commit `60cee6e`，Review提交`1a49817`。
-- [ ] TASK-REQ-0009-01: 新增闭合Effect Protocol、Manifest v3 registry/executor role、Effect Event/Projection与Boundary Inventory/Record V2 Schema，保留全部旧set与旧Run解释。Validation: `effect_contract`、Protocol全套、Schema双生成稳定和retained byte identity。
-- [ ] TASK-REQ-0009-02: 实现crate-private Effect stream、exact reader、continuous fold、Projection与显式cursor/history digest读取，不改SQLite v2或增加第二权威状态表。Validation: `fold_contract/projection_recovery/compatibility`。
-- [ ] TASK-REQ-0009-03: 实现Runtime Control与Effect reserve/Intent及terminal/conclusion原子pair，覆盖fault、one-sided corruption、mutation和response-loss retry。Validation: `intent_before_dispatch/atomic_settlement`及SQLite fault injection。
-- [ ] TASK-REQ-0009-04: 实现Kernel admission、幂等identity和exact retry/conflict语义。Validation: `default_deny/idempotency/isolation`。
-- [ ] TASK-REQ-0009-05: 实现dispatch claim、bounded lease、exact executor descriptor与确定性Fake executor outcomes。Validation: `dispatch_lease/fake_outcomes`。
-- [ ] TASK-REQ-0009-06: 实现Receipt observation admission、state model、safe evidence/redaction、late/duplicate处理与保守预算核算。Validation: `receipt_admission/state_model/partial_success/late_receipts`。
-- [ ] TASK-REQ-0009-07: 实现crash/cancel/timeout recovery command、稳定优先级、未claim零usage释放、已claim partial/unknown与reconciliation。Validation: `crash_recovery/cancellation_timeout/reconciliation`。
-- [ ] TASK-REQ-0009-08: 实现success guard、Inventory/Record V2 fixed horizon与Recorded replay零执行/写入/核算。Validation: `lifecycle_success_guard/recorded_replay`。
-- [ ] TASK-REQ-0009-09: 完成完整隔离、权限、redaction、兼容与scope负向测试，确认无真实外部I/O、自动redispatch或新依赖。Validation: `isolation/compatibility`和`python scripts/check_req0009_scope.py`。
-- [ ] TASK-REQ-0009-10: 跑完Focused/Impacted/Core/Full适用门禁、Schema双生成与完整仓库门禁，并写入`VALIDATION.md`。Validation: PLAN全部命令有exact结果与非零filter计数。
+- [x] TASK-REQ-0009-01: 新增闭合Effect Protocol、Manifest v3 registry/executor role、Effect Event/Projection与Boundary Inventory/Record V2 Schema，保留全部旧set与旧Run解释。Validation: `effect_contract` matched 1并通过；Protocol 9 unit + 25 contract/1 ignored通过；Schema双生成稳定；当前set `sha256-161a614c810a10bfae73d83efc83181c37f39cfaa5ccf628e3767ee642fdd7d2`，v1/v2 retained exact reader覆盖通过。
+- [x] TASK-REQ-0009-02: 实现crate-private Effect stream、exact reader、continuous fold、Projection与显式cursor/history digest读取，不改SQLite v2或增加第二权威状态表。Validation: `effect_runtime::` 3/3通过；`projection::` 35通过/1 performance ignored；crate test targets编译通过。
+- [x] TASK-REQ-0009-03: 实现Runtime Control与Effect reserve/Intent及terminal/conclusion原子pair，覆盖共享atomic writer的zero/two/one规则、mutation、response-loss retry及insert/commit fault rollback。Validation: `effect_runtime::` 5/5通过，含`intent_before_dispatch/atomic_settlement`；Runtime Control 52/53后唯一新golden已修复并targeted通过，Hook 39/39通过，Projection新golden逐项固定后targeted通过。
+- [x] TASK-REQ-0009-04: 实现Kernel admission、registry/Manifest/operation contract default-deny、幂等identity和exact retry/conflict语义。Validation: `default_deny/idempotency/isolation`通过；Effect focused累计8/8。
+- [x] TASK-REQ-0009-05: 实现dispatch claim、bounded sealed lease、exact content-addressed executor descriptor与确定性Fake executor outcomes；claim提交后才调用Fake，exact claim retry不再调用。Validation: `dispatch_lease/fake_outcomes`通过，Effect focused累计10/10。
+- [x] TASK-REQ-0009-06: 实现Receipt observation admission、state model、safe evidence/redaction、late/duplicate处理与保守预算核算。Validation: `receipt_admission/state_model/partial_success/late_receipts`通过；Effect focused累计14/14。
+- [x] TASK-REQ-0009-07: 实现crash/cancel/timeout recovery command、稳定fingerprint、未claim零usage释放、已claim unknown全额与显式reconciliation双Event原子关闭。Validation: `crash_recovery/cancellation_timeout/reconciliation`通过。
+- [x] TASK-REQ-0009-08: 实现success guard、Inventory/Record V2 fixed horizon与Recorded replay零执行/写入/核算。Validation: `lifecycle_success_guard/recorded_replay`通过；Inventory读取显式cursor/history digest，horizon后late Event不改变同一pin，Reexecute拒绝。
+- [x] TASK-REQ-0009-09: 完成完整隔离、权限、redaction、兼容与scope负向测试，确认无真实外部I/O、自动redispatch或新依赖。Validation: `isolation/compatibility`通过；错误producer形成脱敏rejected audit；完整scope矩阵无写入；`python scripts/check_req0009_scope.py`通过。
+- [x] TASK-REQ-0009-10: 跑完Focused/Impacted/Core/Full适用门禁、Schema双生成与完整仓库门禁，并写入`VALIDATION.md`。Validation: 19个Effect命名filter各matched 1；Kernel 179/1 ignored、Protocol 9+25/1 ignored；fmt/clippy/scope/schema/diff通过；docs freshness明确等待实现Review。
 - [ ] TASK-REQ-0009-11: 由新的fresh independent Agent执行实现code review；实现者整改，原Reviewer复审关闭全部Blocker/Major。Validation: 新Review为`approved`、independent、0 open Blocker/Major且固定exact implementation revision。
 - [ ] TASK-REQ-0009-12: 同步implemented facts与最终freshness，Requirement reviewing→verified→done并归档active work。Validation: 完整门禁最终复跑、Review 0/0、工作区仅含预期提交。

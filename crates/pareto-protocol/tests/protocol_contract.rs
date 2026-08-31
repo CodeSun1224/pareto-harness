@@ -173,7 +173,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 63);
+    assert_eq!(first.len(), 86);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -284,7 +284,7 @@ fn projection_digest_golden() {
 fn lifecycle_manifest_contract() {
     let bundle = generate_schema_bundle().unwrap();
     let expected_bindings = [
-        ("run-created", "run-created-payload", "run-created-v2"),
+        ("run-created", "run-created-payload", "run-created-v3"),
         (
             "run-state-transitioned",
             "run-state-transitioned-payload",
@@ -318,7 +318,7 @@ fn lifecycle_manifest_contract() {
         assert_eq!(
             (binding.major, binding.minor),
             if binding.event_type == "run-created" {
-                (2, 0)
+                (3, 0)
             } else {
                 (1, 0)
             }
@@ -344,6 +344,7 @@ fn lifecycle_manifest_contract() {
         "tool_set",
         "kernel",
         "hook_registry",
+        "effect_registry",
     ]
     .into_iter()
     .map(|role| {
@@ -358,6 +359,7 @@ fn lifecycle_manifest_contract() {
         scope: scope(),
         revisions,
         hook_registry_config_digest: Some(digest('e')),
+        effect_registry_config_digest: Some(digest('d')),
         plan_revision: None,
         schema_set_ref: bundle.reference.clone(),
         budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -386,7 +388,7 @@ fn lifecycle_manifest_contract() {
         causation_id: None,
         correlation_id: "corr-run-create".to_owned(),
         event_type: "run-created".to_owned(),
-        event_major: 2,
+        event_major: 3,
         event_minor: 0,
         occurred_at: "2026-08-24T00:00:00.000Z".to_owned(),
         actor: AgentId::parse("agent_primary").unwrap(),
@@ -405,7 +407,7 @@ fn lifecycle_manifest_contract() {
             manifest.protocol_limits_ref.clone(),
         )
         .unwrap();
-    assert_eq!(validated.variant_id(), "run-created-v2");
+    assert_eq!(validated.variant_id(), "run-created-v3");
     assert_eq!(
         validated.downcast_payload::<RunCreatedPayload>().unwrap(),
         &payload
@@ -473,7 +475,7 @@ fn capability_budget_contract() {
             "missing {event_type}"
         );
     }
-    assert_eq!(bundle.manifest.event_bindings.len(), 23);
+    assert_eq!(bundle.manifest.event_bindings.len(), 33);
     assert!(BudgetAmountV1::parse("0").is_ok());
     assert!(BudgetAmountV1::parse(u64::MAX.to_string()).is_ok());
     for invalid in ["", "00", "01", "-1", "1.0", "18446744073709551616"] {
@@ -690,6 +692,8 @@ fn checked_in_old_writer_manifests_use_their_exact_retained_reader() {
     for set_directory in [
         "sha256-68535bfc61b49a5bac4c8f9fd6c405bca32dc60b662196c6668a3de4c1badac3",
         "sha256-7adfe3b790d85e4bfb3440e739528c4fd33a47f99dabf0403888e09cc279a2e4",
+        "sha256-3a0c6e67a97675cf6bfcdc1fb9766b30a79ae62e662479d9ae1ef5d7b43ff99d",
+        "sha256-0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771",
     ] {
         let retained = load_retained_set(&sets.join(set_directory));
         assert_eq!(
@@ -700,7 +704,8 @@ fn checked_in_old_writer_manifests_use_their_exact_retained_reader() {
                 .replace(':', "-"),
             set_directory
         );
-        let revisions = [
+        let manifest_schema = retained.schema_ref("run-manifest").unwrap().clone();
+        let mut roles = vec![
             "task",
             "behavior",
             "workspace",
@@ -709,20 +714,25 @@ fn checked_in_old_writer_manifests_use_their_exact_retained_reader() {
             "model_snapshot",
             "tool_set",
             "kernel",
-        ]
-        .into_iter()
-        .map(|role| {
-            (
-                role.to_owned(),
-                RevisionId::parse(format!("rev_{}", role.replace('_', "-"))).unwrap(),
-            )
-        })
-        .collect();
+        ];
+        if manifest_schema.major == 2 {
+            roles.push("hook_registry");
+        }
+        let revisions = roles
+            .into_iter()
+            .map(|role| {
+                (
+                    role.to_owned(),
+                    RevisionId::parse(format!("rev_{}", role.replace('_', "-"))).unwrap(),
+                )
+            })
+            .collect();
         let manifest = RunManifest {
-            schema_ref: retained.schema_ref("run-manifest").unwrap().clone(),
+            schema_ref: manifest_schema.clone(),
             scope: scope(),
             revisions,
-            hook_registry_config_digest: None,
+            hook_registry_config_digest: (manifest_schema.major == 2).then(|| digest('e')),
+            effect_registry_config_digest: None,
             plan_revision: None,
             schema_set_ref: retained.reference().clone(),
             budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -909,8 +919,8 @@ fn hook_contract_schema_manifest_and_registration_are_closed() {
             .unwrap_or_else(|| panic!("missing {name}"))
             .clone()
     };
-    assert_eq!(member("run-manifest").major, 2);
-    assert_eq!(member("run-created-payload").major, 2);
+    assert_eq!(member("run-manifest").major, 3);
+    assert_eq!(member("run-created-payload").major, 3);
     for required in [
         "hook-registry-revision",
         "hook-stream-initialized-payload",
@@ -945,8 +955,8 @@ fn hook_contract_schema_manifest_and_registration_are_closed() {
     }
     assert!(bundle.manifest.event_bindings.iter().any(|binding| {
         binding.event_type == "run-created"
-            && binding.major == 2
-            && binding.variant_id == "run-created-v2"
+            && binding.major == 3
+            && binding.variant_id == "run-created-v3"
     }));
 
     let base = HookRegistrationV1 {
@@ -1252,25 +1262,18 @@ fn replay_lineage_and_boundary_finalization_fail_closed() {
 
 #[test]
 fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
-    let bundle = generate_schema_bundle().unwrap();
-    let member = |name: &str| {
-        bundle
-            .manifest
-            .schemas
-            .iter()
-            .find(|item| item.r#type == name)
-            .unwrap()
-            .clone()
-    };
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../schemas/sets/sha256-0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771",
+    );
+    let set = load_retained_set(&directory);
+    let member = |name: &str| set.schema_ref(name).unwrap().clone();
     let inventory_top = member("boundary-inventory-revision");
     let inventory_hash = member("boundary-inventory-hash-view");
     let reconciliation_top = member("boundary-reconciliation-revision");
     let reconciliation_hash = member("boundary-reconciliation-hash-view");
     let revision_metadata = member("revision-metadata");
     let run_schema = member("run-manifest");
-    let set_ref = bundle.reference.clone();
-    let set =
-        SchemaSet::bootstrap_initial(bundle.manifest, bundle.schemas, &bundle.reference).unwrap();
+    let set_ref = set.reference().clone();
 
     let mut inventory = BoundaryInventoryRevision {
         metadata: RevisionMetadata {
@@ -1342,6 +1345,7 @@ fn boundary_record_admission_binds_exact_top_and_hash_schemas() {
         scope: source_scope.clone(),
         revisions,
         hook_registry_config_digest: Some(digest('e')),
+        effect_registry_config_digest: None,
         plan_revision: None,
         schema_set_ref: set_ref.clone(),
         budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -1542,4 +1546,202 @@ fn limits_reject_depth_at_n_plus_one_and_accept_n() {
 
     let escaped = br#""\u0078""#;
     assert_eq!(parse_bounded::<String>(escaped).unwrap(), "x");
+}
+
+#[test]
+fn effect_contract_manifest_events_and_inventory_v2_are_closed() {
+    let bundle = generate_schema_bundle().unwrap();
+    let member = |name: &str, major: u32| {
+        bundle
+            .manifest
+            .schemas
+            .iter()
+            .find(|schema| schema.r#type == name && schema.major == major)
+            .unwrap_or_else(|| panic!("missing {name} v{major}"))
+            .clone()
+    };
+    assert_eq!(member("run-manifest", 3).major, 3);
+    assert_eq!(member("boundary-inventory-revision", 2).major, 2);
+    for required in [
+        "effect-attempt-concluded-payload",
+        "effect-boundary-record",
+        "effect-dispatch-claimed-payload",
+        "effect-executor-descriptor",
+        "effect-executor-descriptor-hash-view",
+        "effect-intended-payload",
+        "effect-late-receipt-observed-payload",
+        "effect-message-rejected-payload",
+        "effect-projection",
+        "effect-projection-hash-view",
+        "effect-receipt-admitted-payload",
+        "effect-receipt-observation",
+        "effect-reconciled-payload",
+        "effect-reconciliation-observed-payload",
+        "effect-reconciliation-required-payload",
+        "effect-recovery-base-key",
+        "effect-recovery-key",
+        "effect-registration",
+        "effect-registry-revision",
+        "effect-request",
+        "effect-stream-initialized-payload",
+    ] {
+        assert!(
+            bundle
+                .manifest
+                .schemas
+                .iter()
+                .any(|schema| schema.r#type == required),
+            "missing {required}"
+        );
+    }
+    for event_type in [
+        "effect-attempt-concluded",
+        "effect-dispatch-claimed",
+        "effect-intended",
+        "effect-late-receipt-observed",
+        "effect-message-rejected",
+        "effect-receipt-admitted",
+        "effect-reconciled",
+        "effect-reconciliation-observed",
+        "effect-reconciliation-required",
+        "effect-stream-initialized",
+    ] {
+        assert!(bundle.manifest.event_bindings.iter().any(|binding| {
+            binding.event_type == event_type && binding.major == 1 && binding.minor == 0
+        }));
+    }
+
+    let registration = EffectRegistrationV1 {
+        effect_kind: "fake-write".to_owned(),
+        effect_revision: RevisionId::parse("rev_effect-v1").unwrap(),
+        executor_revision: RevisionId::parse("rev_executor-v1").unwrap(),
+        executor_descriptor_digest: digest('1'),
+        executor_config_digest: digest('2'),
+        adapter_revision: RevisionId::parse("rev_adapter-v1").unwrap(),
+        producer_revision: RevisionId::parse("rev_producer-v1").unwrap(),
+        operation_contract_revision: RevisionId::parse("rev_operation-v1").unwrap(),
+        request_schema_ref: schema("effect-fake-request", '3'),
+        receipt_schema_ref: schema("effect-fake-receipt", '4'),
+        idempotency_policy: EffectIdempotencyPolicyV1::Keyed,
+        unknown_outcome_policy: EffectUnknownOutcomePolicyV1::ReconcileOnly,
+        reconciliation_policy_revision: RevisionId::parse("rev_reconcile-v1").unwrap(),
+        redaction_policy_revision: RevisionId::parse("rev_redaction-v1").unwrap(),
+        limits: EffectLimitsV1 {
+            max_request_bytes: 4096,
+            max_receipt_bytes: 4096,
+            max_result_summary_bytes: 1024,
+            max_limitations: 8,
+        },
+    };
+    assert!(registration.validate().is_ok());
+    let mut invalid = registration;
+    invalid.effect_kind = "Fake_Write".to_owned();
+    assert!(invalid.validate().is_err());
+
+    let partial = EffectBoundaryOutcomeV2::Partial {
+        receipt_digest: None,
+        confirmed_components_digest: digest('5'),
+        unknown_components_digest: digest('6'),
+        limitations: vec!["bounded-observation".to_owned()],
+        reconciliation_binding: EffectReconciliationBindingV2::Open {
+            evidence_digest: digest('7'),
+        },
+    };
+    let partial_value = serde_json::to_value(partial).unwrap();
+    assert_eq!(partial_value["outcome"], "partial");
+    assert!(serde_json::from_value::<BoundaryOutcome>(partial_value).is_err());
+
+    let set_ref = bundle.reference.clone();
+    let set =
+        SchemaSet::bootstrap_initial(bundle.manifest.clone(), bundle.schemas.clone(), &set_ref)
+            .unwrap();
+    let mut source_scope = scope();
+    source_scope.run_id = RunId::parse("run_effect-source").unwrap();
+    let revisions = [
+        "task",
+        "behavior",
+        "workspace",
+        "environment",
+        "context_graph",
+        "model_snapshot",
+        "tool_set",
+        "kernel",
+        "hook_registry",
+        "effect_registry",
+    ]
+    .into_iter()
+    .map(|role| {
+        (
+            role.to_owned(),
+            RevisionId::parse(format!("rev_{}", role.replace('_', "-"))).unwrap(),
+        )
+    })
+    .collect();
+    let source_manifest = RunManifest {
+        schema_ref: member("run-manifest", 3),
+        scope: source_scope.clone(),
+        revisions,
+        hook_registry_config_digest: Some(digest('8')),
+        effect_registry_config_digest: Some(digest('9')),
+        plan_revision: None,
+        schema_set_ref: set_ref.clone(),
+        budget_revision: RevisionId::parse("rev_budget").unwrap(),
+        protocol_limits_ref: ProtocolLimitsRef {
+            profile: "protocol-limits-v1".to_owned(),
+            digest: Digest::parse(ProtocolLimitsV1::DIGEST).unwrap(),
+        },
+        boundary_recording_policy_ref: BoundaryRecordingPolicyRef {
+            revision_id: RevisionId::parse("rev_effect-recording").unwrap(),
+            digest: digest('a'),
+        },
+        execution_mode: ExecutionMode::Live {},
+    };
+    let mut inventory = BoundaryInventoryRevisionV2 {
+        metadata: RevisionMetadata {
+            logical_id: "effect-inventory/run_effect-source".to_owned(),
+            revision_id: RevisionId::parse("rev_placeholder").unwrap(),
+            revision_kind: "boundary_inventory_v2".to_owned(),
+            parent_revision: None,
+            schema_ref: member("boundary-inventory-revision", 2),
+            content_digest: digest('b'),
+            creator_actor: source_scope.agent_id.clone(),
+            source: "fixed-effect-horizon".to_owned(),
+            created_at: "2026-08-30T00:00:00.000Z".to_owned(),
+        },
+        hash_schema_ref: member("boundary-inventory-hash-view", 2),
+        source_run_id: source_scope.run_id.clone(),
+        schema_set_ref: set_ref,
+        effect_stream_id: StreamId::parse("stream_effect-effect-source").unwrap(),
+        effect_inclusive_cursor: EventCursor {
+            sequence: "1".to_owned(),
+            event_id: EventId::parse("event_effect-stream-init").unwrap(),
+        },
+        effect_history_digest: digest('c'),
+        recording_policy_revision: source_manifest
+            .boundary_recording_policy_ref
+            .revision_id
+            .clone(),
+        effects: Vec::new(),
+    };
+    inventory.metadata.content_digest = inventory.content_digest().unwrap();
+    inventory.metadata.revision_id = derive_revision_id(&inventory.metadata).unwrap();
+    let validated = set
+        .validate_boundary_inventory_v2(inventory.clone(), source_manifest, &source_scope)
+        .unwrap();
+    assert!(
+        ExecutionMode::RecordedReplay {
+            source_run_id: inventory.source_run_id.clone(),
+            boundary_inventory_revision: inventory.metadata.revision_id.clone(),
+        }
+        .validate_inventory_v2(&validated)
+        .is_ok()
+    );
+    assert!(
+        ExecutionMode::Reexecute {
+            source_run_id: inventory.source_run_id.clone(),
+            boundary_inventory_revision: inventory.metadata.revision_id.clone(),
+        }
+        .validate_inventory_v2(&validated)
+        .is_err()
+    );
 }

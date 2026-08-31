@@ -14,7 +14,7 @@ links: [REQ-0009, SPEC-0008, RFC-0009, ADR-0010, REQ-0004, REQ-0007, REQ-0008, R
 
 REQ-0004、REQ-0007、REQ-0008均done。当前SQLite保持v2，REQ-0008最终Hook-capable SchemaSet为`sha256-0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771`。REQ-0009 Requirement、影响矩阵、SPEC-0008、RFC-0009与AC→测试追踪已经完成；fresh independent REVIEW-0012曾提出4个Major，设计逐项整改后由同一Reviewer批准，最终设计exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`，接受闭环exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`，0 open Blocker/Major。
 
-当前没有REQ-0009 Runtime、Schema、测试、依赖或真实外部效果实现。本计划创建后Requirement仅为`planned`，不得表示implementing、reviewing、verified或done。
+当前没有REQ-0009 Runtime、Schema、测试、依赖或真实外部效果实现。规划门禁已由fresh independent REVIEW-0012对exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`批准；Requirement现推进为`implementing`，不得表示reviewing、verified或done。
 
 # Plan
 
@@ -38,9 +38,9 @@ REQ-0004、REQ-0007、REQ-0008均done。当前SQLite保持v2，REQ-0008最终Hoo
 所有下列`pareto-kernel`filter都必须通过`python scripts/assert_cargo_test_filter.py pareto-kernel <filter>`执行；helper必须先断言命中数大于0，不得把Cargo的0 tests成功作为证据。
 
 - Protocol/Schema：`cargo test -p pareto-protocol effect_contract --offline`；`cargo test -p pareto-protocol --all-targets --all-features --offline`；`cargo run -p pareto-protocol --bin generate_schemas --offline -- schemas`；再次生成并以`git diff --exit-code -- schemas`证明生成树byte-identical。
-- Focused Effect：filters `effect_runtime::default_deny`、`effect_runtime::intent_before_dispatch`、`effect_runtime::idempotency`、`effect_runtime::dispatch_lease`、`effect_runtime::fake_outcomes`、`effect_runtime::receipt_admission`、`effect_runtime::state_model`、`effect_runtime::partial_success`。
-- Recovery/settlement：filters `effect_runtime::crash_recovery`、`effect_runtime::reconciliation`、`effect_runtime::atomic_settlement`、`effect_runtime::cancellation_timeout`、`effect_runtime::late_receipts`。
-- Persistence/replay/security：filters `effect_runtime::fold_contract`、`effect_runtime::isolation`、`effect_runtime::projection_recovery`、`effect_runtime::recorded_replay`、`effect_runtime::compatibility`、`effect_runtime::lifecycle_success_guard`；`cargo test -p pareto-kernel --doc --offline`证明外部无法构造authority、lease、Receipt admission或writer transaction。
+- Focused Effect：filters `effect_runtime::tests::default_deny`、`effect_runtime::tests::intent_before_dispatch`、`effect_runtime::tests::idempotency`、`effect_runtime::tests::dispatch_lease`、`effect_runtime::tests::fake_outcomes`、`effect_runtime::tests::receipt_admission`、`effect_runtime::tests::state_model`、`effect_runtime::tests::partial_success`。
+- Recovery/settlement：filters `effect_runtime::tests::crash_recovery`、`effect_runtime::tests::reconciliation`、`effect_runtime::tests::atomic_settlement`、`effect_runtime::tests::cancellation_timeout`、`effect_runtime::tests::late_receipts`。
+- Persistence/replay/security：filters `effect_runtime::tests::fold_contract`、`effect_runtime::tests::isolation`、`effect_runtime::tests::projection_recovery`、`effect_runtime::tests::recorded_replay`、`effect_runtime::tests::compatibility`、`effect_runtime::tests::lifecycle_success_guard`；`cargo test -p pareto-kernel --doc --offline`证明外部无法构造authority、lease、Receipt admission或writer transaction。
 - Impacted regression：`cargo test -p pareto-kernel event_store --offline`；`cargo test -p pareto-kernel lifecycle:: --offline`；`cargo test -p pareto-kernel projection:: --offline`；`cargo test -p pareto-kernel runtime_control:: --offline`；`cargo test -p pareto-kernel hook_runtime:: --offline`；`cargo test -p pareto-kernel --all-targets --all-features --offline`。
 - Scope/compatibility：新增并运行`python scripts/check_req0009_scope.py`，断言SQLite `user_version=2`及v2 DDL/trigger、全部retained SchemaSet和旧Run reducers不变；断言没有真实network/process/sleep、mutable outbox/status表、background scanner、自动redispatch或REQ-0010后续能力。运行`cargo tree --workspace --offline`记录完整依赖树，并以`git diff --exit-code 60cee6ed44d150185bf99ca3095a8ce803bcc0d3 -- Cargo.toml Cargo.lock ':(glob)**/Cargo.toml'`证明相对已接受设计基线没有manifest/lock依赖变化；任何依赖diff触发停止和重审。
 - Governance/Core：`python -m unittest discover -s scripts/tests -p "test_*.py"`；`python scripts/check_docs.py`；`cargo fmt --all -- --check`；`cargo clippy --workspace --all-targets --all-features --offline -- -D warnings`；`cargo test --workspace --all-targets --all-features --offline`。

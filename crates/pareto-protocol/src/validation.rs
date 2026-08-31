@@ -270,9 +270,39 @@ fn builtin_event_decoder(binding: &EventTypeBinding) -> Option<Arc<dyn EventVari
         ("hook-message-rejected-v1", "hook-message-rejected-payload") => {
             Some(decoder!(crate::HookMessageRejectedPayloadV1))
         }
-        ("run-created-v1", "run-created-payload") | ("run-created-v2", "run-created-payload") => {
-            Some(decoder!(crate::RunCreatedPayload))
+        ("effect-stream-initialized-v1", "effect-stream-initialized-payload") => {
+            Some(decoder!(crate::EffectStreamInitializedPayloadV1))
         }
+        ("effect-intended-v1", "effect-intended-payload") => {
+            Some(decoder!(crate::EffectIntendedPayloadV1))
+        }
+        ("effect-dispatch-claimed-v1", "effect-dispatch-claimed-payload") => {
+            Some(decoder!(crate::EffectDispatchClaimedPayloadV1))
+        }
+        ("effect-receipt-admitted-v1", "effect-receipt-admitted-payload") => {
+            Some(decoder!(crate::EffectReceiptAdmittedPayloadV1))
+        }
+        ("effect-attempt-concluded-v1", "effect-attempt-concluded-payload") => {
+            Some(decoder!(crate::EffectAttemptConcludedPayloadV1))
+        }
+        ("effect-reconciliation-required-v1", "effect-reconciliation-required-payload") => {
+            Some(decoder!(crate::EffectReconciliationRequiredPayloadV1))
+        }
+        ("effect-reconciliation-observed-v1", "effect-reconciliation-observed-payload") => {
+            Some(decoder!(crate::EffectReconciliationObservedPayloadV1))
+        }
+        ("effect-reconciled-v1", "effect-reconciled-payload") => {
+            Some(decoder!(crate::EffectReconciledPayloadV1))
+        }
+        ("effect-late-receipt-observed-v1", "effect-late-receipt-observed-payload") => {
+            Some(decoder!(crate::EffectLateReceiptObservedPayloadV1))
+        }
+        ("effect-message-rejected-v1", "effect-message-rejected-payload") => {
+            Some(decoder!(crate::EffectMessageRejectedPayloadV1))
+        }
+        ("run-created-v1", "run-created-payload")
+        | ("run-created-v2", "run-created-payload")
+        | ("run-created-v3", "run-created-payload") => Some(decoder!(crate::RunCreatedPayload)),
         ("task-created-v1", "task-created-payload") => Some(decoder!(crate::TaskCreatedPayload)),
         ("run-state-transitioned-v1", "run-state-transitioned-payload") => {
             Some(decoder!(crate::RunStateTransitionedPayload))
@@ -785,9 +815,13 @@ impl SchemaSet {
             "tool_set",
             "kernel",
         ];
-        let is_hook_manifest = manifest.schema_ref.major == 2;
+        let is_hook_manifest = manifest.schema_ref.major >= 2;
+        let is_effect_manifest = manifest.schema_ref.major == 3;
         if is_hook_manifest {
             required_roles.push("hook_registry");
+        }
+        if is_effect_manifest {
+            required_roles.push("effect_registry");
         }
         for role in &required_roles {
             if !manifest.revisions.contains_key(*role) {
@@ -812,7 +846,15 @@ impl SchemaSet {
                 ErrorCode::InvariantViolation,
                 "/hook_registry_config_digest",
                 "run_manifest",
-                "V2 requires and V1 forbids a Hook registry config digest",
+                "V2/V3 require and V1 forbids a Hook registry config digest",
+            ));
+        }
+        if is_effect_manifest != manifest.effect_registry_config_digest.is_some() {
+            errors.push(ValidationError::new(
+                ErrorCode::InvariantViolation,
+                "/effect_registry_config_digest",
+                "run_manifest",
+                "V3 requires and V1/V2 forbid an Effect registry config digest",
             ));
         }
         if let Err(error) = manifest.execution_mode.validate(&manifest.scope.run_id) {
@@ -1006,6 +1048,85 @@ impl SchemaSet {
         sort_and_truncate(&mut errors);
         if errors.is_empty() {
             Ok(Validated(reconciliation))
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// Admits Boundary Inventory V2 only against an exact validated Manifest v3 source Run.
+    pub fn validate_boundary_inventory_v2(
+        &self,
+        inventory: crate::BoundaryInventoryRevisionV2,
+        source_manifest: crate::RunManifest,
+        expected_source_scope: &IsolationScope,
+    ) -> Result<Validated<crate::BoundaryInventoryRevisionV2>, Vec<ValidationError>> {
+        let mut errors = Vec::new();
+        if let Ok(value) = serde_json::to_value(&inventory) {
+            if let Err(error) = validate_value_limits(&value, ProtocolLimitsV1::RECORD_BYTES) {
+                errors.push(error);
+            }
+        }
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+        let validated_source =
+            self.validate_run_manifest(source_manifest, expected_source_scope)?;
+        if validated_source.get().schema_ref.major != 3 {
+            errors.push(schema_error(
+                "/source_manifest/schema_ref",
+                "Boundary Inventory V2 requires an exact Manifest v3 source",
+            ));
+        }
+        if inventory.source_run_id != validated_source.get().scope.run_id {
+            errors.push(scope_error(
+                "/source_run_id",
+                "V2 inventory source Run does not match the validated source manifest",
+            ));
+        }
+        if inventory.recording_policy_revision
+            != validated_source
+                .get()
+                .boundary_recording_policy_ref
+                .revision_id
+        {
+            errors.push(ValidationError::new(
+                ErrorCode::InvariantViolation,
+                "/recording_policy_revision",
+                "boundary_inventory_revision_v2",
+                "V2 inventory recording policy does not match the source manifest",
+            ));
+        }
+        if inventory.schema_set_ref != self.reference {
+            errors.push(schema_error(
+                "/schema_set_ref",
+                "V2 inventory does not pin the exact admitted SchemaSet",
+            ));
+        }
+        let top = self.exact_schema("boundary-inventory-revision");
+        if top != Some(&inventory.metadata.schema_ref) || inventory.metadata.schema_ref.major != 2 {
+            errors.push(schema_error(
+                "/metadata/schema_ref",
+                "V2 inventory does not use the exact admitted major-2 Schema",
+            ));
+        } else if let (Some(validator), Ok(value)) = (
+            self.validators.get(&inventory.metadata.schema_ref),
+            serde_json::to_value(&inventory),
+        ) {
+            validate_json_schema(validator, &value, "", &mut errors);
+        }
+        let hash = self.exact_schema("boundary-inventory-hash-view");
+        if hash != Some(&inventory.hash_schema_ref) || inventory.hash_schema_ref.major != 2 {
+            errors.push(schema_error(
+                "/hash_schema_ref",
+                "V2 inventory hash view does not use the exact admitted major-2 Schema",
+            ));
+        }
+        if let Err(error) = inventory.validate() {
+            errors.push(error);
+        }
+        sort_and_truncate(&mut errors);
+        if errors.is_empty() {
+            Ok(Validated(inventory))
         } else {
             Err(errors)
         }
@@ -1455,6 +1576,24 @@ protocol_record!(
 protocol_record!(crate::ProjectionReducerRef, "projection-reducer-ref");
 protocol_record!(crate::HookProjectionV1, "hook-projection");
 protocol_record!(crate::HookProjectionHashViewV1, "hook-projection-hash-view");
+protocol_record!(crate::EffectProjectionV1, "effect-projection");
+protocol_record!(crate::EffectRequestV1, "effect-request");
+protocol_record!(
+    crate::EffectReceiptObservationV1,
+    "effect-receipt-observation"
+);
+protocol_record!(
+    crate::EffectProjectionHashViewV1,
+    "effect-projection-hash-view"
+);
+protocol_record!(
+    crate::EffectExecutorDescriptorHashViewV1,
+    "effect-executor-descriptor-hash-view"
+);
+protocol_record!(
+    crate::BoundaryInventoryHashViewV2,
+    "boundary-inventory-hash-view"
+);
 protocol_record!(crate::RunTaskProjection, "run-task-projection");
 protocol_record!(
     crate::RunTaskProjectionHashViewV1,
@@ -1857,6 +1996,7 @@ mod tests {
             scope: scope(),
             revisions,
             hook_registry_config_digest: Some(digest('e')),
+            effect_registry_config_digest: Some(digest('d')),
             plan_revision: None,
             schema_set_ref: bundle.reference.clone(),
             budget_revision: crate::RevisionId::parse("rev_budget").unwrap(),

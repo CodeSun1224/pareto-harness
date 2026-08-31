@@ -56,6 +56,7 @@ impl Fixture {
             scope: scope.clone(),
             revisions: revision_pins(),
             hook_registry_config_digest: Some(digest('e')),
+            effect_registry_config_digest: Some(digest('d')),
             plan_revision: None,
             schema_set_ref: set.reference().clone(),
             budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -106,6 +107,7 @@ impl Fixture {
             protocol_limits_ref: self.limits.clone(),
             revisions: self.manifest.revisions.clone(),
             hook_registry_config_digest: self.manifest.hook_registry_config_digest.clone(),
+            effect_registry_config_digest: self.manifest.effect_registry_config_digest.clone(),
             plan_revision: None,
             budget_revision: self.manifest.budget_revision.clone(),
             boundary_recording_policy_ref: self.manifest.boundary_recording_policy_ref.clone(),
@@ -156,6 +158,7 @@ fn revision_pins() -> BTreeMap<String, RevisionId> {
         "tool_set",
         "kernel",
         "hook_registry",
+        "effect_registry",
     ]
     .into_iter()
     .map(|role| {

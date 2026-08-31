@@ -12,6 +12,7 @@ use super::lifecycle::{
     AppliedState, CreateRunCommand, CreateTaskCommand, LifecycleResult, TransitionRunCommand,
     TransitionTaskCommand, TrustedRunInputs,
 };
+use crate::event_store::effect_runtime::{EffectTarget, InitializeEffectStream};
 
 #[derive(Clone)]
 pub(super) struct FakeClock {
@@ -74,6 +75,7 @@ impl Fixture {
             scope: scope.clone(),
             revisions: revision_pins(),
             hook_registry_config_digest: Some(digest('e')),
+            effect_registry_config_digest: Some(digest('d')),
             plan_revision: None,
             schema_set_ref: set.reference().clone(),
             budget_revision: RevisionId::parse("rev_budget").unwrap(),
@@ -123,6 +125,7 @@ impl Fixture {
             protocol_limits_ref: self.limits.clone(),
             revisions: self.manifest.revisions.clone(),
             hook_registry_config_digest: self.manifest.hook_registry_config_digest.clone(),
+            effect_registry_config_digest: self.manifest.effect_registry_config_digest.clone(),
             plan_revision: None,
             budget_revision: self.manifest.budget_revision.clone(),
             boundary_recording_policy_ref: self.manifest.boundary_recording_policy_ref.clone(),
@@ -224,7 +227,7 @@ impl Fixture {
 }
 
 fn revision_pins() -> BTreeMap<String, RevisionId> {
-    ["task", "behavior", "workspace", "environment", "context_graph", "model_snapshot", "tool_set", "kernel", "hook_registry"]
+    ["task", "behavior", "workspace", "environment", "context_graph", "model_snapshot", "tool_set", "kernel", "hook_registry", "effect_registry"]
         .into_iter().map(|role| (role.to_owned(), RevisionId::parse(format!("rev_{}", role.replace('_', "-"))).unwrap())).collect()
 }
 
@@ -256,6 +259,27 @@ async fn create_initialized_with_payload(
     payload: RuntimeControlInitializedPayloadV1,
 ) -> EventStore {
     let store = create_lifecycle_only(fixture).await;
+    store
+        .initialize_effect_stream(
+            &fixture.registry(),
+            &EffectTarget {
+                scope: fixture.scope.clone(),
+                actor: fixture.scope.agent_id.clone(),
+            },
+            &InitializeEffectStream {
+                event_id: EventId::parse("event_effect-stream-init").unwrap(),
+                occurred_at: "2026-08-26T00:00:01.500Z".to_owned(),
+                correlation_id: "corr-effect-stream-init".to_owned(),
+                effect_registry_revision: fixture.manifest.revisions["effect_registry"].clone(),
+                effect_registry_config_digest: fixture
+                    .manifest
+                    .effect_registry_config_digest
+                    .clone()
+                    .unwrap(),
+            },
+        )
+        .await
+        .unwrap();
     store.initialize_runtime_control(&fixture.registry(), &fixture.target(), &InitializeRuntimeControlCommand {
         event_id: EventId::parse("event_control-init").unwrap(), occurred_at: "2026-08-26T00:00:02.000Z".to_owned(), correlation_id: "corr-control".to_owned(), payload,
     }).await.unwrap();
@@ -680,6 +704,7 @@ fn cancellation_propagation() {
         operation_id: OperationId::parse("operation_probe").unwrap(),
         reservation_id: ReservationId::parse("reservation_probe").unwrap(),
         hook_pair: None,
+        effect_pair: None,
         subject_actor: AgentId::parse("agent_owner").unwrap(), task_id: Some(TaskId::parse("task_probe").unwrap()), resource: resource(), operation: "invoke".to_owned(), grant_id: CapabilityId::parse("cap_probe").unwrap(),
         authorization_decision: AuthorizationDecisionV1 { outcome: AuthorizationOutcomeV1::Allowed, reason_code: "allowed".to_owned(), grant_id: Some(CapabilityId::parse("cap_probe").unwrap()), request_digest: digest('1') },
         requested_usage: usage(1), trusted_reservation: usage(1), allocations: Vec::new(), operation_contract_revision: RevisionId::parse("rev_operation").unwrap(), adapter_revision: RevisionId::parse("rev_adapter").unwrap(),
@@ -779,7 +804,7 @@ async fn timeout_recovery() {
     let command = store.prepare_timeout_recovery(
         &fixture.registry(), &fixture.target(), timeout_request("operation_timeout", "corr-timeout", None, digest('e')), &at_deadline,
     ).await.unwrap();
-    assert_eq!(command.event_id.as_str(), "event_43513f57daa1f284d94ae90c36e71a28376e84850df413386fe9b8d608a48e4e");
+    assert_eq!(command.event_id.as_str(), "event_1a6d3f29fd556e10de0d4c8df97bba5f3a8beb6f0b8ee0dbb5ebe27e12a31fd1");
     let first = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     let retry = store.recover_timeout(&fixture.registry(), &fixture.target(), &command).await.unwrap();
     assert_eq!(append_identity(&first), append_identity(&retry));
@@ -1731,6 +1756,7 @@ async fn compatibility_rejects_schema_valid_illegal_budget_and_cancel_history() 
         operation_id: OperationId::parse("operation_illegal-budget").unwrap(),
         reservation_id: ReservationId::parse("reservation_illegal-budget").unwrap(),
         hook_pair: None,
+        effect_pair: None,
         callback_id: Some(CallbackId::parse("callback_fake-illegal-budget").unwrap()),
         callback_fingerprint: Some(digest('7')),
         callback_authority: None,

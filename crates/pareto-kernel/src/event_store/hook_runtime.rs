@@ -167,6 +167,7 @@ fn validate_reserve_pair_command(
         ) != prepared
         || command.pair.pair_fingerprint != fingerprint
         || command.control_payload.hook_pair.as_ref() != Some(&command.pair)
+        || command.control_payload.effect_pair.is_some()
         || command.hook_payload.pair != command.pair
         || command.hook_payload.invocation_id != command.pair.invocation_id
         || command.hook_payload.key.task_id != command.control_payload.task_id
@@ -206,6 +207,7 @@ fn validate_terminal_pair_command(
         ) != prepared
         || command.pair.pair_fingerprint != fingerprint
         || command.control_payload.hook_pair.as_ref() != Some(&command.pair)
+        || command.control_payload.effect_pair.is_some()
         || command.hook_payload.pair != command.pair
         || command.hook_payload.invocation_id != command.pair.invocation_id
         || command.control_payload.operation_id != command.pair.operation_id
@@ -2506,7 +2508,7 @@ impl EventStore {
         let schema_set = lifecycle.schema_set.clone();
         let limits = lifecycle.limits.clone();
         let manifest = lifecycle.state.manifest.clone();
-        if manifest.schema_ref.major != 2 {
+        if !matches!(manifest.schema_ref.major, 2 | 3) {
             return Err(HookError::new(HookErrorKind::ManifestInvalid));
         }
         let resolved = ResolvedHookRegistry::resolve(&manifest, hook_registry, &schema_set)?;
@@ -2599,7 +2601,7 @@ impl EventStore {
             .rollback()
             .await
             .map_err(|_| HookError::new(HookErrorKind::Store))?;
-        if lifecycle.state.manifest.schema_ref.major != 2 {
+        if !matches!(lifecycle.state.manifest.schema_ref.major, 2 | 3) {
             return Err(HookError::new(HookErrorKind::ManifestInvalid));
         }
         Ok((
@@ -2646,7 +2648,7 @@ fn validate_hook_manifest(
     manifest: &RunManifest,
     command: &InitializeHookStream,
 ) -> Result<(), HookError> {
-    if manifest.schema_ref.major != 2
+    if !matches!(manifest.schema_ref.major, 2 | 3)
         || manifest.revisions.get("hook_registry") != Some(&command.hook_registry_revision)
         || manifest.hook_registry_config_digest.as_ref()
             != Some(&command.hook_registry_config_digest)

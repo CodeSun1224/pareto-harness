@@ -6,6 +6,7 @@
 mod canonical;
 mod compatibility;
 mod digest;
+mod effects;
 mod error;
 mod hooks;
 mod runtime_control;
@@ -19,6 +20,7 @@ pub use digest::{
     Digest, derive_revision_id, digest_artifact, digest_json, digest_revision_content,
     digest_schema,
 };
+pub use effects::*;
 pub use error::{ErrorCode, ValidationError};
 pub use hooks::*;
 pub use runtime_control::*;

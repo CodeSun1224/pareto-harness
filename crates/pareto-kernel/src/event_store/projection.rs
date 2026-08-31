@@ -25,6 +25,8 @@ const RETAINED_OUTPUT_MANIFEST_DIGEST: &str =
     "sha256:4ce3872926ce61209fdc5ed48deceeec9703ccfe94ea83be485eb8ef7512ff97";
 const HOOK_OUTPUT_MANIFEST_DIGEST: &str =
     "sha256:0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771";
+const EFFECT_OUTPUT_MANIFEST_DIGEST: &str =
+    "sha256:ed5482a4ce2e593782f8909cf3a11e75759aa656ce3673eac1a18b7e2d3ec241";
 const SCHEMA_SET_MANIFEST_DIGEST: &str =
     "sha256:e534c2d587c2813a97f0bb1abf992d29585c3b1ddd04d9c73ee0eda5d83b0f4b";
 const RUN_MANIFEST_DIGEST: &str =
@@ -35,6 +37,10 @@ const HOOK_RUN_MANIFEST_DIGEST: &str =
     "sha256:4723c760d74dc614bbc6716330916a7b6e5e7b79cf1c4803c7cf3b2813bca355";
 const HOOK_RUN_CREATED_PAYLOAD_DIGEST: &str =
     "sha256:1954105acd0c6191cbd2a5fce9bfcb2c656782e04d1a3811523a98b05911e698";
+const EFFECT_RUN_MANIFEST_DIGEST: &str =
+    "sha256:3609306ceb50e47d11ff7f61dbc7093c29394ca91d8b99211084241d28a29163";
+const EFFECT_RUN_CREATED_PAYLOAD_DIGEST: &str =
+    "sha256:8fc7624788d25d1f737352cb84078cdd141ba8b71c2c449409464dc30df56074";
 const RUN_TRANSITION_PAYLOAD_DIGEST: &str =
     "sha256:bd5af4a5494e71b94df741d91a5286274a494ea0dd8785d1dc7c927ed33937e2";
 const TASK_CREATED_PAYLOAD_DIGEST: &str =
@@ -201,6 +207,7 @@ impl ProjectionRegistry {
         let allowed_keys = [
             retained_lifecycle_source_key()?,
             hook_lifecycle_source_key()?,
+            effect_lifecycle_source_key()?,
         ];
         let present_keys: Vec<_> = sources
             .0
@@ -218,10 +225,15 @@ impl ProjectionRegistry {
             if !present_keys.contains(&source_key) {
                 continue;
             }
-            let output_reference = if source_key.run_manifest_schema_ref.major == 2 {
-                hook_output_reference()?
-            } else {
-                retained_output_reference()?
+            let output_reference = match source_key.run_manifest_schema_ref.major {
+                1 => retained_output_reference()?,
+                2 => hook_output_reference()?,
+                3 => effect_output_reference()?,
+                _ => {
+                    return Err(ProjectionError::new(
+                        ProjectionErrorKind::ReducerUnavailable,
+                    ));
+                }
             };
             let output = outputs
                 .0
@@ -326,6 +338,17 @@ fn hook_output_reference() -> Result<SchemaSetRef, ProjectionError> {
     })
 }
 
+fn effect_output_reference() -> Result<SchemaSetRef, ProjectionError> {
+    Ok(SchemaSetRef {
+        manifest_schema_ref: retained_schema_ref(
+            "schema-set-manifest",
+            SCHEMA_SET_MANIFEST_DIGEST,
+        )?,
+        manifest_digest: Digest::parse(EFFECT_OUTPUT_MANIFEST_DIGEST)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    })
+}
+
 fn retained_output_limits() -> Result<ProtocolLimitsRef, ProjectionError> {
     Ok(ProtocolLimitsRef {
         profile: "protocol-limits-v1".to_owned(),
@@ -405,6 +428,33 @@ fn hook_lifecycle_source_key() -> Result<SourceReducerKeyV1, ProjectionError> {
         major: 2,
         minor: 0,
         schema_digest: Digest::parse(HOOK_RUN_CREATED_PAYLOAD_DIGEST)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    };
+    key.event_bindings.sort();
+    Ok(key)
+}
+
+fn effect_lifecycle_source_key() -> Result<SourceReducerKeyV1, ProjectionError> {
+    let mut key = retained_lifecycle_source_key()?;
+    key.run_manifest_schema_ref = SchemaRef {
+        r#type: "run-manifest".to_owned(),
+        major: 3,
+        minor: 0,
+        schema_digest: Digest::parse(EFFECT_RUN_MANIFEST_DIGEST)
+            .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
+    };
+    let run_created = key
+        .event_bindings
+        .iter_mut()
+        .find(|binding| binding.event_type == "run-created")
+        .ok_or_else(|| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?;
+    run_created.major = 3;
+    run_created.variant_id = "run-created-v3".to_owned();
+    run_created.payload_schema_ref = SchemaRef {
+        r#type: "run-created-payload".to_owned(),
+        major: 3,
+        minor: 0,
+        schema_digest: Digest::parse(EFFECT_RUN_CREATED_PAYLOAD_DIGEST)
             .map_err(|_| ProjectionError::new(ProjectionErrorKind::ReducerUnavailable))?,
     };
     key.event_bindings.sort();
@@ -1504,7 +1554,7 @@ async fn digest_golden() {
     let snapshot = build_snapshot(&projection, reducer, &output).unwrap();
     assert_eq!(
         reducer.reducer_ref.contract_digest.as_str(),
-        "sha256:898790b7188270dfa4f7ff5a5b664509aa33ffb3ec714be5ee7ec77551dc3424"
+        "sha256:5549c75b6f9d0fb9b5a20d7d7c0a55998d25ee07cd8becb15217bfc0105ae1d1"
     );
     assert_eq!(
         seed.as_str(),
@@ -1512,11 +1562,11 @@ async fn digest_golden() {
     );
     assert_eq!(
         projection.projection_digest.as_str(),
-        "sha256:1902d00ecc7d61357f22dc195fee81c7870109698b3f4c0cd0f441be25717ce0"
+        "sha256:cf5585e6dabe99a1dae3ec558c3bdcf19346a94e2020eac78dc5d65f66aea27b"
     );
     assert_eq!(
         snapshot.snapshot_digest.as_str(),
-        "sha256:72af2cb2249a91ba1188ab0417a070e9c01c96da06043bc325a76843abbb3bc2"
+        "sha256:ccd58e409811c40fcda415a33b7767aa2b9b414465211a957807e52a56f48c1d"
     );
     transaction.rollback().await.unwrap();
 
@@ -1564,19 +1614,19 @@ async fn digest_golden() {
     );
     assert_eq!(
         one.as_str(),
-        "sha256:be0d9f4f0abc1d1fed36ce6f95a9cfb10aaf291af87808a327900455bf19b977"
+        "sha256:1579542b5d41d02907781aabea07529eeb3fc2d1ff74f45c30953d9e00353608"
     );
     assert_eq!(
         two.as_str(),
-        "sha256:5fda2b1581dcf6c5c91aae3a870c6ba28ccd190b8612934eaf1b24760c0adf71"
+        "sha256:9afee1d6eb8b2e5f6e208afc42c21e53c49bfba98b025ebc77a6f1945e75a4db"
     );
     assert_eq!(
         projection_n.projection_digest.as_str(),
-        "sha256:36bc5f74adeea792e2b4c6d122d47c1c719edb8a2d56cb0d2e40c57d207504c4"
+        "sha256:6e2e1a74127052920e8f3a85d25ed9a6fedbfe63243f36a04ccb96338bff77ee"
     );
     assert_eq!(
         snapshot_n.snapshot_digest.as_str(),
-        "sha256:54797ce933ca2c39b35bd7c84e71a5d70513b2351a25d30901ae80a1826c57d7"
+        "sha256:32d80a32ca33f890f6919af5675f23ec39c1d8081eb07822fae4444dcec34b8f"
     );
 }
 
@@ -1823,6 +1873,8 @@ async fn retained_source_compatibility() {
     fixture.manifest.schema_set_ref = retained_source.reference().clone();
     fixture.manifest.revisions.remove("hook_registry");
     fixture.manifest.hook_registry_config_digest = None;
+    fixture.manifest.revisions.remove("effect_registry");
+    fixture.manifest.effect_registry_config_digest = None;
     let store = fixture.open_created().await;
     let registry = ProjectionRegistry::retained(
         SchemaRegistry(vec![retained_source.clone()]),

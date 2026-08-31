@@ -10,15 +10,16 @@ use pareto_protocol::{
     BudgetVectorEntryV1, CallbackAuthorityV1, CallbackId, CancellationAcknowledgedPayloadV1,
     CancellationId, CancellationRequestedPayloadV1, CancellationTargetV1, CapabilityGrantV1,
     CapabilityId, CapabilityIssuedPayloadV1, CapabilityRevokedPayloadV1,
-    ControlMessageRejectedPayloadV1, Digest, EventCursor, EventId, ExecutionMode,
-    HookPairBindingV1, IsolationScope, KernelMeterEvidenceV1, LateResultObservedPayloadV1,
-    LifecycleAdmissionV1, OperationId, OperationInterruptibilityV1, OperationOutcomeV1,
-    OperationReservedPayloadV1, OperationSettledPayloadV1, ProtectedOperationDeniedPayloadV1,
-    ReservationId, RevisionId, RunState, RuntimeControlAccountProjectionV1,
-    RuntimeControlCancellationProjectionV1, RuntimeControlInitializedPayloadV1,
-    RuntimeControlOperationProjectionV1, RuntimeControlProjectionHashViewV1,
-    RuntimeControlProjectionV1, StreamId, TaskId, TaskState, TimeoutKeyV1,
-    TrustedOperationContractV1, UsageEvidenceClassV1, ValidatedEvent, canonical_json, digest_json,
+    ControlMessageRejectedPayloadV1, Digest, EffectPairBindingV1, EffectPairKindV1, EventCursor,
+    EventId, ExecutionMode, HookPairBindingV1, IsolationScope, KernelMeterEvidenceV1,
+    LateResultObservedPayloadV1, LifecycleAdmissionV1, OperationId, OperationInterruptibilityV1,
+    OperationOutcomeV1, OperationReservedPayloadV1, OperationSettledPayloadV1,
+    ProtectedOperationDeniedPayloadV1, ReservationId, RevisionId, RunState,
+    RuntimeControlAccountProjectionV1, RuntimeControlCancellationProjectionV1,
+    RuntimeControlInitializedPayloadV1, RuntimeControlOperationProjectionV1,
+    RuntimeControlProjectionHashViewV1, RuntimeControlProjectionV1, StreamId, TaskId, TaskState,
+    TimeoutKeyV1, TrustedOperationContractV1, UsageEvidenceClassV1, ValidatedEvent, canonical_json,
+    digest_json,
 };
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
@@ -45,6 +46,8 @@ const HOOK_CAPABLE_SCHEMA_SET_DIGEST: &str =
     "sha256:0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771";
 const RETAINED_HOOK_SCHEMA_SET_DIGEST: &str =
     "sha256:3a0c6e67a97675cf6bfcdc1fb9766b30a79ae62e662479d9ae1ef5d7b43ff99d";
+const EFFECT_CAPABLE_SCHEMA_SET_DIGEST: &str =
+    "sha256:ed5482a4ce2e593782f8909cf3a11e75759aa656ce3673eac1a18b7e2d3ec241";
 const CONTROL_EVENT_TYPES: [&str; 11] = [
     "budget-refunded",
     "capability-issued",
@@ -940,6 +943,7 @@ impl EventStore {
             operation_id: proposal.operation_id.clone(),
             reservation_id: proposal.reservation_id.clone(),
             hook_pair: None,
+            effect_pair: None,
             subject_actor: target.principal.clone(),
             task_id: proposal.task_id.clone(),
             resource: proposal.resource.clone(),
@@ -1050,7 +1054,7 @@ impl EventStore {
             )
             .await;
         };
-        if record.reservation.hook_pair.is_some() {
+        if record.reservation.hook_pair.is_some() || record.reservation.effect_pair.is_some() {
             return Err(RuntimeControlError::new(
                 RuntimeControlErrorKind::ProducerUnauthorized,
             ));
@@ -1701,7 +1705,7 @@ impl EventStore {
             .operations
             .get(&command.timeout_key.operation_id)
             .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
-        if record.reservation.hook_pair.is_some() {
+        if record.reservation.hook_pair.is_some() || record.reservation.effect_pair.is_some() {
             return Err(RuntimeControlError::new(
                 RuntimeControlErrorKind::ProducerUnauthorized,
             ));
@@ -1742,6 +1746,7 @@ impl EventStore {
             operation_id: record.reservation.operation_id.clone(),
             reservation_id: record.reservation.reservation_id.clone(),
             hook_pair: None,
+            effect_pair: None,
             callback_id: None,
             callback_fingerprint: None,
             callback_authority: None,
@@ -2213,6 +2218,16 @@ fn apply_control_event(
                         &payload.reservation_id,
                     )
                 })
+                || payload.effect_pair.as_ref().is_some_and(|pair| {
+                    !valid_effect_pair_binding(
+                        pair,
+                        EffectPairKindV1::ReserveIntent,
+                        &event.envelope().event_id,
+                        &payload.operation_id,
+                        &payload.reservation_id,
+                    )
+                })
+                || (payload.hook_pair.is_some() && payload.effect_pair.is_some())
                 || payload.authorization_decision.outcome != AuthorizationOutcomeV1::Allowed
                 || payload.authorization_decision.reason_code != "capability_allowed"
                 || payload.authorization_decision.grant_id.as_ref() != Some(&payload.grant_id)
@@ -2322,6 +2337,21 @@ fn apply_control_event(
                     }
                     _ => true,
                 }
+                || match (&record.reservation.effect_pair, &payload.effect_pair) {
+                    (None, None) => false,
+                    (Some(reserve), Some(terminal)) => {
+                        !valid_effect_pair_binding(
+                            terminal,
+                            EffectPairKindV1::TerminalConclusion,
+                            &event.envelope().event_id,
+                            &payload.operation_id,
+                            &payload.reservation_id,
+                        ) || reserve.effect_id != terminal.effect_id
+                            || reserve.attempt_id != terminal.attempt_id
+                    }
+                    _ => true,
+                }
+                || (payload.hook_pair.is_some() && payload.effect_pair.is_some())
             {
                 return corrupt();
             }
@@ -2343,25 +2373,39 @@ fn apply_control_event(
                 };
             let settled_wall = parse_utc_millis(&payload.settled_at_utc)?;
             let deadline_wall = parse_utc_millis(&record.reservation.absolute_deadline_utc)?;
-            let callback_semantics_valid = match payload.outcome {
-                OperationOutcomeV1::TimedOut => settled_wall >= deadline_wall,
-                OperationOutcomeV1::Cancelled => {
-                    cancelled
-                        && settled_wall < deadline_wall
-                        && payload.callback_id.as_ref().is_some_and(|callback| {
-                            callback
-                                .as_str()
-                                .starts_with(&record.reservation.callback_namespace)
-                        })
+            let effect_recovery = payload.effect_pair.is_some()
+                && payload.callback_id.is_none()
+                && payload.callback_fingerprint.is_none()
+                && payload.callback_authority.is_none()
+                && payload.timeout_command_fingerprint.is_some();
+            let callback_semantics_valid = if effect_recovery {
+                match payload.outcome {
+                    OperationOutcomeV1::TimedOut => settled_wall >= deadline_wall,
+                    OperationOutcomeV1::Cancelled => cancelled && settled_wall < deadline_wall,
+                    OperationOutcomeV1::Failed => !cancelled && settled_wall < deadline_wall,
+                    OperationOutcomeV1::Succeeded => false,
                 }
-                OperationOutcomeV1::Succeeded | OperationOutcomeV1::Failed => {
-                    !cancelled
-                        && settled_wall < deadline_wall
-                        && payload.callback_id.as_ref().is_some_and(|callback| {
-                            callback
-                                .as_str()
-                                .starts_with(&record.reservation.callback_namespace)
-                        })
+            } else {
+                match payload.outcome {
+                    OperationOutcomeV1::TimedOut => settled_wall >= deadline_wall,
+                    OperationOutcomeV1::Cancelled => {
+                        cancelled
+                            && settled_wall < deadline_wall
+                            && payload.callback_id.as_ref().is_some_and(|callback| {
+                                callback
+                                    .as_str()
+                                    .starts_with(&record.reservation.callback_namespace)
+                            })
+                    }
+                    OperationOutcomeV1::Succeeded | OperationOutcomeV1::Failed => {
+                        !cancelled
+                            && settled_wall < deadline_wall
+                            && payload.callback_id.as_ref().is_some_and(|callback| {
+                                callback
+                                    .as_str()
+                                    .starts_with(&record.reservation.callback_namespace)
+                            })
+                    }
                 }
             };
             if !vector_lte(&accounted, &reserved)
@@ -2370,12 +2414,14 @@ fn apply_control_event(
                 || released != vector_sub(&reserved, &accounted)?
                 || (payload.evidence_class == UsageEvidenceClassV1::Unknown
                     && accounted != reserved)
-                || (payload.outcome == OperationOutcomeV1::TimedOut
+                || (!effect_recovery
+                    && payload.outcome == OperationOutcomeV1::TimedOut
                     && (payload.callback_id.is_some()
                         || payload.callback_fingerprint.is_some()
                         || payload.callback_authority.is_some()
                         || payload.timeout_command_fingerprint.is_none()))
-                || (payload.outcome != OperationOutcomeV1::TimedOut
+                || (!effect_recovery
+                    && payload.outcome != OperationOutcomeV1::TimedOut
                     && (payload.callback_id.is_none()
                         || payload.callback_fingerprint.is_none()
                         || payload.callback_authority.is_none()
@@ -2696,6 +2742,20 @@ fn valid_hook_pair_binding(
         && pair.reservation_id == *reservation_id
 }
 
+fn valid_effect_pair_binding(
+    pair: &EffectPairBindingV1,
+    pair_kind: EffectPairKindV1,
+    control_event_id: &EventId,
+    operation_id: &OperationId,
+    reservation_id: &ReservationId,
+) -> bool {
+    pair.pair_kind == pair_kind
+        && pair.control_event_id == *control_event_id
+        && pair.effect_event_id != *control_event_id
+        && pair.operation_id == *operation_id
+        && pair.reservation_id == *reservation_id
+}
+
 fn validate_persisted_meter_evidence(
     evidence: &KernelMeterEvidenceV1,
     reservation: &OperationReservedPayloadV1,
@@ -2819,6 +2879,7 @@ fn retained_operation_contract(
         RETAINED_CONTROL_SCHEMA_SET_DIGEST
             | RETAINED_HOOK_SCHEMA_SET_DIGEST
             | HOOK_CAPABLE_SCHEMA_SET_DIGEST
+            | EFFECT_CAPABLE_SCHEMA_SET_DIGEST
     ) {
         return Err(RuntimeControlError::new(
             RuntimeControlErrorKind::ResourceEnvelopeUnavailable,
@@ -3364,6 +3425,7 @@ fn settlement_payload(
         operation_id: command.operation_id.clone(),
         reservation_id: command.reservation_id.clone(),
         hook_pair: None,
+        effect_pair: None,
         callback_id: Some(command.callback_id.clone()),
         callback_fingerprint: Some(safe_digest("callback-command", command)?),
         callback_authority: Some(durable_lease_authority(lease, &command.decision_clock)),
@@ -3631,6 +3693,7 @@ pub(super) async fn plan_hook_timeout_settlement(
         operation_id: record.reservation.operation_id.clone(),
         reservation_id: record.reservation.reservation_id.clone(),
         hook_pair: None,
+        effect_pair: None,
         callback_id: None,
         callback_fingerprint: None,
         callback_authority: None,
@@ -3741,6 +3804,163 @@ pub(super) async fn plan_hook_settlement(
     })
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum EffectSettlementAccountingV1 {
+    VerifiedZero,
+    UnknownConservative,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn plan_effect_conservative_settlement(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    lease: &OperationLease,
+    event_id: EventId,
+    callback_id: CallbackId,
+    correlation_id: String,
+    outcome: OperationOutcomeV1,
+    reason_code: String,
+    redacted_payload_digest: Digest,
+    accounting: EffectSettlementAccountingV1,
+    sample: &ClockSample,
+) -> Result<PlannedHookSettlement, RuntimeControlError> {
+    validate_clock_sample(sample)?;
+    let aggregate = load_control(connection, registry, target).await?;
+    let record = aggregate
+        .state
+        .operations
+        .get(&lease.operation_id)
+        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+    if record.settlement.is_some() {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::TerminalConflict,
+        ));
+    }
+    verify_lease(
+        target,
+        lease,
+        &record.reservation,
+        &record.reservation.producer_revision,
+        sample,
+    )?;
+    if sample.monotonic_millis >= lease.deadline_monotonic_millis
+        || sample.canonical_utc >= record.reservation.absolute_deadline_utc
+        || outcome == OperationOutcomeV1::TimedOut
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::DeadlineExceeded,
+        ));
+    }
+    let meter_snapshot = match accounting {
+        EffectSettlementAccountingV1::VerifiedZero => {
+            let contract = find_contract(
+                &aggregate.state,
+                &record.reservation.resource.kind,
+                &record.reservation.operation,
+            )?;
+            Some(KernelMeter::new(contract, &sample.process_epoch)?.snapshot()?)
+        }
+        EffectSettlementAccountingV1::UnknownConservative => None,
+    };
+    let command = SettlementCommand {
+        event_id,
+        correlation_id,
+        callback_id,
+        operation_id: record.reservation.operation_id.clone(),
+        reservation_id: record.reservation.reservation_id.clone(),
+        producer_revision: record.reservation.producer_revision.clone(),
+        outcome,
+        observed_usage: meter_snapshot
+            .as_ref()
+            .map_or_else(Vec::new, |snapshot| snapshot.usage.clone()),
+        redacted_payload_digest,
+        reason_code,
+        decision_clock: sample.clone(),
+        meter_snapshot,
+    };
+    let payload = settlement_payload(&record.reservation, lease, &command)?;
+    Ok(PlannedHookSettlement {
+        expected_cursor: EventCursor {
+            sequence: aggregate.state.sequence.to_string(),
+            event_id: aggregate.state.last_event_id.clone(),
+        },
+        payload,
+        lease_fingerprint: lease.seal.clone(),
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn plan_effect_recovery_settlement(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    operation_id: &OperationId,
+    outcome: OperationOutcomeV1,
+    reason_code: String,
+    recovery_fingerprint: Digest,
+    accounting: EffectSettlementAccountingV1,
+    sample: &ClockSample,
+) -> Result<PlannedHookSettlement, RuntimeControlError> {
+    validate_clock_sample(sample)?;
+    let aggregate = load_control(connection, registry, target).await?;
+    let record = aggregate
+        .state
+        .operations
+        .get(operation_id)
+        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+    if record.settlement.is_some() || record.reservation.effect_pair.is_none() {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::TerminalConflict,
+        ));
+    }
+    let reserved = vector_map(&record.reservation.trusted_reservation)?;
+    let (evidence_class, kernel_meter_evidence, accounted) = match accounting {
+        EffectSettlementAccountingV1::VerifiedZero => {
+            let contract = find_contract(
+                &aggregate.state,
+                &record.reservation.resource.kind,
+                &record.reservation.operation,
+            )?;
+            let snapshot = KernelMeter::new(contract, &sample.process_epoch)?.snapshot()?;
+            (
+                UsageEvidenceClassV1::KernelMeterVerified,
+                Some(persisted_meter_evidence(&snapshot)),
+                vector_map(&snapshot.usage)?,
+            )
+        }
+        EffectSettlementAccountingV1::UnknownConservative => {
+            (UsageEvidenceClassV1::Unknown, None, reserved.clone())
+        }
+    };
+    let released = vector_sub(&reserved, &accounted)?;
+    Ok(PlannedHookSettlement {
+        expected_cursor: EventCursor {
+            sequence: aggregate.state.sequence.to_string(),
+            event_id: aggregate.state.last_event_id.clone(),
+        },
+        payload: OperationSettledPayloadV1 {
+            operation_id: record.reservation.operation_id.clone(),
+            reservation_id: record.reservation.reservation_id.clone(),
+            hook_pair: None,
+            effect_pair: None,
+            callback_id: None,
+            callback_fingerprint: None,
+            callback_authority: None,
+            outcome,
+            evidence_class,
+            kernel_meter_evidence,
+            observed_usage: Vec::new(),
+            accounted_usage: map_vector(&accounted),
+            released_usage: map_vector(&released),
+            reason_code,
+            timeout_command_fingerprint: Some(recovery_fingerprint.clone()),
+            settled_at_utc: sample.canonical_utc.clone(),
+        },
+        lease_fingerprint: recovery_fingerprint,
+    })
+}
+
 /// Reconstructs and authorizes a Hook reservation from persisted Runtime Control facts without
 /// writing. The atomic pair path re-folds and admits the returned payload under the writer lock.
 pub(super) async fn plan_hook_reservation(
@@ -3820,6 +4040,7 @@ pub(super) async fn plan_hook_reservation(
         operation_id: proposal.operation_id.clone(),
         reservation_id: proposal.reservation_id.clone(),
         hook_pair: None,
+        effect_pair: None,
         subject_actor: target.principal.clone(),
         task_id: proposal.task_id.clone(),
         resource: proposal.resource.clone(),
@@ -3921,6 +4142,61 @@ pub(super) async fn prepare_hook_reservation_event(
                 &payload.reservation_id,
             )
         })
+        || payload.effect_pair.is_some()
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::OperationConflict,
+        ));
+    }
+    let event = control_event(
+        &aggregate.lifecycle,
+        &aggregate.stream_id,
+        context.event_id,
+        aggregate.state.sequence + 1,
+        context.occurred_at,
+        context.correlation_id,
+        "operation-reserved",
+        payload,
+    )?;
+    let mut admitted = aggregate.state.clone();
+    apply_control_event(
+        &mut admitted,
+        &aggregate.lifecycle.state,
+        &aggregate.lifecycle.checkpoints,
+        &event,
+    )?;
+    let prepared = PreparedEvent::new(
+        &event,
+        &aggregate.lifecycle.schema_set,
+        &aggregate.lifecycle.limits,
+    )?;
+    let lease = make_lease(target, payload, sample)?;
+    Ok((prepared, lease))
+}
+
+pub(super) async fn prepare_effect_reservation_event(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    context: &HookControlEventContext<'_>,
+    payload: &OperationReservedPayloadV1,
+    sample: &ClockSample,
+) -> Result<(PreparedEvent, OperationLease), RuntimeControlError> {
+    validate_clock_sample(sample)?;
+    let aggregate = load_control(connection, registry, target).await?;
+    if context.expected_cursor.sequence.parse::<i64>().ok() != Some(aggregate.state.sequence)
+        || context.expected_cursor.event_id != aggregate.state.last_event_id
+        || payload.reserved_at_utc != sample.canonical_utc
+        || payload.effect_pair.as_ref().is_none_or(|pair| {
+            !valid_effect_pair_binding(
+                pair,
+                EffectPairKindV1::ReserveIntent,
+                context.event_id,
+                &payload.operation_id,
+                &payload.reservation_id,
+            )
+        })
+        || payload.hook_pair.is_some()
     {
         return Err(RuntimeControlError::new(
             RuntimeControlErrorKind::OperationConflict,
@@ -3988,6 +4264,7 @@ pub(super) async fn prepare_hook_settlement_event(
     if context.expected_cursor.sequence.parse::<i64>().ok() != Some(aggregate.state.sequence)
         || context.expected_cursor.event_id != aggregate.state.last_event_id
         || !pair_matches
+        || payload.effect_pair.is_some()
         || !authority_matches
     {
         return Err(RuntimeControlError::new(
@@ -4019,12 +4296,93 @@ pub(super) async fn prepare_hook_settlement_event(
     .map_err(Into::into)
 }
 
+pub(super) async fn prepare_effect_settlement_event(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    context: &HookControlEventContext<'_>,
+    payload: &OperationSettledPayloadV1,
+) -> Result<PreparedEvent, RuntimeControlError> {
+    let aggregate = load_control(connection, registry, target).await?;
+    let reservation = aggregate
+        .state
+        .operations
+        .get(&payload.operation_id)
+        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+    let pair_matches = reservation
+        .reservation
+        .effect_pair
+        .as_ref()
+        .zip(payload.effect_pair.as_ref())
+        .is_some_and(|(reserve, terminal)| {
+            reserve.effect_id == terminal.effect_id
+                && reserve.attempt_id == terminal.attempt_id
+                && valid_effect_pair_binding(
+                    terminal,
+                    EffectPairKindV1::TerminalConclusion,
+                    context.event_id,
+                    &payload.operation_id,
+                    &payload.reservation_id,
+                )
+        });
+    if context.expected_cursor.sequence.parse::<i64>().ok() != Some(aggregate.state.sequence)
+        || context.expected_cursor.event_id != aggregate.state.last_event_id
+        || !pair_matches
+        || payload.hook_pair.is_some()
+    {
+        return Err(RuntimeControlError::new(
+            RuntimeControlErrorKind::TerminalConflict,
+        ));
+    }
+    let event = control_event(
+        &aggregate.lifecycle,
+        &aggregate.stream_id,
+        context.event_id,
+        aggregate.state.sequence + 1,
+        context.occurred_at,
+        context.correlation_id,
+        "operation-settled",
+        payload,
+    )?;
+    let mut admitted = aggregate.state.clone();
+    apply_control_event(
+        &mut admitted,
+        &aggregate.lifecycle.state,
+        &aggregate.lifecycle.checkpoints,
+        &event,
+    )?;
+    Ok(PreparedEvent::new(
+        &event,
+        &aggregate.lifecycle.schema_set,
+        &aggregate.lifecycle.limits,
+    )?)
+}
+
 pub(super) async fn validate_runtime_control_history(
     connection: &mut SqliteConnection,
     registry: &SchemaRegistry,
     target: &RuntimeControlTarget,
 ) -> Result<(), RuntimeControlError> {
     load_control(connection, registry, target).await.map(|_| ())
+}
+
+pub(super) async fn effect_cancellation_is_effective(
+    connection: &mut SqliteConnection,
+    registry: &SchemaRegistry,
+    target: &RuntimeControlTarget,
+    operation_id: &OperationId,
+) -> Result<bool, RuntimeControlError> {
+    let aggregate = load_control(connection, registry, target).await?;
+    let record = aggregate
+        .state
+        .operations
+        .get(operation_id)
+        .ok_or_else(|| RuntimeControlError::new(RuntimeControlErrorKind::OperationConflict))?;
+    Ok(cancellation_applies(
+        &aggregate.state,
+        record.reservation.task_id.as_ref(),
+        operation_id,
+    ))
 }
 
 async fn append_control<T: Serialize>(

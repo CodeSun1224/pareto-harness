@@ -4,9 +4,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AgentId, BudgetAccountId, CallbackId, CancellationId, CapabilityId, Digest, EventCursor,
-    EventId, EventTypeBinding, HookPairBindingV1, IsolationScope, OperationId, ProtocolLimitsRef,
-    ReservationId, RevisionId, RunState, SchemaRef, SchemaSetRef, StreamId, TaskId, TaskState,
+    AgentId, BudgetAccountId, CallbackId, CancellationId, CapabilityId, Digest,
+    EffectPairBindingV1, EventCursor, EventId, EventTypeBinding, HookPairBindingV1, IsolationScope,
+    OperationId, ProtocolLimitsRef, ReservationId, RevisionId, RunState, SchemaRef, SchemaSetRef,
+    StreamId, TaskId, TaskState,
 };
 
 fn deserialize_present_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -474,6 +475,13 @@ pub struct OperationReservedPayloadV1 {
         deserialize_with = "deserialize_present_option"
     )]
     pub hook_pair: Option<HookPairBindingV1>,
+    /// Atomic Effect pair binding. Absent for retained non-Effect operations.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub effect_pair: Option<EffectPairBindingV1>,
     /// Subject actor.
     pub subject_actor: AgentId,
     /// Exact Task.
@@ -598,6 +606,13 @@ pub struct OperationSettledPayloadV1 {
         deserialize_with = "deserialize_present_option"
     )]
     pub hook_pair: Option<HookPairBindingV1>,
+    /// Atomic Effect pair binding. Absent for retained non-Effect operations.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_present_option"
+    )]
+    pub effect_pair: Option<EffectPairBindingV1>,
     /// Optional callback identity.
     #[serde(
         default,

@@ -1,10 +1,10 @@
 # REQ-0009 Handoff
 
-当前状态：`planned / TASK-REQ-0009-01`。REQ-0004、REQ-0007、REQ-0008前置均done；REQ-0009设计已接受，但Runtime、Schema与测试尚未实现。
+当前状态：`reviewing / TASK-REQ-0009-11`。REQ-0004、REQ-0007、REQ-0008前置均done；REQ-0009设计与规划已独立批准。实现、安全/隔离/redaction/兼容负测、scope守卫、Focused/Impacted/Core/Full适用门禁与VALIDATION证据已完成；当前必须固定实现候选并交给新的fresh independent code reviewer，不能用REVIEW-0012设计评审替代。
 
 fresh independent REVIEW-0012最终批准设计exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`及接受闭环exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`，F-001至F-004全部closed，0 Blocker/0 Major。四项关键closure是：Recorded replay固定Inventory source horizon；Inventory/Record V2无损区分partial/unknown；executor内容地址identity贯穿全部边界；claim/crash recovery command及未claim/已claim结论闭合。
 
-现有基线：SQLite v2不变，REQ-0008最终Hook-capable SchemaSet为`sha256-0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771`。REQ-0009必须新增Manifest v3和Effect-capable retained SchemaSet，保留所有旧Manifest、Inventory、SchemaSet、reader/reducer及历史字节，不得current substitution。
+现有基线：SQLite v2不变；REQ-0008最终Hook-capable SchemaSet `sha256-0efc2e…`保持retained。TASK-01已发布Manifest v3、Effect/Executor/Event/Projection与Boundary Inventory/Record V2闭合Schema；TASK-03按既有Spec补齐`effect_pair` kind及双方prepared-bytes digest后将重新生成最终content-addressed set，`sha256-161a…`仅为未提交中间候选，不得作为最终identity。全部旧Manifest、Inventory、SchemaSet、reader/reducer及历史字节继续保留。
 
 开始任何行为编辑前，先把Requirement从`planned`推进为`implementing`并同步TASKS/HANDOFF。第一实施步是Protocol/Schema：闭合Effect/executor descriptor/Intent/claim/Receipt/conclusion/reconciliation/Projection/Inventory V2类型并生成内容地址SchemaSet。随后才实现Effect stream、Runtime Control双事件原子pair、幂等Intent、dispatch claim、Fake executor、Receipt admission、恢复/reconciliation及Recorded replay。
 

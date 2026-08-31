@@ -75,6 +75,7 @@ pub(super) struct TrustedRunInputs {
     pub(super) protocol_limits_ref: ProtocolLimitsRef,
     pub(super) revisions: BTreeMap<String, RevisionId>,
     pub(super) hook_registry_config_digest: Option<Digest>,
+    pub(super) effect_registry_config_digest: Option<Digest>,
     pub(super) plan_revision: Option<RevisionId>,
     pub(super) budget_revision: RevisionId,
     pub(super) boundary_recording_policy_ref: BoundaryRecordingPolicyRef,
@@ -326,6 +327,17 @@ impl EventStore {
             .await
             .map_err(|_| LifecycleError::new(LifecycleErrorKind::ParentStateConflict))?;
         }
+        if command.target_state == RunState::Succeeded
+            && aggregate.state.manifest.schema_ref.major == 3
+        {
+            super::effect_runtime::ensure_effects_complete_for_run(
+                &mut transaction,
+                registry,
+                &target.scope,
+            )
+            .await
+            .map_err(|_| LifecycleError::new(LifecycleErrorKind::ParentStateConflict))?;
+        }
         validate_run_transition(
             &aggregate.state,
             command.expected_state,
@@ -461,6 +473,7 @@ fn validate_create_authority(
     }
     let exact = manifest.revisions == trusted.revisions
         && manifest.hook_registry_config_digest == trusted.hook_registry_config_digest
+        && manifest.effect_registry_config_digest == trusted.effect_registry_config_digest
         && manifest.plan_revision == trusted.plan_revision
         && manifest.schema_set_ref == *trusted.schema_set.reference()
         && manifest.budget_revision == trusted.budget_revision
@@ -498,12 +511,11 @@ pub(super) fn lifecycle_event<T: serde::Serialize>(
     event_type: &str,
     payload: &T,
 ) -> Result<ValidatedEvent, LifecycleError> {
-    let event_major = if event_type == "run-created"
-        && schema_set
+    let event_major = if event_type == "run-created" {
+        schema_set
             .schema_ref("run-manifest")
-            .is_some_and(|schema| schema.major == 2)
-    {
-        2
+            .map(|schema| schema.major)
+            .ok_or_else(|| LifecycleError::new(LifecycleErrorKind::SchemaUnavailable))?
     } else {
         1
     };
@@ -710,6 +722,7 @@ pub(super) fn fold_lifecycle(
     let (created_major, created_variant) = match created.manifest.schema_ref.major {
         1 => (1, "run-created-v1"),
         2 => (2, "run-created-v2"),
+        3 => (3, "run-created-v3"),
         _ => return Err(LifecycleError::new(LifecycleErrorKind::AggregateCorrupt)),
     };
     if first_envelope.event_type != "run-created"
