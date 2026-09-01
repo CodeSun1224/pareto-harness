@@ -1,13 +1,13 @@
 ---
 id: REQ-0009
 title: Effect Intent/Receipt 与幂等效果
-status: reviewing
+status: done
 owners: [runtime-kernel]
 created: 2026-08-30
-updated: 2026-08-30
-links: [EPIC-0002, REQ-0004, REQ-0007, REQ-0008, SPEC-0008, RFC-0009, ADR-0010, REVIEW-0012]
+updated: 2026-09-01
+links: [EPIC-0002, REQ-0004, REQ-0007, REQ-0008, SPEC-0008, RFC-0009, ADR-0010, REVIEW-0012, REVIEW-0013, FIX-0002]
 risk: high
-work: .agents/work/active/REQ-0009-effect-intent-receipt-idempotent-effects
+work: .agents/work/archived/REQ-0009-effect-intent-receipt-idempotent-effects
 ---
 
 # Context and user
@@ -62,4 +62,4 @@ SQLite 事务不能与文件、进程、网络、模型或其他外部系统形�
 
 # Risks and open questions
 
-Intent 与 reservation 的原子边界、幂等键作用域、dispatch lease、Receipt producer trust、部分成功、unknown outcome、Effect/operation 双 stream 原子终结、对账准入、取消竞态、redaction、版本兼容与 replay 零执行会被多个后续 Requirement 依赖，属于跨模块、安全敏感且难以回退的合同。影响分析已识别 Runtime Control Hook-specific pair 字段、lifecycle success guard、Run Manifest v3、Effect stream/Projection、Boundary Inventory 与 retained SchemaSet 为直接影响。REVIEW-0012对初始fixed `9f8bf23`提出4个Major；Requirement/RFC/SPEC经多轮同Reviewer复审，在fixed `b7acbd82824d8410d432117c89be1bd56c8ce05c`关闭F-001至F-004并达到independent approved、0 Blocker、0 Major。ADR-0010接受该合同；实现仍未开始。
+Intent 与 reservation 的原子边界、幂等键作用域、dispatch lease、Receipt producer trust、部分成功、unknown outcome、Effect/operation 双 stream 原子终结、对账准入、取消竞态、redaction、版本兼容与 replay 零执行会被多个后续 Requirement 依赖，属于跨模块、安全敏感且难以回退的合同。REVIEW-0012独立批准设计；REVIEW-0013对最终实现exact `25e84603f09c3e3c47c29846e9cc3ef1fe6a4d72`独立批准并关闭F-001至F-009，最终0 Blocker、0 Major。实现保持SQLite v2与全部retained SchemaSet/reader identity，使用Fake executor/FakeClock，不执行真实外部效果，不宣称跨边界exactly-once或质量/成本/延迟优化。

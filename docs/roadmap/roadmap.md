@@ -4,7 +4,7 @@ title: Pareto Harness Evidence-gated 实施路线图
 status: active
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-27
+updated: 2026-09-01
 links: [PRD-0001, REQ-0001, RFC-0007, ADR-0008, ARCH-0004, BACKLOG-0001, BENCH-0001]
 ---
 
@@ -21,6 +21,8 @@ links: [PRD-0001, REQ-0001, RFC-0007, ADR-0008, ARCH-0004, BACKLOG-0001, BENCH-0
 ## G1：可信内核骨架
 
 交付：REQ-0003 至 REQ-0009，包括协议/Revision、Event Store、Run Manifest、Snapshot/Replay、Capability/Budget、Hook 骨架和 Effect Intent/Receipt。
+
+截至2026-09-01，REQ-0003至REQ-0009均已交付并通过各自独立评审；G1仍不宣告整体完成，因为退出条件中的确定性CLI尚未由后续Requirement交付。
 
 退出条件：
 

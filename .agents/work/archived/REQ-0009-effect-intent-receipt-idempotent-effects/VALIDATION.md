@@ -2,23 +2,23 @@
 
 ## Subject
 
-- Requirement: REQ-0009 (`reviewing`，REVIEW-0013整改后待同一Reviewer复审)
+- Requirement: REQ-0009 (`done`，fresh independent REVIEW-0013 approved)
 - Spec/RFC/ADR: SPEC-0008 / RFC-0009 / ADR-0010
 - Accepted design revision: `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`
 - Initial implementation candidate: `6cad604ffe5ec2126f9745bf22ece713f2c0ce85`
-- Remediation candidate: 包含FIX-0002、本文件、Effect修复和最终SchemaSet的exact Git commit；提交后作为REVIEW-0013同一independent reviewer的固定输入
+- Final reviewed implementation: `25e84603f09c3e3c47c29846e9cc3ef1fe6a4d72`
 - Environment: Windows PowerShell，2026-08-31至2026-09-01，Asia/Shanghai；全部Cargo命令使用`--offline`
 
 ## Results
 
-| Scope/layer | Command or procedure | Result | Notes |
-|---|---|---|---|
-| Effect focused | 19个`assert_cargo_test_filter.py`命令 + Effect模块全集 | passed；每个原始filter matched 1并运行1/1；模块24/24 | 同时覆盖REVIEW-0013九项整改及hybrid lineage负测 |
-| Protocol focused | `cargo test -p pareto-protocol --test protocol_contract effect_contract_manifest_events_and_inventory_v2_are_closed --offline -- --exact` | passed；1/1 | Manifest v3、Effect contracts/events、Inventory V2 |
-| Event Store impacted | `cargo test -p pareto-kernel event_store --offline` | passed；185 passed、1 ignored | ignored为既有非阈值performance observation |
-| Workspace full | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 185 passed/1 ignored；Protocol 9 unit + 25 contract passed/1 ignored |
-| Scope/static | `python scripts/check_req0009_scope.py` | passed | SQLite v2、retained sets、Fake-only、Replay read-only、依赖不变 |
-| Schema identity | generator运行两次并逐文件SHA-256比较 | passed；89 files byte-identical | second-remediation set `sha256-0d32378157c01117dc9b86a307cfc8d05aa299bc520ad0cb7ae29d67a79844ba`；`70389…`、`ed548…`及更早set未改写 |
+| Scope/layer | Command or procedure | Result | Artifact | Evidence/risk |
+|---|---|---|---|---|
+| Effect focused | 19个`assert_cargo_test_filter.py`命令 + Effect模块全集 | passed | 每个原始filter matched 1并运行1/1；模块24/24 | 覆盖REVIEW-0013九项整改及hybrid lineage负测 |
+| Protocol focused | `cargo test -p pareto-protocol --test protocol_contract effect_contract_manifest_events_and_inventory_v2_are_closed --offline -- --exact` | passed | 1/1 | Manifest v3、Effect contracts/events、Inventory V2 |
+| Event Store impacted | `cargo test -p pareto-kernel event_store --offline` | passed | 185 passed、1 ignored | ignored为既有非阈值performance observation |
+| Workspace full | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 185 passed/1 ignored；Protocol 9 unit + 25 contract passed/1 ignored | 无失败；ignored均为既有非阈值观察 |
+| Scope/static | `python scripts/check_req0009_scope.py` | passed | SQLite v2、retained sets、Fake-only、Replay read-only、依赖不变 | 无边界扩张 |
+| Schema identity | generator运行两次并逐文件SHA-256比较 | passed | 89 files byte-identical | 当前`sha256-0d323…`；`70389…`、`ed548…`及更早set未改写 |
 
 ## Focused and layered tests
 
@@ -100,7 +100,7 @@ fake_outcomes exact tests与Kernel clippy通过，待完整门禁和同一Review
 | Command | Result |
 |---|---|
 | `python -m unittest discover -s scripts/tests -p "test_*.py"` | 27 passed |
-| `python scripts/check_docs.py` | expected pre-re-review failure：FIX状态已修正；当前行为diff尚未固定到REVIEW-0013复审revision，因此旧Review freshness被正确判定stale；不得表示为通过 |
+| `python scripts/check_docs.py` | pre-closure仅报告REVIEW-0001..0013 freshness；归档格式及其他文档检查通过。closure revision后刷新Review并要求最终exit 0 |
 | `cargo fmt --all -- --check` | passed |
 | `cargo clippy --workspace --all-targets --all-features --offline -- -D warnings` | passed |
 | `cargo test --workspace --all-targets --all-features --offline` | passed |
@@ -119,7 +119,9 @@ Protocol publisher负向测试会打印`existing content-addressed schema set di
 - Latency：测试只使用FakeClock，无真实sleep；既有SQLite/protocol performance observation保持
   ignored的非阈值观察，不声明延迟改善。
 
-## Pending gate
+## Final review and closure
 
-下一步将F-005最终整改固定为exact commit，由REVIEW-0013同一independent Reviewer完成最终复审。
-只有Reviewer将open Blocker/Major归零并批准后，才同步最终freshness、复跑docs门禁并完成归档。
+Fresh independent REVIEW-0013批准exact `25e84603f09c3e3c47c29846e9cc3ef1fe6a4d72`，
+F-001至F-009均由同一Reviewer关闭，最终0 Blocker、0 Major。Requirement已按
+`reviewing → verified → done`闭环；本轮fact sync与归档不增加runtime行为。closure revision形成后刷新
+全部Review freshness并复跑最终docs/仓库门禁。

@@ -1,6 +1,6 @@
 # 文档导航
 
-本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-08-30。
+本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-09-01。
 
 ## 产品
 
@@ -70,7 +70,9 @@
 - [REQ-0008 Observer/Gate/Transform Hook 独立设计评审](reviews/REVIEW-0010-observer-gate-transform-hooks-design.md)
 - [REQ-0008 Observer/Gate/Transform Hook 独立实现评审](reviews/REVIEW-0011-observer-gate-transform-hooks-implementation.md)
 - [REQ-0009 Effect Intent/Receipt 独立设计评审](reviews/REVIEW-0012-effect-intent-receipt-design.md)
+- [REQ-0009 Effect Intent/Receipt 独立实现评审](reviews/REVIEW-0013-effect-intent-receipt-implementation.md)
 - [REQ-0007 Runtime Control 修复记录](fixes/FIX-0001-runtime-control-authority-and-replay-contract.md)
+- [REQ-0009 Effect authority/recovery 修复记录](fixes/FIX-0002-effect-authority-and-recovery-closure.md)
 
 ## 记录类型
 

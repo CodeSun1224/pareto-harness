@@ -70,9 +70,9 @@ links: [PRD-0001, RFC-0001, RFC-0007, RFC-0008, RFC-0009, ADR-0001, ADR-0002, AD
 
 这些是逻辑模块，不要求全部使用 Rust 或处于同一进程。Event、identity、state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 和 Promotion 保持在 Rust 权威控制面；Provider、Tool、Hook handler、Agent Worker、Memory 检索、评测、SDK 和受限 Guest 可按 Requirement 使用其他语言，但不得取得权威数据库或内核私有对象。设计基线阶段不创建空目录。
 
-Hook 采用 ADR-0009 的 Kernel 治理合同，并已由REQ-0008交付最小Rust Fake纵切：Manifest固定registry/config和顺序，Observer只读，Gate默认拒绝，Transform只改明确允许的非权威proposal，预算准入与终结通过双stream原子pair提交，取消/timeout由Runtime Control裁决，Recorded replay只消费已记录决定。该实现不包含真实Hook Runtime、外部transport、Worker或REQ-0009 Effect。
+Hook 采用 ADR-0009 的 Kernel 治理合同，并已由REQ-0008交付最小Rust Fake纵切：Manifest固定registry/config和顺序，Observer只读，Gate默认拒绝，Transform只改明确允许的非权威proposal，预算准入与终结通过双stream原子pair提交，取消/timeout由Runtime Control裁决，Recorded replay只消费已记录决定。该实现不包含真实Hook Runtime、外部transport或Worker。
 
-Effect采用ADR-0010的已接受设计，实施时由Kernel以control/Effect atomic pair先提交Intent，再持久化dispatch claim并向Manifest-pinned Fake executor交付opaque lease；Receipt保持observation，partial/unknown经stable recovery与独立reconciliation追加事实，Recorded replay只读Boundary Inventory v2固定horizon。该合同明确at-most-once-or-reconcile而非虚构exactly-once，并保持SQLite v2；REQ-0009当前尚未规划或实现。
+Effect采用ADR-0010合同，并已由REQ-0009交付最小Rust Fake纵切：Kernel以control/Effect atomic pair先提交Intent，再持久化dispatch claim并向Manifest-pinned sealed Fake executor交付用途受限lease；Receipt保持observation，partial/unknown经Kernel recovery authority与Manifest-pinned reconciliation producer追加事实；Projection与Boundary Inventory V2固定exact horizon，Recorded replay零执行/零写入/零核算。该实现明确提供at-most-once-or-reconcile而非虚构exactly-once，保持SQLite v2，且不包含真实文件、进程、网络、Provider、Tool或Sandbox效果。
 
 ## 一致性原则
 
