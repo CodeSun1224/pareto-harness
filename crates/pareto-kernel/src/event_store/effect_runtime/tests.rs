@@ -2618,6 +2618,162 @@ async fn reconciliation() {
 }
 
 #[tokio::test]
+async fn hybrid_reconciliation_lineage_fails_closed_without_writes() {
+    let harness = receipt_harness(
+        "run_effect-hybrid-reconciliation-lineage",
+        EffectReceiptOutcomeClassV1::Partial,
+    )
+    .await;
+    harness
+        .store
+        .admit_effect_receipt(
+            &harness.fixture.registry(),
+            &harness.registry,
+            &harness.descriptor,
+            &harness.target,
+            &harness.fixture.target(),
+            &harness.operation_lease,
+            &harness.dispatch_lease,
+            &harness.observation,
+            &harness.command,
+        )
+        .await
+        .unwrap();
+    let envelope_json: String =
+        sqlx::query_scalar("SELECT envelope_json FROM events WHERE event_id=?")
+            .bind(harness.command.effect_event_id.as_str())
+            .fetch_one(&harness.store.pool)
+            .await
+            .unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&envelope_json).unwrap();
+    let receipt_payload: EffectReconciliationRequiredPayloadV1 =
+        serde_json::from_value(envelope["payload"].clone()).unwrap();
+    assert_eq!(
+        validate_reconciliation_required_lineage(&receipt_payload).unwrap(),
+        EffectReconciliationLineage::Receipt
+    );
+
+    let mut missing_result = receipt_payload.clone();
+    missing_result.result_digest = None;
+    assert_eq!(
+        validate_reconciliation_required_lineage(&missing_result)
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::AggregateCorrupt
+    );
+    let mut receipt_reason_without_identity = receipt_payload.clone();
+    receipt_reason_without_identity.receipt_digest = None;
+    receipt_reason_without_identity.result_digest = None;
+    receipt_reason_without_identity.producer_revision = None;
+    receipt_reason_without_identity.adapter_revision = None;
+    receipt_reason_without_identity.observed_at = None;
+    assert_eq!(
+        validate_reconciliation_required_lineage(&receipt_reason_without_identity)
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::AggregateCorrupt
+    );
+    let mut recovery_payload = receipt_reason_without_identity;
+    recovery_payload.external_conclusion = EffectExternalConclusionV1::Unknown;
+    recovery_payload.reason_code = "effect-recovery-after-claim".to_owned();
+    recovery_payload.observed_usage.clear();
+    recovery_payload.limitations.clear();
+    recovery_payload.confirmed_components_digest = None;
+    assert_eq!(
+        validate_reconciliation_required_lineage(&recovery_payload).unwrap(),
+        EffectReconciliationLineage::Recovery
+    );
+    let mut hybrid = recovery_payload;
+    hybrid.receipt_digest = receipt_payload.receipt_digest.clone();
+    hybrid.result_digest = receipt_payload.result_digest.clone();
+    hybrid.producer_revision = receipt_payload.producer_revision.clone();
+    hybrid.adapter_revision = receipt_payload.adapter_revision.clone();
+    hybrid.observed_at = receipt_payload.observed_at.clone();
+    assert_eq!(
+        validate_reconciliation_required_lineage(&hybrid)
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::AggregateCorrupt
+    );
+
+    let (observation, _) = fake_reconciliation_observation(
+        &harness,
+        FakeReconciliationMode::Partial,
+        "2026-08-26T00:00:30.000Z",
+        vec![harness.command.effect_event_id.clone()],
+    );
+    let command = seal_reconciliation(ReconcileEffectCommandV1 {
+        effect_id: harness.observation.effect_id.clone(),
+        attempt_id: harness.observation.attempt_id.clone(),
+        expected_effect_cursor: EventCursor {
+            sequence: "4".to_owned(),
+            event_id: harness.command.effect_event_id.clone(),
+        },
+        observation_event_id: EventId::parse("event_effect-hybrid-observed").unwrap(),
+        reconciled_event_id: EventId::parse("event_effect-hybrid-reconciled").unwrap(),
+        occurred_at: "2026-08-26T00:00:30.000Z".to_owned(),
+        correlation_id: "corr-effect-hybrid-reconciliation".to_owned(),
+        command_fingerprint: digest('0'),
+    });
+    let resealed = lifecycle_event(
+        &harness.fixture.set,
+        &harness.fixture.manifest.protocol_limits_ref,
+        &harness.fixture.scope,
+        &harness.fixture.scope.agent_id,
+        &effect_stream_id(&harness.fixture.scope).unwrap(),
+        &harness.command.effect_event_id,
+        4,
+        &harness.command.occurred_at,
+        &harness.command.correlation_id,
+        "effect-reconciliation-required",
+        &hybrid,
+    )
+    .unwrap();
+    let prepared = PreparedEvent::new(
+        &resealed,
+        &harness.fixture.set,
+        &harness.fixture.manifest.protocol_limits_ref,
+    )
+    .unwrap();
+    sqlx::query("DROP TRIGGER events_no_update")
+        .execute(&harness.store.pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE events SET envelope_json=?,envelope_fingerprint=? WHERE event_id=?")
+        .bind(&prepared.envelope_json)
+        .bind(&prepared.envelope_fingerprint)
+        .bind(harness.command.effect_event_id.as_str())
+        .execute(&harness.store.pool)
+        .await
+        .unwrap();
+    let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&harness.store.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        harness
+            .store
+            .reconcile_effect(
+                &harness.fixture.registry(),
+                &harness.registry,
+                &harness.target,
+                &observation,
+                &command,
+                AtomicPairFault::None,
+            )
+            .await
+            .unwrap_err()
+            .kind,
+        EffectErrorKind::AggregateCorrupt
+    );
+    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+        .fetch_one(&harness.store.pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
+}
+
+#[tokio::test]
 async fn lifecycle_success_guard() {
     let harness = receipt_harness(
         "run_effect-success-guard",

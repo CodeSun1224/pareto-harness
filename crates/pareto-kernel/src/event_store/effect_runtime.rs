@@ -488,6 +488,55 @@ terminal_payload!(
     "effect-reconciliation-required"
 );
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EffectReconciliationLineage {
+    Receipt,
+    Recovery,
+}
+
+fn validate_reconciliation_required_lineage(
+    payload: &EffectReconciliationRequiredPayloadV1,
+) -> Result<EffectReconciliationLineage, EffectError> {
+    let receipt_lineage = payload.receipt_digest.is_some()
+        && payload.result_digest.is_some()
+        && payload.producer_revision.is_some()
+        && payload.adapter_revision.is_some()
+        && payload.observed_at.is_some()
+        && match payload.external_conclusion {
+            EffectExternalConclusionV1::Partial => {
+                payload.reason_code == "effect-partial"
+                    && payload.confirmed_components_digest.is_some()
+            }
+            EffectExternalConclusionV1::Unknown => {
+                payload.reason_code == "effect-unknown"
+                    && payload.confirmed_components_digest.is_none()
+            }
+            _ => false,
+        };
+    let recovery_lineage = payload.external_conclusion == EffectExternalConclusionV1::Unknown
+        && payload.reason_code == "effect-recovery-after-claim"
+        && payload.receipt_digest.is_none()
+        && payload.result_digest.is_none()
+        && payload.producer_revision.is_none()
+        && payload.adapter_revision.is_none()
+        && payload.observed_at.is_none()
+        && payload.observed_usage.is_empty()
+        && payload.limitations.is_empty()
+        && payload.confirmed_components_digest.is_none();
+    match (receipt_lineage, recovery_lineage) {
+        (true, false) => Ok(EffectReconciliationLineage::Receipt),
+        (false, true) => Ok(EffectReconciliationLineage::Recovery),
+        _ => Err(EffectError::new(EffectErrorKind::AggregateCorrupt)),
+    }
+}
+
+fn validated_reconciliation_required_payload(
+    payload: EffectReconciliationRequiredPayloadV1,
+) -> Result<EffectReconciliationRequiredPayloadV1, EffectError> {
+    validate_reconciliation_required_lineage(&payload)?;
+    Ok(payload)
+}
+
 #[derive(Clone, Serialize)]
 struct EffectTerminalPairCommandV1<T> {
     scope: IsolationScope,
@@ -1718,25 +1767,27 @@ impl EventStore {
                     target,
                     control_target,
                     EffectTerminalPairCommandV1 {
-                        effect_payload: EffectReconciliationRequiredPayloadV1 {
-                            effect_id: observation.effect_id.clone(),
-                            attempt_id: observation.attempt_id.clone(),
-                            external_conclusion: conclusion,
-                            reason_code: reason_code.to_owned(),
-                            accounted_usage: base.control_payload.accounted_usage.clone(),
-                            receipt_digest: Some(observation.receipt_digest.clone()),
-                            result_digest: Some(observation.result_digest.clone()),
-                            producer_revision: Some(observation.producer_revision.clone()),
-                            adapter_revision: Some(observation.adapter_revision.clone()),
-                            observed_at: Some(observation.observed_at.clone()),
-                            observed_usage: observation.observed_usage.clone(),
-                            limitations: observation.limitations.clone(),
-                            confirmed_components_digest: (conclusion
-                                == EffectExternalConclusionV1::Partial)
-                                .then(|| observation.result_digest.clone()),
-                            unknown_components_digest: observation.receipt_digest.clone(),
-                            pair,
-                        },
+                        effect_payload: validated_reconciliation_required_payload(
+                            EffectReconciliationRequiredPayloadV1 {
+                                effect_id: observation.effect_id.clone(),
+                                attempt_id: observation.attempt_id.clone(),
+                                external_conclusion: conclusion,
+                                reason_code: reason_code.to_owned(),
+                                accounted_usage: base.control_payload.accounted_usage.clone(),
+                                receipt_digest: Some(observation.receipt_digest.clone()),
+                                result_digest: Some(observation.result_digest.clone()),
+                                producer_revision: Some(observation.producer_revision.clone()),
+                                adapter_revision: Some(observation.adapter_revision.clone()),
+                                observed_at: Some(observation.observed_at.clone()),
+                                observed_usage: observation.observed_usage.clone(),
+                                limitations: observation.limitations.clone(),
+                                confirmed_components_digest: (conclusion
+                                    == EffectExternalConclusionV1::Partial)
+                                    .then(|| observation.result_digest.clone()),
+                                unknown_components_digest: observation.receipt_digest.clone(),
+                                pair,
+                            },
+                        )?,
                         scope: base.scope,
                         owner: base.owner,
                         control_stream_id: base.control_stream_id,
@@ -2087,23 +2138,25 @@ impl EventStore {
                 target,
                 control_target,
                 EffectTerminalPairCommandV1 {
-                    effect_payload: EffectReconciliationRequiredPayloadV1 {
-                        effect_id: command.effect_id.clone(),
-                        attempt_id: command.attempt_id.clone(),
-                        external_conclusion: EffectExternalConclusionV1::Unknown,
-                        reason_code: "effect-recovery-after-claim".to_owned(),
-                        accounted_usage: base.control_payload.accounted_usage.clone(),
-                        receipt_digest: None,
-                        result_digest: None,
-                        producer_revision: None,
-                        adapter_revision: None,
-                        observed_at: None,
-                        observed_usage: Vec::new(),
-                        limitations: Vec::new(),
-                        confirmed_components_digest: None,
-                        unknown_components_digest: command.command_fingerprint.clone(),
-                        pair,
-                    },
+                    effect_payload: validated_reconciliation_required_payload(
+                        EffectReconciliationRequiredPayloadV1 {
+                            effect_id: command.effect_id.clone(),
+                            attempt_id: command.attempt_id.clone(),
+                            external_conclusion: EffectExternalConclusionV1::Unknown,
+                            reason_code: "effect-recovery-after-claim".to_owned(),
+                            accounted_usage: base.control_payload.accounted_usage.clone(),
+                            receipt_digest: None,
+                            result_digest: None,
+                            producer_revision: None,
+                            adapter_revision: None,
+                            observed_at: None,
+                            observed_usage: Vec::new(),
+                            limitations: Vec::new(),
+                            confirmed_components_digest: None,
+                            unknown_components_digest: command.command_fingerprint.clone(),
+                            pair,
+                        },
+                    )?,
                     scope: base.scope,
                     owner: base.owner,
                     control_stream_id: base.control_stream_id,
@@ -2267,24 +2320,13 @@ impl EventStore {
             let payload = source
                 .downcast_payload::<EffectReconciliationRequiredPayloadV1>()
                 .ok_or_else(|| EffectError::new(EffectErrorKind::Unauthorized))?;
-            let receipt_backed_lineage = payload.producer_revision.as_ref()
-                == Some(&registration.producer_revision)
-                && payload.adapter_revision.as_ref() == Some(&registration.adapter_revision)
-                && payload.receipt_digest.is_some()
-                && payload.observed_at.is_some();
-            let recovery_backed_lineage = payload.reason_code == "effect-recovery-after-claim"
-                && payload.external_conclusion == EffectExternalConclusionV1::Unknown
-                && payload.receipt_digest.is_none()
-                && payload.result_digest.is_none()
-                && payload.producer_revision.is_none()
-                && payload.adapter_revision.is_none()
-                && payload.observed_at.is_none()
-                && payload.observed_usage.is_empty()
-                && payload.limitations.is_empty()
-                && payload.confirmed_components_digest.is_none();
+            let lineage = validate_reconciliation_required_lineage(payload)?;
+            let lineage_matches_registration = lineage == EffectReconciliationLineage::Recovery
+                || (payload.producer_revision.as_ref() == Some(&registration.producer_revision)
+                    && payload.adapter_revision.as_ref() == Some(&registration.adapter_revision));
             if payload.effect_id != command.effect_id
                 || payload.attempt_id != command.attempt_id
-                || !(receipt_backed_lineage || recovery_backed_lineage)
+                || !lineage_matches_registration
             {
                 return Err(EffectError::new(EffectErrorKind::Unauthorized));
             }
@@ -3876,6 +3918,7 @@ fn fold_effect_events(
                     let payload = event
                         .downcast_payload::<EffectReconciliationRequiredPayloadV1>()
                         .ok_or_else(|| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
+                    validate_reconciliation_required_lineage(payload)?;
                     let entry = effects
                         .get_mut(&payload.effect_id)
                         .ok_or_else(|| EffectError::new(EffectErrorKind::AggregateCorrupt))?;

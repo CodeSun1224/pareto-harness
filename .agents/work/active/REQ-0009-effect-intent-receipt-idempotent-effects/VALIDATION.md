@@ -13,10 +13,10 @@
 
 | Scope/layer | Command or procedure | Result | Notes |
 |---|---|---|---|
-| Effect focused | 19个`assert_cargo_test_filter.py`命令 + Effect模块全集 | passed；每个原始filter matched 1并运行1/1；模块23/23 | 同时覆盖REVIEW-0013九项整改负测 |
+| Effect focused | 19个`assert_cargo_test_filter.py`命令 + Effect模块全集 | passed；每个原始filter matched 1并运行1/1；模块24/24 | 同时覆盖REVIEW-0013九项整改及hybrid lineage负测 |
 | Protocol focused | `cargo test -p pareto-protocol --test protocol_contract effect_contract_manifest_events_and_inventory_v2_are_closed --offline -- --exact` | passed；1/1 | Manifest v3、Effect contracts/events、Inventory V2 |
-| Event Store impacted | `cargo test -p pareto-kernel event_store --offline` | passed；184 passed、1 ignored | ignored为既有非阈值performance observation |
-| Workspace full | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 184 passed/1 ignored；Protocol 9 unit + 25 contract passed/1 ignored |
+| Event Store impacted | `cargo test -p pareto-kernel event_store --offline` | passed；185 passed、1 ignored | ignored为既有非阈值performance observation |
+| Workspace full | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 185 passed/1 ignored；Protocol 9 unit + 25 contract passed/1 ignored |
 | Scope/static | `python scripts/check_req0009_scope.py` | passed | SQLite v2、retained sets、Fake-only、Replay read-only、依赖不变 |
 | Schema identity | generator运行两次并逐文件SHA-256比较 | passed；89 files byte-identical | second-remediation set `sha256-0d32378157c01117dc9b86a307cfc8d05aa299bc520ad0cb7ae29d67a79844ba`；`70389…`、`ed548…`及更早set未改写 |
 
@@ -37,7 +37,7 @@ REVIEW-0013整改新增或强化的独立证明为
 `projection_reopens_losslessly_for_unclaimed_and_partial_effects`及
 `effect_v3_digest_golden`；原有`dispatch_lease/fake_outcomes/crash_recovery/reconciliation/
 lifecycle_success_guard/digest_golden`也扩展了wrong implementation、fault terminal、new-sample、
-伪造source、Task scope与历史identity断言。Effect模块全集23/23通过。
+伪造source、Task scope与历史identity断言；最终新增hybrid lineage fail-closed/no-write。Effect模块全集24/24通过。
 
 REVIEW-0013对`7eeb5f6d4095b7d2fdc6cc225e9b60c89482063f`的同一Reviewer复审关闭
 F-001/F-006/F-007/F-008/F-009，保留F-002/F-003/F-004/F-005四个Major。第二轮候选进一步证明：
@@ -55,13 +55,19 @@ implementation/producer/resolution与不存在lineage均no-write。上述第二�
 两种闭合形态；`fake_outcomes`现证明CrashAfterReturn→close/reopen→recovery Unknown→Manifest-pinned
 sealed query observation→ResolvedNotApplied全链路可达，同时executor counter保持1。该最终整改待Reviewer关闭。
 
+Reviewer对`f3bf18e0129f397c998032979b0bf19dc055ca56`确认上述可达性，但保留F-005一个Major：
+Receipt-backed形态未要求result digest/合法reason，且writer/fold/source没有共用互斥validator。最新候选已将
+exact validator接入三处；direct shape matrix覆盖missing result/identity与recovery+Receipt hybrid，数据库
+reseal hybrid Event后projection/reconcile fail closed且reconcile Event count不变。定向hybrid、reconciliation、
+fake_outcomes exact tests与Kernel clippy通过，待完整门禁和同一Reviewer最终关闭。
+
 | Layer | Command | Result |
 |---|---|---|
 | Lifecycle | `cargo test -p pareto-kernel lifecycle:: --offline` | 18 passed |
 | Projection/replay/snapshot | `cargo test -p pareto-kernel projection:: --offline` | 35 passed、1 ignored |
 | Runtime Control | `cargo test -p pareto-kernel runtime_control:: --offline` | 53 passed |
 | Hook regression | `cargo test -p pareto-kernel hook_runtime:: --offline` | 39 passed |
-| Kernel all targets/features | workspace命令中的Kernel target | 184 passed、1 ignored |
+| Kernel all targets/features | workspace命令中的Kernel target | 185 passed、1 ignored |
 | Protocol all targets/features | `cargo test -p pareto-protocol --all-targets --all-features --offline` | 9 unit + 25 contract passed、1 ignored |
 | Public boundary doctest | `cargo test -p pareto-kernel --doc --offline` | 1 compile-fail doctest passed |
 

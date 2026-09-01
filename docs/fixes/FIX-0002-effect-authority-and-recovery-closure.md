@@ -59,6 +59,9 @@ Provider、Tool、文件、进程或网络 Effect，因此缺陷未逃逸到外�
   identity，而query observation admission错误地只接受Receipt-backed lineage。修复将source严格分为
   完整Receipt-backed与Kernel `effect-recovery-after-claim`两类，并新增crash/reopen recovery Unknown由
   Manifest-pinned sealed query producer关闭、且external executor不重入的端到端回归。
+- 后续复审发现上述双lineage predicate尚未在writer/fold/source共用，且Receipt形态没有要求result digest
+  与合法reason。最终修复提取互斥exact validator并接入三个权威位置；missing result/identity、recovery
+  reason混入Receipt字段及resealed hybrid history均fail closed，reconcile保持no-write。
 
 # Regression proof
 

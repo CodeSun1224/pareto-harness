@@ -1,6 +1,6 @@
 # Requirement Tasks
 
-Current execution: reviewing / TASK-REQ-0009-11 final remediation。设计exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`、接受闭环exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`及规划exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`已由fresh independent REVIEW-0012批准；REVIEW-0013对`fc1e3d9`复审关闭F-002/F-003/F-004，发现F-005 recovery-Unknown lineage残余。该残余已补严格双lineage admission及crash/reopen→reconcile回归，待同一Reviewer复审。
+Current execution: reviewing / TASK-REQ-0009-11 final remediation。设计exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`、接受闭环exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`及规划exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`已由fresh independent REVIEW-0012批准；REVIEW-0013对`f3bf18e`保持F-005一个Major，要求writer/fold/source共用互斥exact lineage validator及hybrid reseal负测。该最终整改与完整门禁已通过，待同一Reviewer关闭。
 
 - [x] TASK-REQ-0009-00: 完成Requirement、直接/间接影响分析、SPEC、RFC、AC→测试矩阵、fresh independent设计Review、finding整改复审、ADR接受和设计freshness门禁。Validation: REVIEW-0012 `approved`、independent、0 open Blocker/Major；设计接受commit `60cee6e`，Review提交`1a49817`。
 - [x] TASK-REQ-0009-01: 新增闭合Effect Protocol、Manifest v3 registry/executor role、Effect Event/Projection与Boundary Inventory/Record V2 Schema，保留全部旧set与旧Run解释。Validation: `effect_contract` matched 1并通过；Protocol 9 unit + 25 contract/1 ignored通过；Schema双生成稳定；当前set `sha256-161a614c810a10bfae73d83efc83181c37f39cfaa5ccf628e3767ee642fdd7d2`，v1/v2 retained exact reader覆盖通过。
@@ -13,5 +13,5 @@ Current execution: reviewing / TASK-REQ-0009-11 final remediation。设计exact 
 - [x] TASK-REQ-0009-08: 实现success guard、Inventory/Record V2 fixed horizon与Recorded replay零执行/写入/核算。Validation: `lifecycle_success_guard/recorded_replay`通过；Inventory读取显式cursor/history digest，horizon后late Event不改变同一pin，Reexecute拒绝。
 - [x] TASK-REQ-0009-09: 完成完整隔离、权限、redaction、兼容与scope负向测试，确认无真实外部I/O、自动redispatch或新依赖。Validation: `isolation/compatibility`通过；错误producer形成脱敏rejected audit；完整scope矩阵无写入；`python scripts/check_req0009_scope.py`通过。
 - [x] TASK-REQ-0009-10: 跑完Focused/Impacted/Core/Full适用门禁、Schema双生成与完整仓库门禁，并写入`VALIDATION.md`。Validation: 19个Effect命名filter各matched 1；Kernel 179/1 ignored、Protocol 9+25/1 ignored；fmt/clippy/scope/schema/diff通过；docs freshness明确等待实现Review。
-- [ ] TASK-REQ-0009-11: 由新的fresh independent Agent执行实现code review；实现者整改，原Reviewer复审关闭全部Blocker/Major。Validation: REVIEW-0013对`fc1e3d9`复审为0 Blocker/1 Major；F-005 residual修复的`fake_outcomes`与`reconciliation` exact tests及Kernel clippy通过，待完整门禁和同一Reviewer最终复审。
+- [ ] TASK-REQ-0009-11: 由新的fresh independent Agent执行实现code review；实现者整改，原Reviewer复审关闭全部Blocker/Major。Validation: REVIEW-0013对`f3bf18e`为0 Blocker/1 Major；Effect 24/24、Workspace Kernel 185/1 ignored、Protocol 9+25/1 ignored及全部静态门禁通过，待同一Reviewer最终复审。
 - [ ] TASK-REQ-0009-12: 同步implemented facts与最终freshness，Requirement reviewing→verified→done并归档active work。Validation: 完整门禁最终复跑、Review 0/0、工作区仅含预期提交。
