@@ -2267,12 +2267,24 @@ impl EventStore {
             let payload = source
                 .downcast_payload::<EffectReconciliationRequiredPayloadV1>()
                 .ok_or_else(|| EffectError::new(EffectErrorKind::Unauthorized))?;
+            let receipt_backed_lineage = payload.producer_revision.as_ref()
+                == Some(&registration.producer_revision)
+                && payload.adapter_revision.as_ref() == Some(&registration.adapter_revision)
+                && payload.receipt_digest.is_some()
+                && payload.observed_at.is_some();
+            let recovery_backed_lineage = payload.reason_code == "effect-recovery-after-claim"
+                && payload.external_conclusion == EffectExternalConclusionV1::Unknown
+                && payload.receipt_digest.is_none()
+                && payload.result_digest.is_none()
+                && payload.producer_revision.is_none()
+                && payload.adapter_revision.is_none()
+                && payload.observed_at.is_none()
+                && payload.observed_usage.is_empty()
+                && payload.limitations.is_empty()
+                && payload.confirmed_components_digest.is_none();
             if payload.effect_id != command.effect_id
                 || payload.attempt_id != command.attempt_id
-                || payload.producer_revision.as_ref() != Some(&registration.producer_revision)
-                || payload.adapter_revision.as_ref() != Some(&registration.adapter_revision)
-                || payload.receipt_digest.is_none()
-                || payload.observed_at.is_none()
+                || !(receipt_backed_lineage || recovery_backed_lineage)
             {
                 return Err(EffectError::new(EffectErrorKind::Unauthorized));
             }

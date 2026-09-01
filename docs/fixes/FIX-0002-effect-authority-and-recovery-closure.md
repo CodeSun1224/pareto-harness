@@ -55,6 +55,10 @@ Provider、Tool、文件、进程或网络 Effect，因此缺陷未逃逸到外�
   recovery关闭。authenticated-invalid Receipt的双stream terminal pair与rejection audit改为同一
   三Event事务。recovery改由module-private KernelRecoveryClock签发用途受限authority。reconciliation
   registry固定producer/adapter/implementation，resolution只来自sealed admitted query observation。
+- 第二轮复审关闭F-002/F-003/F-004并发现F-005残余：claim后recovery产生的Unknown没有Receipt
+  identity，而query observation admission错误地只接受Receipt-backed lineage。修复将source严格分为
+  完整Receipt-backed与Kernel `effect-recovery-after-claim`两类，并新增crash/reopen recovery Unknown由
+  Manifest-pinned sealed query producer关闭、且external executor不重入的端到端回归。
 
 # Regression proof
 

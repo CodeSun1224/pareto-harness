@@ -49,6 +49,12 @@ authority，篡改authority no-write；reconciliation resolution只来自Manifes
 implementation生成的sealed query observation，command不再携带resolution/source/producer，wrong
 implementation/producer/resolution与不存在lineage均no-write。上述第二轮修复待同一Reviewer关闭。
 
+同一Reviewer对`fc1e3d968b87a8cfea987bea306f53b6a5b8c468`独立复审后确认F-002/F-003/F-004
+可关闭，并发现F-005的最后一个可达性缺口：claim后recovery Unknown不含Receipt identity，旧admission
+却只接受Receipt-backed source。最终整改把source验证严格分成完整Receipt-backed与Kernel recovery-backed
+两种闭合形态；`fake_outcomes`现证明CrashAfterReturn→close/reopen→recovery Unknown→Manifest-pinned
+sealed query observation→ResolvedNotApplied全链路可达，同时executor counter保持1。该最终整改待Reviewer关闭。
+
 | Layer | Command | Result |
 |---|---|---|
 | Lifecycle | `cargo test -p pareto-kernel lifecycle:: --offline` | 18 passed |
@@ -109,5 +115,5 @@ Protocol publisher负向测试会打印`existing content-addressed schema set di
 
 ## Pending gate
 
-下一步将第二轮整改固定为exact commit，由REVIEW-0013同一independent Reviewer复审F-002..F-005。
+下一步将F-005最终整改固定为exact commit，由REVIEW-0013同一independent Reviewer完成最终复审。
 只有Reviewer将open Blocker/Major归零并批准后，才同步最终freshness、复跑docs门禁并完成归档。

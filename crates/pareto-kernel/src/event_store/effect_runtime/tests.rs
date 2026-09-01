@@ -1527,7 +1527,7 @@ async fn fake_outcomes() {
                     &target,
                     &EventCursor {
                         sequence: "4".to_owned(),
-                        event_id: recovery.effect_event_id,
+                        event_id: recovery.effect_event_id.clone(),
                     },
                 )
                 .await
@@ -1535,6 +1535,70 @@ async fn fake_outcomes() {
             assert_eq!(
                 recovered.effects[0].external_conclusion,
                 EffectExternalConclusionV1::Unknown
+            );
+            let reconciliation_calls = Arc::new(AtomicUsize::new(0));
+            let producer = resolve_fake_reconciliation_producer(
+                &registry.registrations[0],
+                FakeReconciliationMode::NotApplied,
+                reconciliation_calls.clone(),
+            )
+            .unwrap();
+            let observation = producer
+                .observe(
+                    &request.effect_id,
+                    &request.attempt_id,
+                    recovered.effects[0].external_key_digest.as_ref().unwrap(),
+                    "2026-08-26T00:00:30.000Z",
+                    vec![recovery.effect_event_id.clone()],
+                )
+                .unwrap();
+            let reconcile = seal_reconciliation(ReconcileEffectCommandV1 {
+                effect_id: request.effect_id.clone(),
+                attempt_id: request.attempt_id.clone(),
+                expected_effect_cursor: EventCursor {
+                    sequence: "4".to_owned(),
+                    event_id: recovery.effect_event_id.clone(),
+                },
+                observation_event_id: EventId::parse(format!(
+                    "event_effect-crash-reconciliation-observed-{suffix}"
+                ))
+                .unwrap(),
+                reconciled_event_id: EventId::parse(format!(
+                    "event_effect-crash-reconciled-{suffix}"
+                ))
+                .unwrap(),
+                occurred_at: "2026-08-26T00:00:30.000Z".to_owned(),
+                correlation_id: format!("corr-effect-crash-reconciliation-{suffix}"),
+                command_fingerprint: digest('0'),
+            });
+            assert!(
+                !reopened
+                    .reconcile_effect(
+                        &fixture.registry(),
+                        &registry,
+                        &target,
+                        &observation,
+                        &reconcile,
+                        AtomicPairFault::None,
+                    )
+                    .await
+                    .unwrap()
+            );
+            assert_eq!(reconciliation_calls.load(Ordering::SeqCst), 1);
+            let reconciled = reopened
+                .effect_projection_at(
+                    &fixture.registry(),
+                    &target,
+                    &EventCursor {
+                        sequence: "6".to_owned(),
+                        event_id: reconcile.reconciled_event_id,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                reconciled.effects[0].reconciliation_state,
+                EffectReconciliationStateV1::ResolvedNotApplied
             );
             continue;
         }
