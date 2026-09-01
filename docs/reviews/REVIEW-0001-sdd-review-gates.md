@@ -4,10 +4,10 @@ title: REQ-0002 SDD 与独立评审门禁代码评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-22
-updated: 2026-08-30
+updated: 2026-09-01
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 46772c7fbb30e82f0e8fd4fb50915e8414acaa65
+reviewed_revision: 62bc44e250587594912f7ef16b431be6b1c12103
 open_blockers: 0
 open_majors: 0
 ---
@@ -89,3 +89,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。仅收紧proposed RFC recovery accounting；治理/代码/Schema零变化。REVIEW-0012独立关闭F-004至0/0，但REQ-0009仍未接受/实现。REVIEW-0001保持approved、0/0。
 - 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已由REVIEW-0012在`b7acbd8`批准0/0的设计、创建ADR-0010并同步共享文档；无代码/Schema/Runtime/旧治理合同变化，且未声称实现。REVIEW-0001保持approved、0/0。
 - 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅推进planned并创建active PLAN/TASKS/HANDOFF；fixed planning补齐planned→implementing与AC-21 exact命令。治理规则、代码、Schema、Runtime和旧合同零变化，未声称实现。REVIEW-0001保持approved、0/0。
+- 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。该revision仅在REVIEW-0013已独立批准exact实现、0/0之后同步done/archive与README/index/architecture/Epic/roadmap事实；无runtime、Schema、权限或治理规则变化，原verdict/findings不变。

@@ -4,10 +4,10 @@ title: REQ-0008 Observer、Gate 与 Transform Hook 独立实现评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-29
-updated: 2026-08-30
+updated: 2026-09-01
 links: [REQ-0008, SPEC-0007, RFC-0008, ADR-0009, REVIEW-0010, REQ-0004, REQ-0007]
 independence: independent
-reviewed_revision: 46772c7fbb30e82f0e8fd4fb50915e8414acaa65
+reviewed_revision: 62bc44e250587594912f7ef16b431be6b1c12103
 open_blockers: 0
 open_majors: 0
 ---
@@ -88,3 +88,4 @@ F-006的先前红测在exact revision上稳定转绿，且生产调用边界、�
 - 2026-08-30：one-line REQ-0009 freshness exact `b7acbd82824d8410d432117c89be1bd56c8ce05c`。仅proposed RFC一行变化，Hook实现/Schema/DB/Cargo/scripts零变化；REQ-0009尚未接受/实现。原verdict不变，REVIEW-0011保持approved、0/0。
 - 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已评审设计、创建ADR-0010并同步共享文档；Hook实现/Schema/DB/Cargo/scripts与REQ-0008合同零变化，REQ-0009未实现。原verdict不变，REVIEW-0011保持approved、0/0。
 - 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅新增忠实planning并补齐状态/依赖门禁；Hook实现、Schema、DB、Cargo、scripts与REQ-0008合同零变化，未实现。原verdict不变，REVIEW-0011保持approved、0/0。
+- 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。仅同步独立批准后的done/archive事实，无Hook runtime变化；原verdict/findings不变。

@@ -4,10 +4,10 @@ title: REQ-0009 Effect Intent/Receipt 与幂等效果独立设计评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-09-01
 links: [REQ-0009, SPEC-0008, RFC-0009, ADR-0010, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: 46772c7fbb30e82f0e8fd4fb50915e8414acaa65
+reviewed_revision: 62bc44e250587594912f7ef16b431be6b1c12103
 open_blockers: 0
 open_majors: 0
 ---
@@ -183,3 +183,4 @@ unclaimed/claimed recovery、fixed-horizon Recorded replay、兼容与rollback�
   `planned→implementing`启动门禁；本Reviewer将其作为planning Major退回。`46772c7`只修订PLAN/HANDOFF，
   补齐两项exact proof与行为编辑前状态迁移；无Runtime、Schema、测试、旧合同或新设计语义变化。finding closed，
   无新finding，保持approved 0/0；本轮仅为planning freshness，不是实现code review。
+- 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。REVIEW-0013已独立批准exact实现、0/0；该closure仅同步done/archive事实，无设计合同变化，原verdict/findings不变。
