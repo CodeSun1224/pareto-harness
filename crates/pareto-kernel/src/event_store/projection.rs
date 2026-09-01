@@ -26,7 +26,7 @@ const RETAINED_OUTPUT_MANIFEST_DIGEST: &str =
 const HOOK_OUTPUT_MANIFEST_DIGEST: &str =
     "sha256:0efc2ecfafba4c683a08917f4f4d025731f70df7c1ec68827d5eedff46384771";
 const EFFECT_OUTPUT_MANIFEST_DIGEST: &str =
-    "sha256:70389ae3f20ce4428ee0a8b1ecd6ddf1b6c48474982d6372ffea69e6fc7ba390";
+    "sha256:0d32378157c01117dc9b86a307cfc8d05aa299bc520ad0cb7ae29d67a79844ba";
 const SCHEMA_SET_MANIFEST_DIGEST: &str =
     "sha256:e534c2d587c2813a97f0bb1abf992d29585c3b1ddd04d9c73ee0eda5d83b0f4b";
 const RUN_MANIFEST_DIGEST: &str =
@@ -1662,15 +1662,15 @@ async fn effect_v3_digest_golden() {
     let snapshot = build_snapshot(&projection, reducer, &output).unwrap();
     assert_eq!(
         reducer.reducer_ref.contract_digest.as_str(),
-        "sha256:11bf2448899ffc72437b99d819c669104ef08522272e1c316a1d45bd015a411e"
+        "sha256:736e5a4a6ada093df7a72ebb91e8a2c109496c6ab573589e7019696d55037787"
     );
     assert_eq!(
         projection.projection_digest.as_str(),
-        "sha256:3a7769d9b4284664fd8d2cabfae6952ee7a1a48eaf23c90a3ecd1afd5fe2558e"
+        "sha256:80448ecf015688787478f20ba2145d27b90dd16d2eff5c5a7d4036b47900fffb"
     );
     assert_eq!(
         snapshot.snapshot_digest.as_str(),
-        "sha256:7a28f5a91e95f9c24649cc290128d5e257a117a4a7075c39970cf5a20f29b27b"
+        "sha256:0889f648b38ad79da6222041380f975f5b4647374f739226a327e511cc09217a"
     );
     transaction.rollback().await.unwrap();
 }

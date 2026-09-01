@@ -18,7 +18,7 @@
 | Event Store impacted | `cargo test -p pareto-kernel event_store --offline` | passed；184 passed、1 ignored | ignored为既有非阈值performance observation |
 | Workspace full | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 184 passed/1 ignored；Protocol 9 unit + 25 contract passed/1 ignored |
 | Scope/static | `python scripts/check_req0009_scope.py` | passed | SQLite v2、retained sets、Fake-only、Replay read-only、依赖不变 |
-| Schema identity | generator运行两次并逐文件SHA-256比较 | passed；88 files byte-identical | remediation set `sha256-70389ae3f20ce4428ee0a8b1ecd6ddf1b6c48474982d6372ffea69e6fc7ba390`；初始`ed548…` set未改写 |
+| Schema identity | generator运行两次并逐文件SHA-256比较 | passed；89 files byte-identical | second-remediation set `sha256-0d32378157c01117dc9b86a307cfc8d05aa299bc520ad0cb7ae29d67a79844ba`；`70389…`、`ed548…`及更早set未改写 |
 
 ## Focused and layered tests
 
@@ -38,6 +38,16 @@ REVIEW-0013整改新增或强化的独立证明为
 `effect_v3_digest_golden`；原有`dispatch_lease/fake_outcomes/crash_recovery/reconciliation/
 lifecycle_success_guard/digest_golden`也扩展了wrong implementation、fault terminal、new-sample、
 伪造source、Task scope与历史identity断言。Effect模块全集23/23通过。
+
+REVIEW-0013对`7eeb5f6d4095b7d2fdc6cc225e9b60c89482063f`的同一Reviewer复审关闭
+F-001/F-006/F-007/F-008/F-009，保留F-002/F-003/F-004/F-005四个Major。第二轮候选进一步证明：
+Kernel用固定implementation digest解析sealed concrete Fake executor，wrong pin为0调用；
+`CrashAfterReturn`在claim后/terminal前中断，关闭并reopen后只走recovery且调用计数不增加；
+authenticated-invalid Receipt的Control terminal、Effect terminal与mandatory rejection audit在同一事务，
+terminal后/audit前故障为零写入；recovery只接受KernelRecoveryClock签发并绑定scope/effect/attempt/cause的
+authority，篡改authority no-write；reconciliation resolution只来自Manifest-pinned producer/adapter/
+implementation生成的sealed query observation，command不再携带resolution/source/producer，wrong
+implementation/producer/resolution与不存在lineage均no-write。上述第二轮修复待同一Reviewer关闭。
 
 | Layer | Command | Result |
 |---|---|---|
@@ -70,7 +80,8 @@ lifecycle_success_guard/digest_golden`也扩展了wrong implementation、fault t
   同一pin；Reexecute拒绝，未获得writer/executor/reserve/settlement authority。
 - 相对设计接受基线，workspace/crate manifests与`Cargo.lock`无diff；`cargo tree --workspace
   --offline`成功。已删除三个未提交的中间Schema候选目录；它们可由generator重建，最终只保留
-  `sha256-70389...`整改候选、初始`sha256-ed548...`集合及全部更早retained sets。
+  `sha256-0d323...`第二轮候选、`sha256-70389...`首轮整改集合、初始`sha256-ed548...`
+  集合及全部更早retained sets。
 
 ## Completion gates before independent review
 
@@ -81,7 +92,7 @@ lifecycle_success_guard/digest_golden`也扩展了wrong implementation、fault t
 | `cargo fmt --all -- --check` | passed |
 | `cargo clippy --workspace --all-targets --all-features --offline -- -D warnings` | passed |
 | `cargo test --workspace --all-targets --all-features --offline` | passed |
-| `cargo run -p pareto-protocol --bin generate_schemas --offline -- schemas` | passed连续两次；88 files byte-identical |
+| `cargo run -p pareto-protocol --bin generate_schemas --offline -- schemas` | passed连续两次；89 files byte-identical |
 | `git diff --check` | passed |
 | dependency manifest diff against `60cee6e` | passed；no diff |
 
@@ -90,13 +101,13 @@ Protocol publisher负向测试会打印`existing content-addressed schema set di
 
 ## Quality, cost, and latency
 
-- Quality：REVIEW-0013 F-001..F-009均已实现候选修复并有确定性负测；尚未由Reviewer关闭，故不把
-  independent approval表示为完成。
+- Quality：Reviewer已关闭F-001/F-006..F-009；F-002..F-005第二轮候选修复均有确定性负测，
+  但尚未由Reviewer关闭，故不把independent approval表示为完成。
 - Cost：无模型、Provider或付费外部系统调用；unknown usage保守核算，不声明成本优化。
 - Latency：测试只使用FakeClock，无真实sleep；既有SQLite/protocol performance observation保持
   ignored的非阈值观察，不声明延迟改善。
 
 ## Pending gate
 
-下一步将整改固定为exact commit，由REVIEW-0013同一independent Reviewer逐项复审F-001..F-009。
+下一步将第二轮整改固定为exact commit，由REVIEW-0013同一independent Reviewer复审F-002..F-005。
 只有Reviewer将open Blocker/Major归零并批准后，才同步最终freshness、复跑docs门禁并完成归档。

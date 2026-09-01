@@ -1583,6 +1583,10 @@ protocol_record!(
     "effect-receipt-observation"
 );
 protocol_record!(
+    crate::EffectReconciliationObservationV1,
+    "effect-reconciliation-observation"
+);
+protocol_record!(
     crate::EffectProjectionHashViewV1,
     "effect-projection-hash-view"
 );

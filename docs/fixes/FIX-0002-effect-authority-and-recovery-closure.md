@@ -50,6 +50,11 @@ Provider、Tool、文件、进程或网络 Effect，因此缺陷未逃逸到外�
 - Effect/Control读取双向验证counterpart、完整pair、可重算prepared digests与pair fingerprint。
 - Task success接入exact Task Effect guard；Projection扩展为无损recovery/budget/pair/Receipt/evidence视图。
 - v2 golden固定保留的Hook SchemaSet，v3使用独立golden；旧SchemaSet不改写。
+- REVIEW-0013首轮整改复审后，对剩余F-002..F-005移除executor trait自报identity，改为
+  Kernel固定实现digest解析sealed concrete Fake executor；`CrashAfterReturn`停在claim后并由reopen
+  recovery关闭。authenticated-invalid Receipt的双stream terminal pair与rejection audit改为同一
+  三Event事务。recovery改由module-private KernelRecoveryClock签发用途受限authority。reconciliation
+  registry固定producer/adapter/implementation，resolution只来自sealed admitted query observation。
 
 # Regression proof
 

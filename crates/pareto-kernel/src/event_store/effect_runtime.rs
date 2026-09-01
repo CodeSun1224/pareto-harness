@@ -1,11 +1,17 @@
 //! Kernel-owned Effect event stream, fixed-horizon fold, and projection.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 use super::lifecycle::{LifecycleTarget, lifecycle_event, load_established};
 use super::runtime_control::{
     ClockSample, EffectSettlementAccountingV1, HookControlEventContext, OperationLease,
-    ProtectedOperationProposal, RuntimeControlTarget, control_event,
+    ProtectedOperationProposal, RuntimeClock, RuntimeControlTarget, control_event,
     effect_cancellation_is_effective, ensure_effect_dispatch_admissible,
     plan_effect_conservative_settlement, plan_effect_recovery_settlement, plan_hook_reservation,
     plan_hook_settlement, prepare_effect_reservation_event, prepare_effect_settlement_event,
@@ -24,12 +30,12 @@ use pareto_protocol::{
     EffectPairBindingV1, EffectPairId, EffectPairKindV1, EffectProjectionEntryV1,
     EffectProjectionHashViewV1, EffectProjectionV1, EffectReceiptAdmittedPayloadV1,
     EffectReceiptObservationV1, EffectReceiptOutcomeClassV1, EffectReconciledPayloadV1,
-    EffectReconciliationBindingV2, EffectReconciliationObservedPayloadV1,
-    EffectReconciliationRequiredPayloadV1, EffectReconciliationStateV1, EffectRecoveryCauseV1,
-    EffectRegistryRevisionV1, EffectRequestV1, EffectStreamInitializedPayloadV1, EventCursor,
-    EventId, IsolationScope, OperationOutcomeV1, OperationReservedPayloadV1,
-    OperationSettledPayloadV1, ProtocolLimitsRef, RevisionId, RevisionMetadata, SchemaSet,
-    StreamId, TaskId, ValidatedEvent, derive_revision_id, digest_json,
+    EffectReconciliationBindingV2, EffectReconciliationObservationV1,
+    EffectReconciliationObservedPayloadV1, EffectReconciliationRequiredPayloadV1,
+    EffectReconciliationStateV1, EffectRecoveryCauseV1, EffectRegistryRevisionV1, EffectRequestV1,
+    EffectStreamInitializedPayloadV1, EventCursor, EventId, IsolationScope, OperationOutcomeV1,
+    OperationReservedPayloadV1, OperationSettledPayloadV1, ProtocolLimitsRef, RevisionId,
+    RevisionMetadata, SchemaSet, StreamId, TaskId, ValidatedEvent, derive_revision_id, digest_json,
 };
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
@@ -160,6 +166,7 @@ struct EffectClaimResult {
 enum EffectOrchestrationResult {
     Terminal(EffectTerminalConclusionResult),
     AlreadyClaimed { cursor: EventCursor },
+    InterruptedAfterReturn { cursor: EventCursor },
 }
 
 #[derive(Clone)]
@@ -189,12 +196,63 @@ struct RecoverEffectCommandV1 {
     control_event_id: EventId,
     effect_event_id: EventId,
     pair_id: EffectPairId,
-    lost_process_epoch_digest: Digest,
-    current_process_epoch_digest: Digest,
+    recovery_authority_fingerprint: Digest,
     occurred_at: String,
     correlation_id: String,
-    clock: ClockSample,
     command_fingerprint: Digest,
+}
+
+/// Kernel-owned recovery clock/process-liveness service. The type and fields are module-private;
+/// callers can only receive a purpose-bound observation issued by this service.
+struct KernelRecoveryClock {
+    sample: ClockSample,
+    service_revision: RevisionId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct EffectRecoveryAuthority {
+    scope: IsolationScope,
+    effect_id: EffectId,
+    attempt_id: pareto_protocol::EffectAttemptId,
+    cause: EffectRecoveryCauseV1,
+    clock: ClockSample,
+    current_process_epoch_digest: Digest,
+    service_revision: RevisionId,
+    seal: Digest,
+}
+
+impl KernelRecoveryClock {
+    fn capture(clock: &dyn RuntimeClock) -> Self {
+        Self {
+            sample: clock.sample(),
+            service_revision: RevisionId::parse("rev_kernel-recovery-clock-v1")
+                .expect("static revision is valid"),
+        }
+    }
+
+    fn observe(
+        &self,
+        target: &EffectTarget,
+        effect_id: &EffectId,
+        attempt_id: &pareto_protocol::EffectAttemptId,
+        cause: EffectRecoveryCauseV1,
+    ) -> Result<EffectRecoveryAuthority, EffectError> {
+        let mut authority = EffectRecoveryAuthority {
+            scope: target.scope.clone(),
+            effect_id: effect_id.clone(),
+            attempt_id: attempt_id.clone(),
+            cause,
+            clock: self.sample.clone(),
+            current_process_epoch_digest: digest_bytes(
+                "effect-current-process-epoch-v1",
+                self.sample.process_epoch.as_bytes(),
+            )?,
+            service_revision: self.service_revision.clone(),
+            seal: zero_digest()?,
+        };
+        authority.seal = recovery_authority_fingerprint(&authority)?;
+        Ok(authority)
+    }
 }
 
 #[derive(Debug)]
@@ -209,12 +267,88 @@ struct ReconcileEffectCommandV1 {
     expected_effect_cursor: EventCursor,
     observation_event_id: EventId,
     reconciled_event_id: EventId,
-    producer_revision: RevisionId,
-    source_observation_event_ids: Vec<EventId>,
-    resolution: EffectReconciliationStateV1,
     occurred_at: String,
     correlation_id: String,
     command_fingerprint: Digest,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum FakeReconciliationMode {
+    Applied,
+    NotApplied,
+    Partial,
+}
+
+#[derive(Debug)]
+struct ResolvedFakeReconciliationProducer {
+    mode: FakeReconciliationMode,
+    calls: Arc<AtomicUsize>,
+    producer_revision: RevisionId,
+    adapter_revision: RevisionId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct AdmittedReconciliationObservation {
+    observation: EffectReconciliationObservationV1,
+    implementation_compatibility_digest: Digest,
+    seal: Digest,
+}
+
+impl ResolvedFakeReconciliationProducer {
+    fn observe(
+        &self,
+        effect_id: &EffectId,
+        attempt_id: &pareto_protocol::EffectAttemptId,
+        external_key_digest: &Digest,
+        observed_at: &str,
+        source_observation_event_ids: Vec<EventId>,
+    ) -> Result<AdmittedReconciliationObservation, EffectError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let resolution = match self.mode {
+            FakeReconciliationMode::Applied => EffectReconciliationStateV1::ResolvedApplied,
+            FakeReconciliationMode::NotApplied => EffectReconciliationStateV1::ResolvedNotApplied,
+            FakeReconciliationMode::Partial => EffectReconciliationStateV1::ResolvedPartial,
+        };
+        let evidence_digest = digest_json(
+            "pareto.fake-reconciliation-query-evidence.v1",
+            &pareto_protocol::SchemaRef {
+                r#type: "effect-reconciliation-query-evidence".to_owned(),
+                major: 1,
+                minor: 0,
+                schema_digest: digest_bytes(
+                    "pareto.fake-reconciliation-query-schema.v1",
+                    b"effect-reconciliation-query-evidence-v1",
+                )?,
+            },
+            &serde_json::json!({
+                "effect_id": effect_id,
+                "attempt_id": attempt_id,
+                "external_key_digest": external_key_digest,
+                "resolution": resolution,
+                "observed_at": observed_at,
+                "source_observation_event_ids": source_observation_event_ids,
+            }),
+        )
+        .map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
+        let observation = EffectReconciliationObservationV1 {
+            effect_id: effect_id.clone(),
+            attempt_id: attempt_id.clone(),
+            external_key_digest: external_key_digest.clone(),
+            producer_revision: self.producer_revision.clone(),
+            adapter_revision: self.adapter_revision.clone(),
+            resolution,
+            observed_at: observed_at.to_owned(),
+            evidence_digest,
+            source_observation_event_ids,
+        };
+        let mut admitted = AdmittedReconciliationObservation {
+            observation,
+            implementation_compatibility_digest: fake_reconciliation_implementation_digest()?,
+            seal: zero_digest()?,
+        };
+        admitted.seal = admitted_reconciliation_observation_fingerprint(&admitted)?;
+        Ok(admitted)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -225,10 +359,64 @@ enum FakeEffectExecution {
     CrashedAfterReturn(EffectReceiptObservationV1),
 }
 
-trait FakeEffectExecutor {
-    fn implementation_compatibility_digest(&self) -> &Digest;
+#[derive(Clone, Copy, Debug)]
+enum FakeEffectMode {
+    Applied,
+    BusinessRejected,
+    FailedBeforeApply,
+    ResponseLost,
+    Partial,
+    CrashAfterReturn,
+}
 
-    fn invoke(&self, lease: &EffectDispatchLease) -> FakeEffectExecution;
+/// A resolved in-process implementation. Its identity is selected by Kernel code from the
+/// Manifest-pinned descriptor; an injected object cannot claim an arbitrary compatibility digest.
+#[derive(Debug)]
+struct ResolvedFakeEffectExecutor {
+    mode: FakeEffectMode,
+    calls: Arc<AtomicUsize>,
+    producer_revision: RevisionId,
+    adapter_revision: RevisionId,
+}
+
+impl ResolvedFakeEffectExecutor {
+    fn invoke(&self, lease: &EffectDispatchLease, observed_at: &str) -> FakeEffectExecution {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let observation = |outcome_class| EffectReceiptObservationV1 {
+            effect_id: lease.effect_id.clone(),
+            attempt_id: lease.attempt_id.clone(),
+            external_key_digest: lease.external_key_digest.clone(),
+            producer_revision: self.producer_revision.clone(),
+            adapter_revision: self.adapter_revision.clone(),
+            outcome_class,
+            observed_at: observed_at.to_owned(),
+            receipt_digest: digest_bytes("fake-effect-receipt-v1", b"receipt")
+                .expect("static digest input is valid"),
+            result_digest: digest_bytes("fake-effect-result-v1", b"result")
+                .expect("static digest input is valid"),
+            result_summary_bytes: 32,
+            observed_usage: Vec::new(),
+            limitations: Vec::new(),
+        };
+        match self.mode {
+            FakeEffectMode::Applied => {
+                FakeEffectExecution::Observation(observation(EffectReceiptOutcomeClassV1::Applied))
+            }
+            FakeEffectMode::BusinessRejected => FakeEffectExecution::Observation(observation(
+                EffectReceiptOutcomeClassV1::RejectedBeforeApply,
+            )),
+            FakeEffectMode::FailedBeforeApply => FakeEffectExecution::FailedBeforeApply {
+                reason_code: "fake-before-apply".to_owned(),
+            },
+            FakeEffectMode::ResponseLost => FakeEffectExecution::ResponseLost,
+            FakeEffectMode::Partial => {
+                FakeEffectExecution::Observation(observation(EffectReceiptOutcomeClassV1::Partial))
+            }
+            FakeEffectMode::CrashAfterReturn => FakeEffectExecution::CrashedAfterReturn(
+                observation(EffectReceiptOutcomeClassV1::Unknown),
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -325,6 +513,12 @@ struct EffectTerminalConclusionResult {
     control: AppendResult,
     effect: AppendResult,
     already_committed: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EffectTerminalAuditFault {
+    None,
+    AfterPairBeforeAudit,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -442,15 +636,75 @@ fn verify_dispatch_lease(
 fn execute_fake_effect(
     descriptor: &EffectExecutorDescriptorV1,
     lease: &EffectDispatchLease,
-    executor: &dyn FakeEffectExecutor,
+    executor: &ResolvedFakeEffectExecutor,
+    observed_at: &str,
 ) -> Result<FakeEffectExecution, EffectError> {
     verify_dispatch_lease(descriptor, lease)?;
-    if executor.implementation_compatibility_digest()
-        != &descriptor.content.implementation_compatibility_digest
+    Ok(executor.invoke(lease, observed_at))
+}
+
+fn fake_effect_implementation_digest() -> Result<Digest, EffectError> {
+    digest_bytes(
+        "pareto.kernel.fake-effect-implementation.v1",
+        b"resolved-fake-effect-v1",
+    )
+}
+
+fn resolve_fake_effect_executor(
+    descriptor: &EffectExecutorDescriptorV1,
+    mode: FakeEffectMode,
+    calls: Arc<AtomicUsize>,
+) -> Result<ResolvedFakeEffectExecutor, EffectError> {
+    if descriptor.validate().is_err()
+        || descriptor.content.implementation_compatibility_digest
+            != fake_effect_implementation_digest()?
     {
         return Err(EffectError::new(EffectErrorKind::Unauthorized));
     }
-    Ok(executor.invoke(lease))
+    Ok(ResolvedFakeEffectExecutor {
+        mode,
+        calls,
+        producer_revision: descriptor.content.producer_revision.clone(),
+        adapter_revision: descriptor.content.adapter_revision.clone(),
+    })
+}
+
+fn fake_reconciliation_implementation_digest() -> Result<Digest, EffectError> {
+    digest_bytes(
+        "pareto.kernel.fake-reconciliation-implementation.v1",
+        b"resolved-fake-reconciliation-v1",
+    )
+}
+
+fn admitted_reconciliation_observation_fingerprint(
+    admitted: &AdmittedReconciliationObservation,
+) -> Result<Digest, EffectError> {
+    let mut normalized = admitted.clone();
+    normalized.seal = zero_digest()?;
+    let bytes =
+        canonical(&normalized).map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
+    digest_bytes(
+        "pareto.effect-reconciliation.admitted-observation.v1",
+        bytes.as_bytes(),
+    )
+}
+
+fn resolve_fake_reconciliation_producer(
+    registration: &pareto_protocol::EffectRegistrationV1,
+    mode: FakeReconciliationMode,
+    calls: Arc<AtomicUsize>,
+) -> Result<ResolvedFakeReconciliationProducer, EffectError> {
+    if registration.reconciliation_implementation_compatibility_digest
+        != fake_reconciliation_implementation_digest()?
+    {
+        return Err(EffectError::new(EffectErrorKind::Unauthorized));
+    }
+    Ok(ResolvedFakeReconciliationProducer {
+        mode,
+        calls,
+        producer_revision: registration.reconciliation_producer_revision.clone(),
+        adapter_revision: registration.reconciliation_adapter_revision.clone(),
+    })
 }
 
 fn recovery_command_fingerprint(command: &RecoverEffectCommandV1) -> Result<Digest, EffectError> {
@@ -459,6 +713,16 @@ fn recovery_command_fingerprint(command: &RecoverEffectCommandV1) -> Result<Dige
     let bytes =
         canonical(&normalized).map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
     digest_bytes("pareto.effect-recovery.command.v1", bytes.as_bytes())
+}
+
+fn recovery_authority_fingerprint(
+    authority: &EffectRecoveryAuthority,
+) -> Result<Digest, EffectError> {
+    let mut normalized = authority.clone();
+    normalized.seal = zero_digest()?;
+    let bytes =
+        canonical(&normalized).map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
+    digest_bytes("pareto.effect-recovery.authority.v1", bytes.as_bytes())
 }
 
 fn expected_effect_id(
@@ -1045,7 +1309,7 @@ impl EventStore {
         operation_lease: &OperationLease,
         claim_command: &ClaimEffectCommandV1,
         receipt_command: &AdmitEffectReceiptCommandV1,
-        executor: &dyn FakeEffectExecutor,
+        executor: &ResolvedFakeEffectExecutor,
     ) -> Result<EffectOrchestrationResult, EffectError> {
         let claimed = self
             .claim_effect_dispatch(registry, descriptor, target, claim_command)
@@ -1055,10 +1319,22 @@ impl EventStore {
                 cursor: claimed.cursor,
             });
         };
-        let execution = execute_fake_effect(descriptor, &lease, executor)?;
+        let execution = execute_fake_effect(
+            descriptor,
+            &lease,
+            executor,
+            &receipt_command.clock.canonical_utc,
+        )?;
+        // This mode models the process disappearing after the external system returned but before
+        // the Kernel could append a terminal pair. It deliberately leaves only the durable claim;
+        // a reopened process must use recovery and must never invoke the executor again.
+        if matches!(execution, FakeEffectExecution::CrashedAfterReturn(_)) {
+            return Ok(EffectOrchestrationResult::InterruptedAfterReturn {
+                cursor: claimed.cursor,
+            });
+        }
         let observation = match &execution {
-            FakeEffectExecution::Observation(observation)
-            | FakeEffectExecution::CrashedAfterReturn(observation) => observation.clone(),
+            FakeEffectExecution::Observation(observation) => observation.clone(),
             FakeEffectExecution::FailedBeforeApply { reason_code } => {
                 let digest = digest_bytes("fake-effect-before-apply-v1", reason_code.as_bytes())?;
                 EffectReceiptObservationV1 {
@@ -1096,6 +1372,7 @@ impl EventStore {
                     limitations: vec!["response-lost".to_owned()],
                 }
             }
+            FakeEffectExecution::CrashedAfterReturn(_) => unreachable!("handled above"),
         };
         let terminal = self
             .admit_effect_receipt(
@@ -1125,6 +1402,35 @@ impl EventStore {
         dispatch_lease: &EffectDispatchLease,
         observation: &EffectReceiptObservationV1,
         command: &AdmitEffectReceiptCommandV1,
+    ) -> Result<EffectTerminalConclusionResult, EffectError> {
+        self.admit_effect_receipt_with_fault(
+            registry,
+            effect_registry,
+            descriptor,
+            target,
+            control_target,
+            operation_lease,
+            dispatch_lease,
+            observation,
+            command,
+            EffectTerminalAuditFault::None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn admit_effect_receipt_with_fault(
+        &self,
+        registry: &SchemaRegistry,
+        effect_registry: &EffectRegistryRevisionV1,
+        descriptor: &EffectExecutorDescriptorV1,
+        target: &EffectTarget,
+        control_target: &RuntimeControlTarget,
+        operation_lease: &OperationLease,
+        dispatch_lease: &EffectDispatchLease,
+        observation: &EffectReceiptObservationV1,
+        command: &AdmitEffectReceiptCommandV1,
+        audit_fault: EffectTerminalAuditFault,
     ) -> Result<EffectTerminalConclusionResult, EffectError> {
         verify_dispatch_lease(descriptor, dispatch_lease)?;
         let mut transaction = self
@@ -1407,7 +1713,7 @@ impl EventStore {
                     } else {
                         EffectExternalConclusionV1::Unknown
                     };
-                self.append_effect_terminal_pair(
+                self.append_effect_terminal_pair_with_audit(
                     registry,
                     target,
                     control_target,
@@ -1444,76 +1750,14 @@ impl EventStore {
                         correlation_id: base.correlation_id,
                         control_payload: base.control_payload,
                     },
+                    rejection_payload.clone(),
                     AtomicPairFault::None,
+                    audit_fault,
                 )
                 .await
             }
         }?;
-        if let Some(payload) = rejection_payload {
-            self.append_authenticated_receipt_rejection(registry, target, command, &payload)
-                .await?;
-        }
         Ok(terminal)
-    }
-
-    async fn append_authenticated_receipt_rejection(
-        &self,
-        registry: &SchemaRegistry,
-        target: &EffectTarget,
-        command: &AdmitEffectReceiptCommandV1,
-        payload: &EffectMessageRejectedPayloadV1,
-    ) -> Result<(), EffectError> {
-        let mut transaction = self
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .map_err(|_| EffectError::new(EffectErrorKind::Store))?;
-        let lifecycle = load_established(
-            &mut transaction,
-            registry,
-            &LifecycleTarget {
-                scope: target.scope.clone(),
-                actor: target.actor.clone(),
-            },
-        )
-        .await
-        .map_err(|_| EffectError::new(EffectErrorKind::Unauthorized))?;
-        let cursor = current_effect_cursor(&mut transaction, target).await?;
-        let event_id = EventId::parse(format!(
-            "event_effect-rejected-{}",
-            &payload.input_digest.as_str()[7..39]
-        ))
-        .map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
-        let event = lifecycle_event(
-            &lifecycle.schema_set,
-            &lifecycle.limits,
-            &target.scope,
-            &target.actor,
-            &effect_stream_id(&target.scope)?,
-            &event_id,
-            next_sequence(&cursor)?,
-            &command.occurred_at,
-            &command.correlation_id,
-            "effect-message-rejected",
-            payload,
-        )
-        .map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
-        let prepared = PreparedEvent::new(&event, &lifecycle.schema_set, &lifecycle.limits)
-            .map_err(map_store_error)?;
-        if check_prepared_idempotency(&mut transaction, &prepared)
-            .await
-            .map_err(map_store_error)?
-            .is_none()
-        {
-            insert_prepared(&mut transaction, &prepared)
-                .await
-                .map_err(map_store_error)?;
-        }
-        transaction
-            .commit()
-            .await
-            .map_err(|_| EffectError::new(EffectErrorKind::Store))?;
-        Ok(())
     }
 
     async fn observe_late_effect_receipt(
@@ -1641,12 +1885,24 @@ impl EventStore {
         target: &EffectTarget,
         control_target: &RuntimeControlTarget,
         command: &RecoverEffectCommandV1,
+        authority: &EffectRecoveryAuthority,
     ) -> Result<EffectRecoveryResult, EffectError> {
         if command.command_fingerprint != recovery_command_fingerprint(command)?
             || target.scope != control_target.scope
             || target.actor != control_target.principal
         {
             return Err(EffectError::new(EffectErrorKind::IdempotencyConflict));
+        }
+        if authority.seal != recovery_authority_fingerprint(authority)?
+            || command.recovery_authority_fingerprint != authority.seal
+            || authority.scope != target.scope
+            || authority.effect_id != command.effect_id
+            || authority.attempt_id != command.attempt_id
+            || authority.cause != command.cause
+            || command.occurred_at != authority.clock.canonical_utc
+            || authority.service_revision.as_str() != "rev_kernel-recovery-clock-v1"
+        {
+            return Err(EffectError::new(EffectErrorKind::Unauthorized));
         }
         let mut transaction = self
             .pool
@@ -1747,16 +2003,10 @@ impl EventStore {
         };
         let eligible = match command.cause {
             EffectRecoveryCauseV1::ProcessEpochLost => {
-                let expected_current_epoch = digest_bytes(
-                    "effect-current-process-epoch-v1",
-                    command.clock.process_epoch.as_bytes(),
-                )?;
-                &command.lost_process_epoch_digest == expected_lost_epoch
-                    && command.current_process_epoch_digest == expected_current_epoch
-                    && command.current_process_epoch_digest != command.lost_process_epoch_digest
+                &authority.current_process_epoch_digest != expected_lost_epoch
             }
             EffectRecoveryCauseV1::DeadlineDue => {
-                command.clock.canonical_utc >= intent.recovery_base_key.deadline_at
+                authority.clock.canonical_utc >= intent.recovery_base_key.deadline_at
             }
             EffectRecoveryCauseV1::CancellationEffective => effect_cancellation_is_effective(
                 &mut transaction,
@@ -1794,7 +2044,7 @@ impl EventStore {
             .to_owned(),
             command.command_fingerprint.clone(),
             accounting,
-            &command.clock,
+            &authority.clock,
         )
         .await
         .map_err(|_| EffectError::new(EffectErrorKind::Unauthorized))?;
@@ -1911,21 +2161,31 @@ impl EventStore {
         registry: &SchemaRegistry,
         effect_registry: &EffectRegistryRevisionV1,
         target: &EffectTarget,
+        admitted_observation: &AdmittedReconciliationObservation,
         command: &ReconcileEffectCommandV1,
         fault: AtomicPairFault,
     ) -> Result<bool, EffectError> {
+        if admitted_observation.seal
+            != admitted_reconciliation_observation_fingerprint(admitted_observation)?
+            || admitted_observation.implementation_compatibility_digest
+                != fake_reconciliation_implementation_digest()?
+        {
+            return Err(EffectError::new(EffectErrorKind::Unauthorized));
+        }
+        let observation = &admitted_observation.observation;
         if command.command_fingerprint != reconciliation_command_fingerprint(command)?
-            || command.source_observation_event_ids.is_empty()
-            || command
+            || observation.source_observation_event_ids.is_empty()
+            || observation
                 .source_observation_event_ids
                 .windows(2)
                 .any(|ids| ids[0] >= ids[1])
             || !matches!(
-                command.resolution,
+                observation.resolution,
                 EffectReconciliationStateV1::ResolvedApplied
                     | EffectReconciliationStateV1::ResolvedNotApplied
                     | EffectReconciliationStateV1::ResolvedPartial
             )
+            || observation.observed_at != command.occurred_at
         {
             return Err(EffectError::new(EffectErrorKind::IdempotencyConflict));
         }
@@ -1968,7 +2228,10 @@ impl EventStore {
             || effect_registry.metadata.revision_id != intent.effect_registry_revision
             || effect_registry.config_digest != intent.effect_registry_config_digest
             || command.attempt_id != intent.attempt_id
-            || command.producer_revision != registration.reconciliation_policy_revision
+            || observation.effect_id != command.effect_id
+            || observation.attempt_id != command.attempt_id
+            || observation.producer_revision != registration.reconciliation_producer_revision
+            || observation.adapter_revision != registration.reconciliation_adapter_revision
         {
             return Err(EffectError::new(EffectErrorKind::Unauthorized));
         }
@@ -1976,9 +2239,24 @@ impl EventStore {
             .claims
             .get(&command.effect_id)
             .ok_or_else(|| EffectError::new(EffectErrorKind::Unauthorized))?;
+        if observation.external_key_digest != claim.external_key_digest
+            || lifecycle
+                .schema_set
+                .schema_ref("effect-reconciliation-observation")
+                .and_then(|_| canonical(observation).ok())
+                .and_then(|bytes| {
+                    lifecycle
+                        .schema_set
+                        .parse_record::<EffectReconciliationObservationV1>(bytes.as_bytes())
+                        .ok()
+                })
+                .is_none()
+        {
+            return Err(EffectError::new(EffectErrorKind::Unauthorized));
+        }
         let mut source_payload_digests =
-            Vec::with_capacity(command.source_observation_event_ids.len());
-        for source_id in &command.source_observation_event_ids {
+            Vec::with_capacity(observation.source_observation_event_ids.len());
+        for source_id in &observation.source_observation_event_ids {
             let source = current_events
                 .iter()
                 .find(|event| &event.envelope().event_id == source_id)
@@ -2012,8 +2290,12 @@ impl EventStore {
                 "effect_id": command.effect_id,
                 "attempt_id": command.attempt_id,
                 "external_key_digest": claim.external_key_digest,
-                "producer_revision": command.producer_revision,
-                "source_event_ids": command.source_observation_event_ids,
+                "producer_revision": observation.producer_revision,
+                "adapter_revision": observation.adapter_revision,
+                "resolution": observation.resolution,
+                "observed_at": observation.observed_at,
+                "query_evidence_digest": observation.evidence_digest,
+                "source_event_ids": observation.source_observation_event_ids,
                 "source_payload_digests": source_payload_digests,
             }),
         )
@@ -2025,14 +2307,19 @@ impl EventStore {
         let observed_payload = EffectReconciliationObservedPayloadV1 {
             effect_id: command.effect_id.clone(),
             attempt_id: command.attempt_id.clone(),
-            producer_revision: command.producer_revision.clone(),
-            source_observation_event_ids: command.source_observation_event_ids.clone(),
+            producer_revision: observation.producer_revision.clone(),
+            adapter_revision: observation.adapter_revision.clone(),
+            external_key_digest: observation.external_key_digest.clone(),
+            resolution: observation.resolution,
+            observed_at: observation.observed_at.clone(),
+            evidence_digest: observation.evidence_digest.clone(),
+            source_observation_event_ids: observation.source_observation_event_ids.clone(),
             evidence_fingerprint: evidence_fingerprint.clone(),
         };
         let reconciled_payload = EffectReconciledPayloadV1 {
             effect_id: command.effect_id.clone(),
             attempt_id: command.attempt_id.clone(),
-            reconciliation_state: command.resolution,
+            reconciliation_state: observation.resolution,
             source_observation_event_id: command.observation_event_id.clone(),
             evidence_fingerprint,
         };
@@ -2352,8 +2639,31 @@ impl EventStore {
         registry: &SchemaRegistry,
         target: &EffectTarget,
         control_target: &RuntimeControlTarget,
-        mut command: EffectTerminalPairCommandV1<T>,
+        command: EffectTerminalPairCommandV1<T>,
         fault: AtomicPairFault,
+    ) -> Result<EffectTerminalConclusionResult, EffectError> {
+        self.append_effect_terminal_pair_with_audit(
+            registry,
+            target,
+            control_target,
+            command,
+            None,
+            fault,
+            EffectTerminalAuditFault::None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn append_effect_terminal_pair_with_audit<T: EffectTerminalPayload>(
+        &self,
+        registry: &SchemaRegistry,
+        target: &EffectTarget,
+        control_target: &RuntimeControlTarget,
+        mut command: EffectTerminalPairCommandV1<T>,
+        rejection_audit: Option<EffectMessageRejectedPayloadV1>,
+        fault: AtomicPairFault,
+        audit_fault: EffectTerminalAuditFault,
     ) -> Result<EffectTerminalConclusionResult, EffectError> {
         if target.scope != control_target.scope
             || target.actor != control_target.principal
@@ -2524,12 +2834,72 @@ impl EventStore {
                 .await
                 .map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
         }
+        let audit_prepared = if let Some(payload) = &rejection_audit {
+            let event_id = EventId::parse(format!(
+                "event_effect-rejected-{}",
+                &payload.input_digest.as_str()[7..39]
+            ))
+            .map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
+            let event = lifecycle_event(
+                &lifecycle.schema_set,
+                &lifecycle.limits,
+                &target.scope,
+                &target.actor,
+                &effect_stream_id(&target.scope)?,
+                &event_id,
+                command
+                    .effect_sequence
+                    .checked_add(1)
+                    .ok_or_else(|| EffectError::new(EffectErrorKind::IdempotencyConflict))?,
+                &command.occurred_at,
+                &command.correlation_id,
+                "effect-message-rejected",
+                payload,
+            )
+            .map_err(|_| EffectError::new(EffectErrorKind::AggregateCorrupt))?;
+            Some(
+                PreparedEvent::new(&event, &lifecycle.schema_set, &lifecycle.limits)
+                    .map_err(map_store_error)?,
+            )
+        } else {
+            None
+        };
         let pair = append_atomic_pair(&mut transaction, &control_prepared, &effect_prepared, fault)
             .await
             .map_err(map_store_error)?;
+        if audit_prepared.is_some()
+            && audit_fault == EffectTerminalAuditFault::AfterPairBeforeAudit
+            && !pair.already_committed
+        {
+            transaction
+                .rollback()
+                .await
+                .map_err(|_| EffectError::new(EffectErrorKind::Store))?;
+            return Err(EffectError::new(EffectErrorKind::Store));
+        }
+        if let Some(prepared) = &audit_prepared {
+            let existing = check_prepared_idempotency(&mut transaction, prepared)
+                .await
+                .map_err(map_store_error)?;
+            match (pair.already_committed, existing) {
+                (false, None) => {
+                    insert_prepared(&mut transaction, prepared)
+                        .await
+                        .map_err(map_store_error)?;
+                }
+                (true, Some(_)) => {}
+                _ => return Err(EffectError::new(EffectErrorKind::AggregateCorrupt)),
+            }
+        }
         let final_cursor = EventCursor {
-            sequence: command.effect_sequence.to_string(),
-            event_id: command.pair.effect_event_id.clone(),
+            sequence: audit_prepared
+                .as_ref()
+                .map_or(command.effect_sequence, |_| command.effect_sequence + 1)
+                .to_string(),
+            event_id: audit_prepared.as_ref().map_or_else(
+                || command.pair.effect_event_id.clone(),
+                |prepared| prepared.envelope.event_id.clone(),
+            ),
         };
         let events = read_effect_events_at(
             &mut transaction,

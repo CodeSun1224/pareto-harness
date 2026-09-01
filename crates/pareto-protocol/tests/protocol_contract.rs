@@ -173,7 +173,7 @@ fn schema_generation_is_deterministic_closed_and_versioned() {
     let first = generate_schema_set().unwrap();
     let second = generate_schema_set().unwrap();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 86);
+    assert_eq!(first.len(), 87);
     for schema in first {
         assert_eq!(
             schema.document["$schema"],
@@ -1625,6 +1625,9 @@ fn effect_contract_manifest_events_and_inventory_v2_are_closed() {
         idempotency_policy: EffectIdempotencyPolicyV1::Keyed,
         unknown_outcome_policy: EffectUnknownOutcomePolicyV1::ReconcileOnly,
         reconciliation_policy_revision: RevisionId::parse("rev_reconcile-v1").unwrap(),
+        reconciliation_producer_revision: RevisionId::parse("rev_reconcile-producer-v1").unwrap(),
+        reconciliation_adapter_revision: RevisionId::parse("rev_reconcile-adapter-v1").unwrap(),
+        reconciliation_implementation_compatibility_digest: digest('8'),
         redaction_policy_revision: RevisionId::parse("rev_redaction-v1").unwrap(),
         limits: EffectLimitsV1 {
             max_request_bytes: 4096,

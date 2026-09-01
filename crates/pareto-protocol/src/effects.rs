@@ -70,6 +70,12 @@ pub struct EffectRegistrationV1 {
     pub unknown_outcome_policy: EffectUnknownOutcomePolicyV1,
     /// Exact reconciliation policy revision.
     pub reconciliation_policy_revision: RevisionId,
+    /// Manifest-pinned reconciliation query producer revision.
+    pub reconciliation_producer_revision: RevisionId,
+    /// Manifest-pinned reconciliation query adapter revision.
+    pub reconciliation_adapter_revision: RevisionId,
+    /// In-process reconciliation implementation compatibility digest.
+    pub reconciliation_implementation_compatibility_digest: Digest,
     /// Exact redaction policy revision.
     pub redaction_policy_revision: RevisionId,
     /// Closed resource limits.
@@ -590,6 +596,30 @@ pub struct EffectReconciliationRequiredPayloadV1 {
     pub pair: EffectPairBindingV1,
 }
 
+/// Untrusted reconciliation query result before Kernel admission.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EffectReconciliationObservationV1 {
+    /// Stable Effect identity.
+    pub effect_id: EffectId,
+    /// Stable attempt identity.
+    pub attempt_id: EffectAttemptId,
+    /// Exact external idempotency identity.
+    pub external_key_digest: Digest,
+    /// Manifest-pinned reconciliation producer revision.
+    pub producer_revision: RevisionId,
+    /// Manifest-pinned reconciliation adapter revision.
+    pub adapter_revision: RevisionId,
+    /// Resolution asserted by the query producer.
+    pub resolution: EffectReconciliationStateV1,
+    /// Canonical observation time.
+    pub observed_at: String,
+    /// Bounded safe digest of query evidence.
+    pub evidence_digest: Digest,
+    /// Sorted terminal/Receipt lineage Events consulted by the query.
+    pub source_observation_event_ids: Vec<EventId>,
+}
+
 /// Safe admitted observation used by an explicit reconciliation command.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -600,6 +630,16 @@ pub struct EffectReconciliationObservedPayloadV1 {
     pub attempt_id: EffectAttemptId,
     /// Exact reconciliation producer revision.
     pub producer_revision: RevisionId,
+    /// Exact reconciliation adapter revision.
+    pub adapter_revision: RevisionId,
+    /// Exact external idempotency identity.
+    pub external_key_digest: Digest,
+    /// Producer-derived resolution admitted by the Kernel.
+    pub resolution: EffectReconciliationStateV1,
+    /// Canonical observation time.
+    pub observed_at: String,
+    /// Bounded safe query evidence digest.
+    pub evidence_digest: Digest,
     /// Source observation Events.
     pub source_observation_event_ids: Vec<EventId>,
     /// Canonical evidence fingerprint.

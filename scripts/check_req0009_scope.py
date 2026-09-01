@@ -90,7 +90,9 @@ def validate() -> list[str]:
         if token in runtime or token in tests:
             errors.append(f"out-of-scope external Effect boundary found: {token}")
     for required in (
-        "trait FakeEffectExecutor",
+        "struct ResolvedFakeEffectExecutor",
+        "fake_effect_implementation_digest",
+        "struct ResolvedFakeReconciliationProducer",
         "append_effect_reserve_intent_pair",
         "append_effect_terminal_pair",
         "recorded_effect_replay",

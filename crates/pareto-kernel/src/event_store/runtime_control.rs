@@ -47,7 +47,7 @@ const HOOK_CAPABLE_SCHEMA_SET_DIGEST: &str =
 const RETAINED_HOOK_SCHEMA_SET_DIGEST: &str =
     "sha256:3a0c6e67a97675cf6bfcdc1fb9766b30a79ae62e662479d9ae1ef5d7b43ff99d";
 const EFFECT_CAPABLE_SCHEMA_SET_DIGEST: &str =
-    "sha256:70389ae3f20ce4428ee0a8b1ecd6ddf1b6c48474982d6372ffea69e6fc7ba390";
+    "sha256:0d32378157c01117dc9b86a307cfc8d05aa299bc520ad0cb7ae29d67a79844ba";
 const CONTROL_EVENT_TYPES: [&str; 11] = [
     "budget-refunded",
     "capability-issued",

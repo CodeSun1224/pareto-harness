@@ -30,10 +30,10 @@ use crate::{
     EffectExecutorDescriptorV1, EffectIntendedPayloadV1, EffectLateReceiptObservedPayloadV1,
     EffectLimitsV1, EffectMessageRejectedPayloadV1, EffectPairBindingV1,
     EffectProjectionHashViewV1, EffectProjectionV1, EffectReceiptAdmittedPayloadV1,
-    EffectReceiptObservationV1, EffectReconciledPayloadV1, EffectReconciliationObservedPayloadV1,
-    EffectReconciliationRequiredPayloadV1, EffectRecoveryBaseKeyV1, EffectRecoveryKeyV1,
-    EffectRegistrationV1, EffectRegistryRevisionV1, EffectRequestV1,
-    EffectStreamInitializedPayloadV1,
+    EffectReceiptObservationV1, EffectReconciledPayloadV1, EffectReconciliationObservationV1,
+    EffectReconciliationObservedPayloadV1, EffectReconciliationRequiredPayloadV1,
+    EffectRecoveryBaseKeyV1, EffectRecoveryKeyV1, EffectRegistrationV1, EffectRegistryRevisionV1,
+    EffectRequestV1, EffectStreamInitializedPayloadV1,
 };
 
 /// A generated public JSON Schema and its stable filename.
@@ -97,6 +97,7 @@ pub fn generate_schema_set() -> Result<Vec<SchemaDocument>, ValidationError> {
         generate::<EffectReceiptAdmittedPayloadV1>("effect-receipt-admitted-payload", 1, 0)?,
         generate::<EffectReceiptObservationV1>("effect-receipt-observation", 1, 0)?,
         generate::<EffectReconciledPayloadV1>("effect-reconciled-payload", 1, 0)?,
+        generate::<EffectReconciliationObservationV1>("effect-reconciliation-observation", 1, 0)?,
         generate::<EffectReconciliationObservedPayloadV1>(
             "effect-reconciliation-observed-payload",
             1,
