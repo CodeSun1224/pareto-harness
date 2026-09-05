@@ -6,6 +6,9 @@
 - Initial candidate: `cfdc65af64675b8066b9bc429fbf998d588231bc`.
 - First independent review record: `72a0f8b597996688f31007bd2fc7f613528f5cdc`; REVIEW-0018 recorded 1 Blocker/3 Major.
 - Remediation content revision: `499116a8e93e00a737f0c112d0a0104eb9386840`.
+- Approved remediation/evidence revision: `660cfca9e230f1440505c8e3bfd9a07bf17529ab`.
+- Accepted RFC/Spec/Requirement and ADR closure revision: `6df161ff5d5fc150cfa09f48ae54b7501cababcb`.
+- Final same-reviewer record commit: `1f3078c521118635ddc498f2767ab51daec709fd`.
 - Scope: product/architecture/roadmap documents, REQ-0034/SPEC-0010/RFC-0013, EPIC-0007 and active work records only.
 - Environment: Windows PowerShell, 2026-09-05, Asia/Shanghai; all Cargo commands use `--offline`.
 
@@ -14,7 +17,7 @@
 | Scope/layer | Command or procedure | Result | Artifact | Evidence/risk |
 |---|---|---|---|---|
 | Governance tests | `python -m unittest discover -s scripts/tests -p "test_*.py"` | passed | 27 tests | Document and repository governance regressions passed |
-| Document structure | `python scripts/check_docs.py` | skipped | actual exit 1 before re-review | Only REVIEW-0001..0007 and REVIEW-0010..0013 freshness checks fail because substantive formal docs changed; same independent Reviewer must refresh them before final acceptance |
+| Document structure | `python scripts/check_docs.py` | passed | 209 Markdown files / 74 formal IDs | Same independent Reviewer refreshed REVIEW-0001..0007 and REVIEW-0010..0013 to exact closure revision; no stale review remains |
 | Rust format | `cargo fmt --all -- --check` | passed | exit 0 | No Rust formatting change |
 | Rust static | `cargo clippy --workspace --all-targets --all-features --offline -- -D warnings` | passed | workspace clippy | Zero warnings |
 | Workspace tests | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 185 passed/1 ignored; Protocol 9 unit + 25 contract passed; 1 performance baseline ignored | Existing ignored cases are non-threshold performance observations |
@@ -39,11 +42,11 @@ The protocol publisher prints `existing content-addressed schema set differs byt
 - F-003 remediation chooses content-addressed user/pure-builder Plan input with zero Harness external I/O; sequence-1 Manifest admission is the only first-version planning authority.
 - F-004 remediation binds a complete review subject and principal-root role assignment with four-way mandatory independence/quorum, freshness, invalidation and revocation.
 - F-005 remediation corrects REQ-0009 Effect Schema/Runtime status in the authoritative version/event model.
+- F-006 fixed exact validation/Task lineage; F-007 corrected lifecycle ownership; F-008 removed the duplicate RFC compatibility paragraph.
+- REVIEW-0018 independently approved exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb`; every F-001 through F-008 is closed, with 0 open Blocker and 0 open Major.
 
-## Remaining gates
+## Design closure
 
-- Commit this evidence update and give its exact revision to the same independent Reviewer.
-- Same-Reviewer architecture-review and code-review of the remediation diff and raw evidence, including Plan/Tasks.
-- Close all Blocker/Major findings with same-Reviewer re-review.
-- Refresh existing approved Review freshness, accept RFC/SPEC/Requirement and add the resulting ADR only after approval.
-- Re-run `python scripts/check_docs.py` to exit 0 and repeat final hygiene/status checks.
+- RFC-0013 is accepted, SPEC-0010 is approved, REQ-0034 design is approved, and ADR-0012 records the durable decision.
+- This approval does not implement REQ-0034 or authorize REQ-0010 runtime work. REQ-0034 requires a separately reviewed implementation Plan/Tasks before code or schema changes.
+- The next session must start from the accepted roadmap and redesign REQ-0010 as a distinct authority-first Requirement; the archived Provider path is not a cherry-pick source.
