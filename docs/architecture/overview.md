@@ -4,8 +4,8 @@ title: Pareto Harness 总体架构
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-30
-links: [PRD-0001, RFC-0001, RFC-0007, RFC-0008, RFC-0009, ADR-0001, ADR-0002, ADR-0008, ADR-0009, ADR-0010]
+updated: 2026-09-05
+links: [PRD-0001, REQ-0034, RFC-0001, RFC-0007, RFC-0008, RFC-0009, RFC-0013, ADR-0001, ADR-0002, ADR-0008, ADR-0009, ADR-0010]
 ---
 
 # 总体架构
@@ -26,12 +26,12 @@ links: [PRD-0001, RFC-0001, RFC-0007, RFC-0008, RFC-0009, ADR-0001, ADR-0002, AD
 │ planner | context | router | tools | retry | eval     │
 ├──────────────────────────────────────────────────────┤
 │ Runtime Services                                     │
-│ Task DAG | Context DAG | Evidence | workspace        │
-│ projections | model/tool registry | scheduler        │
+│ context | workspace | projections | registries       │
+│ scheduler | provider/tool adapters                    │
 ├──────────────────────────────────────────────────────┤
 │ Trusted Kernel                                       │
-│ event | revisions | state machine | MVCC | capability │
-│ budget | cancellation | snapshot/replay | promotion  │
+│ event | procedure/plan/node state | version identity  │
+│ capability | budget | evidence | replay | promotion   │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -40,16 +40,18 @@ links: [PRD-0001, RFC-0001, RFC-0007, RFC-0008, RFC-0009, ADR-0001, ADR-0002, AD
 ## 运行数据流
 
 1. Intake 将用户输入和验收条件固化为 `TaskRevision`。
-2. Kernel 创建固定所有行为依赖的 `RunManifest` 并追加 `RunStarted`。
-3. Planner 产生 `PlanRevision`；Task Graph 校验无环、依赖和预算。
-4. Scheduler 请求 Context Projector 为下一节点生成 `ContextProjectionRevision`。
-5. Router 根据节点、证据缺口、预算、失败史和模型能力选择模型。
-6. 执行只能通过 Tool Capability 提交效果；每次请求、授权、结果和费用均记录事件。
-7. Evidence Service 将测试、静态分析、构建、人工确认或 Judge 结果关联到 Requirement。
-8. Completion Gate 仅在必需证据满足时产生 `RunSucceeded`，否则失败、暂停或请求补充。
-9. 投影器从 Event Log 构建 Task、Context、Evidence、Cost 和 Timeline 视图。
+2. Kernel 从 retained registry 准入 exact `VerifiedProcedureRevision`；Planner 只能提出绑定该流程和 Task 的 `PlanRevision`。
+3. Kernel 校验 Plan/Task DAG 后创建固定 Procedure、Plan 与全部行为依赖的 `RunManifest`。
+4. Kernel 节点状态机只把依赖已满足的节点置为 ready，并签发用途受限 Node lease。
+5. Scheduler/Router/Agent 只能在当前节点内提出 Context、Provider 或 Tool 请求；执行只能通过 Node-bound Capability 与 Effect 边界。
+6. Provider、Tool、Workspace 和 Sandbox 返回非权威 observation；Kernel admission 记录 Receipt、usage、artifact 和失败事实。
+7. 最小 Evidence Gate 将测试、静态分析、构建或人工批准关联到 exact requirement/node/subject/verifier/freshness。
+8. 只有必需 Evidence 满足且无未结 Effect/operation 时，Kernel 才提交 Node 或 Run success；否则失败、暂停、恢复或对账。
+9. 投影器从 Event Log 构建 Procedure、Plan、Node、Context、Evidence、Cost 和 Timeline 视图。
 
 ## 演化数据流
+
+流程版本和行为版本是正交演化轴。REQ-0036 先交付最小流程候选提升、复用和默认流程回退；REQ-0028 至 REQ-0032 后续交付 Planner、Router、Memory 等 `BehaviorRevision` 的历史评测、Canary 与 Promote/Rollback。
 
 1. Observer 从失败簇、成本热点和轨迹差异形成带假设的 `EvolutionProposal`。
 2. Proposal 以目标 `BehaviorRevision` 为 MVCC 基线生成候选，不能原位修改已发布行为。
@@ -62,13 +64,13 @@ links: [PRD-0001, RFC-0001, RFC-0007, RFC-0008, RFC-0009, ADR-0001, ADR-0002, AD
 
 - `protocol`：版本化公共类型和 JSON Schema；不依赖运行时实现。
 - `kernel`：事件、状态机、版本、能力、预算、重放和晋升。
-- `runtime`：Task/Context/Evidence 服务和调度。
+- `runtime`：Context/Workspace 服务、调度与不具权威性的执行协调。
 - `strategies`：内置策略实现；只能依赖公开接口。
 - `adapters`：模型、工具、MCP、存储和 Sandbox 适配。
 - `control-plane`：实验、评测、Canary 和版本管理。
 - `cli`：首个操作入口，不承载业务规则。
 
-这些是逻辑模块，不要求全部使用 Rust 或处于同一进程。Event、identity、state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 和 Promotion 保持在 Rust 权威控制面；Provider、Tool、Hook handler、Agent Worker、Memory 检索、评测、SDK 和受限 Guest 可按 Requirement 使用其他语言，但不得取得权威数据库或内核私有对象。设计基线阶段不创建空目录。
+这些是逻辑模块，不要求全部使用 Rust 或处于同一进程。Event、Procedure/Plan/Node identity 与 state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 和 Promotion 保持在 Rust 权威控制面；Provider、Tool、Hook handler、Agent Worker、Memory 检索、评测、SDK 和受限 Guest 可按 Requirement 使用其他语言，但不得取得权威数据库或内核私有对象。设计基线阶段不创建空目录。
 
 Hook 采用 ADR-0009 的 Kernel 治理合同，并已由REQ-0008交付最小Rust Fake纵切：Manifest固定registry/config和顺序，Observer只读，Gate默认拒绝，Transform只改明确允许的非权威proposal，预算准入与终结通过双stream原子pair提交，取消/timeout由Runtime Control裁决，Recorded replay只消费已记录决定。该实现不包含真实Hook Runtime、外部transport或Worker。
 
@@ -82,6 +84,8 @@ Effect采用ADR-0010合同，并已由REQ-0009交付最小Rust Fake纵切：Kern
 - 外部模型输出、时钟、网络和工具环境是非确定性源，Replay 必须选择录制结果或重新执行并标记差异。
 - 删除策略以墓碑和保留期实现；已被 Run Manifest 引用的版本不可物理删除。
 
-## 首个纵向切片
+## 当前实现与下一纵向路径
 
-设计基线完成后实现：CLI 创建 Task/Behavior/Workspace Revision → 生成 Run Manifest → SQLite 追加事件 → 构建投影 → Snapshot → Replay → 输出证据摘要。首个切片使用确定性 Fake Model/Tool，不接真实模型，以先证明内核语义。
+截至可信基线 `e7a939c`，REQ-0003 至 REQ-0009 已实现版本、Event Store、Run/Task lifecycle、Recorded replay、Runtime Control、Fake Hook 与 Fake Effect；Procedure、Plan/DAG、Node lifecycle 和执行期 Evidence Gate 尚未实现。
+
+下一路径按 Provider → Coding Tools → Workspace → Sandbox → Verified Procedure identity → Plan/DAG → Node state machine → minimal Evidence Gate → single-Agent procedure executor → procedure promotion/reuse 推进。每个阶段必须产生可运行的确定性纵向切片，不能用路线目标冒充已实现事实。

@@ -4,17 +4,19 @@ title: Pareto Harness 项目章程与产品需求
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-20
-links: [REQ-0001, RFC-0001, ADR-0001, ADR-0002]
+updated: 2026-09-05
+links: [REQ-0001, REQ-0034, RFC-0001, RFC-0013, ADR-0001, ADR-0002]
 ---
 
 # 项目章程与产品需求
 
 ## 执行摘要
 
-Pareto Harness 是独立实现的 Coding Agent Harness Runtime。它优化的不是模型单次回答，而是完整任务在可验证质量、Token/费用和端到端延迟上的 Pareto 前沿。
+Pareto Harness 是独立实现的已验证 Coding Procedure Runtime。它优化的不是模型单次回答，而是完整任务在可验证质量、Token/费用和端到端延迟上的 Pareto 前沿。
 
-项目将不可频繁变化且承担安全、可追溯和可恢复责任的机制保留在可信内核；将规划、上下文、模型路由、工具选择、重试、评测和记忆建模为带版本、可回放、可比较、可晋升和可回滚的策略。
+一次任务成功路径只有经过外部证据验证和独立批准，才能提升为不可变、内容寻址的 `VerifiedProcedureRevision`。后续 Run 固定该流程版本，可信内核强制节点、依赖、Capability、Evidence、checkpoint、恢复与补偿规则。模型、Planner、Memory、Provider 和 Tool 只能提出动作或返回 observation，不能跳过流程或自行宣告完成。
+
+项目将事件、版本身份、流程与节点状态、权限、证据准入、恢复和晋升保留在可信内核；将规划、上下文、模型路由、工具选择、重试、评测和记忆建模为可替换的版本化策略。
 
 ## 问题
 
@@ -25,6 +27,7 @@ Pareto Harness 是独立实现的 Coding Agent Harness Runtime。它优化的不
 - 插件可以扩展能力，但缺少统一的行为版本、历史回放、证据准入和渐进晋升机制。
 - 自改进研究常在固定基准上展示收益，距离权限隔离、并发控制、回滚和生产审计仍有距离。
 - Agent 与 Task 的版本常被简化为 Git commit 或会话 ID，不能完整描述运行时行为。
+- 成功会话常被保存为聊天记忆、提示词或操作手册，却不能形成由内核执行的跨 Run 流程合同。
 
 ## 目标用户
 
@@ -40,6 +43,7 @@ Pareto Harness 是独立实现的 Coding Agent Harness Runtime。它优化的不
 3. 任务完成必须由需求关联的证据支持，而不是 Agent 自报完成。
 4. 新策略只有经过历史回放、回归门禁和 Canary 后才可晋升。
 5. 在不降低验证成功率的前提下，持续减少 Token、费用和延迟。
+6. 经批准的成功路径可提升为已验证流程；后续运行固定 exact 版本并拒绝跳步、缺证据完成或越权执行。
 
 ## 非目标
 
@@ -48,6 +52,8 @@ Pareto Harness 是独立实现的 Coding Agent Harness Runtime。它优化的不
 - 不让插件替换事件完整性、权限、版本或晋升协议。
 - 不把聊天 UI、IDE 或多 Agent 数量作为核心卖点。
 - 不宣称所有执行都可以位级确定性重放；外部非确定性必须被记录和界定。
+- 不承诺现实结果百分百正确。系统保证 Kernel 可观察边界内的流程遵循和证据准入；领域正确性仍由 verifier、环境与外部事实决定。
+- 不把 Conversation Memory、用户偏好、项目经验或 Markdown 指令视为权威流程。
 
 ## 成功指标
 
@@ -58,13 +64,15 @@ Pareto Harness 是独立实现的 Coding Agent Harness Runtime。它优化的不
 - 实际或标准化费用。
 - 端到端、模型和工具延迟分布。
 - 工具错误率、重试次数、无效动作比例。
-- Evidence 覆盖率、重放一致率和回滚成功率。
+- Procedure 遵循率、跳步拒绝率、Evidence 覆盖率和重放一致率。
+- 分别报告流程/行为版本回退、Run 恢复、Workspace 恢复、Effect 对账与补偿结果，不合并成一个“回滚成功率”。
 
 主决策依据是多维 Pareto 前沿。可构建 `Verified Outcome Yield` 辅助看板，但不得使用可调权重的综合分决定晋升。
 
 ## 产品原则
 
 - Evidence before confidence：先证据，后置信。
+- Procedure before autonomy：先建立可执行流程合同，再允许 Agent 自主提议动作。
 - Version everything behavioral：凡影响行为者均进入 Run Manifest。
 - Replay before promotion：先历史重放，再晋升。
 - Kernel owns safety：安全和一致性由内核拥有。

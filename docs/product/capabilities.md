@@ -4,8 +4,8 @@ title: Pareto Harness 核心能力地图
 status: proposed
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-20
-links: [PRD-0001, RFC-0001]
+updated: 2026-09-05
+links: [PRD-0001, REQ-0034, RFC-0001, RFC-0013]
 ---
 
 # 核心能力地图
@@ -19,13 +19,15 @@ links: [PRD-0001, RFC-0001]
 | Revision Registry | Task/Behavior/Workspace 等可追踪 | 父子谱系、内容摘要、兼容校验 |
 | Snapshot/Replay | 复现问题和历史评测 | 固定夹具投影一致、非确定性被标记 |
 | Capability/Budget | 插件不能越权或无限消耗 | 拒绝路径、超时、取消和预算耗尽测试 |
+| Verified Procedure Registry | 只运行证据验证且独立批准的流程版本 | 内容身份、审批包、撤销、替换和 Manifest pin 负测 |
 
 ## P1：完成质量
 
 | 能力 | 用户价值 | 最小证明 |
 |---|---|---|
-| Task DAG | 显式依赖、并发和失败传播 | DAG 校验、取消、重试、补偿场景 |
-| Evidence Loop | 完成判定可验证 | 每项验收关联通过、失败或缺失证据 |
+| Plan Revision / Task DAG | 为 exact Task 实例化已验证流程 | DAG 校验、Procedure binding、取消、重试和失败传播 |
+| Kernel Node Lifecycle | 模型不能跳步或自报节点完成 | 前置依赖、lease、checkpoint、恢复和非法转移测试 |
+| Minimal Evidence Gate | 第一版执行器即由证据决定转移 | 缺失、伪造、过期和跨域证据拒绝 |
 | Evaluator | 结果可比较 | 版本化 rubric、测试输出和盲评记录 |
 | Workspace Revision | 代码变化与行为变化解耦 | Git revision、dirty patch、环境摘要齐全 |
 
@@ -48,12 +50,25 @@ links: [PRD-0001, RFC-0001]
 | Canary and rollback | 控制上线风险 | 自动停止条件、快速恢复、审计事件 |
 | MVCC experiments | 多候选并发而不互相覆盖 | 基线冲突检测、显式 rebase/merge |
 
+## Authority classification
+
+| Information class | Role | May advance authoritative state? |
+|---|---|---|
+| Conversation memory and user preference | 改善交互与默认建议 | No |
+| Project experience and operating guidance | 提供有来源的候选步骤和说明 | No |
+| ProcedureRevision | 描述候选流程内容 | No；须被批准包引用 |
+| VerifiedProcedureRevision | 固定流程、验证证据和独立审批 | Yes，且只能由 Kernel 准入 |
+| PlanRevision / Task DAG | 为 exact Task 实例化流程 | Yes，且必须符合已验证流程 |
+| Evidence Record / Gate | 证明节点或 Run 条件 | 只有 Kernel-admitted evidence 可推动状态 |
+
 ## Agent/Task 版本控制可挖掘点
 
 传统 Git 只描述工作区文件，Session ID 只描述一次对话。本项目将版本拆为正交维度：
 
 - `TaskRevision`：目标、约束、验收标准和任务输入。
-- `PlanRevision`：Task DAG 及其决策理由。
+- `ProcedureRevision`：可复用的节点、依赖、能力、证据、恢复与补偿合同。
+- `VerifiedProcedureRevision`：exact Procedure 与验证证据、独立审批的不可变批准包。
+- `PlanRevision`：为 exact Task 实例化 Verified Procedure 的 Task DAG、参数与预算。
 - `BehaviorRevision`：策略、Prompt、Skill、路由和重试配置。
 - `ContextProjectionRevision`：本次具体可见上下文，而不只是 Context DAG 本体。
 - `WorkspaceRevision`：Git commit、未提交补丁、依赖锁和构建环境。

@@ -4,8 +4,8 @@ title: 可信内核宪法
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-08-20
-links: [RFC-0001, ADR-0001]
+updated: 2026-09-05
+links: [RFC-0001, RFC-0013, ADR-0001, REQ-0034]
 ---
 
 # 可信内核宪法
@@ -24,6 +24,8 @@ links: [RFC-0001, ADR-0001]
 8. **重放诚实**：系统必须区分录制重放、重新执行和模拟，不能把非确定性重新执行描述为确定性复现。
 9. **演化隔离**：候选不能修改其基线或生产策略；所有晋升和回滚生成审计事件。
 10. **并发安全**：Proposal 固定基线版本；基线过期时显式失败、rebase 或 merge，不采用最后写入者覆盖。
+11. **流程权威**：已验证运行必须固定 exact `VerifiedProcedureRevision` 与 `PlanRevision`；只有内核可判定节点依赖、合法转移、Evidence 满足、checkpoint 恢复和终态，模型与策略只能提出请求。
+12. **知识非权威**：对话记忆、用户偏好、项目经验、操作说明和检索结果不能满足流程依赖、Capability、Evidence、完成或晋升条件。
 
 ## 可演化策略
 
@@ -46,3 +48,7 @@ Planner、Context 选择/压缩/GC、Model Router、Tool/Skill Ranking、Retry/R
 ## 修改宪法
 
 必须有已接受 Requirement、公开 RFC、威胁分析、迁移与回滚、负向测试以及独立架构评审。宪法变化按重大兼容性变更处理。
+
+## Guarantee boundary
+
+内核保证在其控制和观察边界内只提交符合固定流程、权限和证据合同的状态转移。该保证不等于现实结果必然正确，也不等于 verifier、外部系统或环境永不失效；这些限制必须进入 Evidence 和批准包，并通过新 Revision 修复而非改写历史。

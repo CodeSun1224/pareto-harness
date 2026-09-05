@@ -1,6 +1,6 @@
 # 文档导航
 
-本目录是 Pareto Harness 的长期事实来源。当前基线日期为 2026-09-01。
+本目录是 Pareto Harness 的长期事实来源。当前重设计候选基于 2026-09-01 的 REQ-0009 verified/done 远程基线，候选日期为 2026-09-05。
 
 ## 产品
 
@@ -23,6 +23,8 @@
 - [SPEC-0007：Observer、Gate 与 Transform Hook 骨架规范](specs/SPEC-0007-observer-gate-transform-hooks.md)
 - [REQ-0009：Effect Intent/Receipt 与幂等效果](requirements/REQ-0009-effect-intent-receipt-idempotent-effects.md)
 - [SPEC-0008：Effect Intent/Receipt 与幂等效果规范](specs/SPEC-0008-effect-intent-receipt-idempotent-effects.md)
+- [REQ-0034：不可变已验证流程版本](requirements/REQ-0034-verified-procedure-revision.md)
+- [SPEC-0010：不可变已验证流程版本规范](specs/SPEC-0010-verified-procedure-revision.md)
 
 ## 研究
 
@@ -54,6 +56,7 @@
 - [ADR-0009：采用 Kernel 治理的 Observer、Gate 与 Transform Hook 合同](adrs/ADR-0009-kernel-governed-observer-gate-transform-hooks.md)
 - [RFC-0009：Kernel 治理的 Effect Intent、Receipt 与对账合同](rfcs/RFC-0009-kernel-governed-effect-intent-receipt.md)
 - [ADR-0010：采用 Kernel 治理的 Effect Intent、Receipt 与对账边界](adrs/ADR-0010-kernel-governed-effect-boundary.md)
+- [RFC-0013：已验证流程执行与路线重排架构](rfcs/RFC-0013-verified-procedure-execution-architecture.md)
 
 ## 交付
 
@@ -62,6 +65,7 @@
 - [Requirement Backlog](roadmap/requirement-backlog.md)
 - [工程基础 Epic](epics/EPIC-0001-engineering-foundation.md)
 - [可信内核 Epic](epics/EPIC-0002-trusted-kernel.md)
+- [已验证流程执行与复用 Epic](epics/EPIC-0007-verified-procedure-execution.md)
 - [REQ-0005 独立评审](reviews/REVIEW-0004-run-task-state-machine-run-manifest.md)
 - [REQ-0006 独立代码评审](reviews/REVIEW-0005-projection-snapshot-replay.md)
 - [REQ-0007 独立设计评审](reviews/REVIEW-0006-capability-budget-cancellation-timeout-design.md)
