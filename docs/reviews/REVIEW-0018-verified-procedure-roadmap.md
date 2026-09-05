@@ -7,7 +7,7 @@ created: 2026-09-05
 updated: 2026-09-05
 links: [REQ-0034, SPEC-0010, RFC-0013]
 independence: independent
-reviewed_revision: 49c8a378520d2599719f9dad2e412e3227417f32
+reviewed_revision: d2594439c95960d2acd18dc7614b00ef55744ea0
 open_blockers: 0
 open_majors: 0
 ---
@@ -72,6 +72,9 @@ Plan/TASKS 明确了 fresh independent Reviewer、Reviewer-only Review 文件、
 
 # Re-review evidence
 
+- Final closure-only freshness review exact `d2594439c95960d2acd18dc7614b00ef55744ea0` against Reviewer closure commit `58a2d65b4cd1ba2767ed5f1d62b8f08fa1c91d97`: the direct one-commit diff contains only `HANDOFF.md`, `PLAN.md`, `TASKS.md`, and `VALIDATION.md` (9 insertions, 7 deletions). The records consistently state route design complete/stopped, F-009 closed through the user-authorized fresh takeover, and TASK-REQ-0034-10 completed only after Review commit `58a2d65`; no REQ-0034 runtime or REQ-0010 redesign/implementation began.
+- The closure-only diff has no README, product/design document, Requirement, Spec, RFC, ADR, code, Cargo, Schema, script, CI, or agent-governance change. Independent checks passed: 27 governance tests, `cargo fmt --all -- --check`, exact `58a2d65..d259443` whitespace check, and current worktree diff check, all exit 0.
+
 - F-009 focused re-review exact `49c8a378520d2599719f9dad2e412e3227417f32` against original Reviewer record commit `2b7662ee4899e304920a0eb053eef755ef9c9305`: the diff contains only `HANDOFF.md`, `PLAN.md`, `TASKS.md`, and `VALIDATION.md`. `git diff --exit-code 72a0f8b597996688f31007bd2fc7f613528f5cdc 499116a8e93e00a737f0c112d0a0104eb9386840 -- docs/reviews/REVIEW-0018-verified-procedure-roadmap.md` returned exit 0, proving only the author remediation interval preserved the original Reviewer text; later Review edits remain Reviewer-owned.
 - The current Handoff has one state (`route architecture accepted; F-009 remediation submitted for re-review`), and `TASK-REQ-0034-10` remains unchecked until this closure. No runtime, Cargo, Schema, or REQ-0010 path changed in `2b7662e..49c8a37`.
 - Required local checks on the exact candidate: `python -B -m unittest discover -s scripts/tests -p "test_*.py"` passed (27/27, exit 0); `cargo fmt --all -- --check` passed (exit 0); `git diff --check` passed (exit 0). `python -B scripts/check_docs.py` returned exit 1 only for pre-existing REVIEW-0001..0007 and REVIEW-0010..0013 freshness against the four work-record paths; no REVIEW-0018 structural error was reported.
@@ -100,3 +103,4 @@ Plan/TASKS 明确了 fresh independent Reviewer、Reviewer-only Review 文件、
 - 2026-09-05：final same-reviewer freshness review exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb` against approval commit `c2c6e32503e8a6e85c80126869c4b302374d4abd`；ADR/status/link closure忠实、无实现声明或authority回退，F-007/F-008 closed，无新finding，保持 `approved`、0 open Blocker、0 open Major。
 - 2026-09-05：evidence-only freshness review exact `1206ad9eb074763988609999e67962ec59a0c1b7` against Reviewer commit `1f3078c521118635ddc498f2767ab51daec709fd`；四文件scope与无实现声明成立，但 Validation preservation命令不可按当前记录复算且Handoff current phase矛盾，新增F-009 open Major。evidence-only closure为`changes-requested`、0 Blocker/1 Major；exact `6df161f`设计批准不回退。
 - 2026-09-05：fresh independent Reviewer 接管 exact `49c8a378520d2599719f9dad2e412e3227417f32` 的 F-009 focused re-review。原 Reviewer 会话不可恢复，经用户明确授权，本次替代同一 Reviewer 要求，作为一次性治理例外；原始 Review findings、verdict 与完整历史均保留。四文件 work-record diff、author-only preservation proof、单一 Handoff 状态、TASK-REQ-0034-10 未完成状态及无 runtime/Cargo/Schema/REQ-0010 改动均成立；F-009 closed，REVIEW-0018 `approved`、0 open Blocker、0 open Major，`reviewed_revision` 前移至 exact `49c8a37`。
+- 2026-09-05：final closure-only freshness review exact `d2594439c95960d2acd18dc7614b00ef55744ea0` against Reviewer closure commit `58a2d65b4cd1ba2767ed5f1d62b8f08fa1c91d97`。唯一后续提交只把四份 work record 从 F-009 pending 转为 complete/stopped，并在 Review closure 后勾选 TASK-REQ-0034-10；未开始 REQ-0034 runtime 或 REQ-0010 redesign/implementation，未修改任何产品/设计合同、代码、Cargo、Schema 或 scripts。REVIEW-0018 保持 `approved`、0/0，F-001..F-009 全部 closed，freshness 前移至 exact `d259443`。

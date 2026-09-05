@@ -7,7 +7,7 @@ created: 2026-08-26
 updated: 2026-09-05
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REVIEW-0006, FIX-0001, REQ-0003, REQ-0004, REQ-0005, REQ-0006]
 independence: independent
-reviewed_revision: 49c8a378520d2599719f9dad2e412e3227417f32
+reviewed_revision: d2594439c95960d2acd18dc7614b00ef55744ea0
 open_blockers: 0
 open_majors: 0
 ---
