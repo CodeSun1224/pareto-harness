@@ -28,8 +28,8 @@ Planned ID 表示编号已保留但尚未进入 SDD 实施窗口。进入窗口�
 | 10 | REQ-0011 | EPIC-0003 | Search/Read/Patch/Shell/Test Coding Tools | high | REQ-0007, REQ-0009 | 工具契约、路径和权限负例 |
 | 11 | REQ-0012 | EPIC-0003 | Git Workspace Revision 与 Artifact | high | REQ-0006, REQ-0011 | dirty patch、恢复、隔离 |
 | 12 | REQ-0013 | EPIC-0003 | Linux Container 与 Windows 开发 Sandbox | high | REQ-0007, REQ-0009, REQ-0011, REQ-0012 | escape、网络、秘密、资源限制 |
-| 13 | REQ-0034 | EPIC-0007 | 不可变 Procedure/Verified Procedure identity、registry 与 Manifest pin | high | REQ-0003, REQ-0005, REQ-0006, REQ-0007, REQ-0009 | 内容身份、审批包、撤销、替换、兼容与零效果拒绝 |
-| 14 | REQ-0018 | EPIC-0007 | Task-specific Plan Revision 和基础 Task DAG | high | REQ-0034 | Procedure binding、DAG、失败、取消、重试 |
+| 13 | REQ-0034 | EPIC-0007 | 不可变 Procedure/TaskClass/Verified Procedure identity、独立审批与纯 registry admission | high | REQ-0003, REQ-0004, REQ-0005, REQ-0007, REQ-0009 | 内容身份、角色分离/quorum、撤销/失效、替换、跨域与零效果拒绝 |
+| 14 | REQ-0018 | EPIC-0007 | 无外部调用的 Plan proposal、closed instantiation、基础 Task DAG 与 procedure-capable Manifest | high | REQ-0005, REQ-0006, REQ-0007, REQ-0034 | 模板 witness、删改/复制/扩权负测、pre-Manifest 零 I/O、exact provenance |
 | 15 | REQ-0035 | EPIC-0007 | Kernel Node 状态机、lease、checkpoint 与运行恢复 | high | REQ-0005, REQ-0007, REQ-0009, REQ-0018, REQ-0034 | 非法转移、跳步、崩溃恢复、迟到结果、节点 Effect binding |
 | 16 | REQ-0016 | EPIC-0007 | 测试/构建/静态检查最小 Evidence Gate | high | REQ-0008, REQ-0011, REQ-0035 | 缺失/伪造/过期/跨域证据与完成拒绝 |
 | 17 | REQ-0014 | EPIC-0007 | 单 Agent 已验证流程执行器 | high | REQ-0010, REQ-0011, REQ-0012, REQ-0013, REQ-0016, REQ-0018, REQ-0034, REQ-0035 | Fake E2E、跳步拒绝、失败/恢复、零旁路 |

@@ -40,8 +40,8 @@ links: [PRD-0001, REQ-0034, RFC-0001, RFC-0007, RFC-0008, RFC-0009, RFC-0013, AD
 ## 运行数据流
 
 1. Intake 将用户输入和验收条件固化为 `TaskRevision`。
-2. Kernel 从 retained registry 准入 exact `VerifiedProcedureRevision`；Planner 只能提出绑定该流程和 Task 的 `PlanRevision`。
-3. Kernel 校验 Plan/Task DAG 后创建固定 Procedure、Plan 与全部行为依赖的 `RunManifest`。
+2. Intake 接收由用户或 pinned pure builder 在零外部 I/O 下生成的内容寻址 `PlanProposalArtifact`；第一版不允许 pre-Run 模型/工具规划。
+3. Kernel 从 retained registry 准入 exact `VerifiedProcedureRevision`，按 closed instantiation relation 校验 Plan 后，在 sequence-1 `RunManifest` 中首次固定 Procedure、Plan provenance 与全部行为依赖。
 4. Kernel 节点状态机只把依赖已满足的节点置为 ready，并签发用途受限 Node lease。
 5. Scheduler/Router/Agent 只能在当前节点内提出 Context、Provider 或 Tool 请求；执行只能通过 Node-bound Capability 与 Effect 边界。
 6. Provider、Tool、Workspace 和 Sandbox 返回非权威 observation；Kernel admission 记录 Receipt、usage、artifact 和失败事实。

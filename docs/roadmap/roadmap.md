@@ -40,7 +40,7 @@ REQ-0010 按 authority-first 顺序：Provider contract/Manifest identity/Secret
 
 ## G2B：已验证流程执行与复用
 
-交付：EPIC-0007。顺序为 REQ-0034 Verified Procedure identity → REQ-0018 PlanRevision/基础 Task DAG → REQ-0035 Kernel Node 状态机/checkpoint → REQ-0016 最小 Evidence Gate → REQ-0014 单 Agent 流程执行器 → REQ-0036 成功流程候选提升、复用与流程版本回退。
+交付：EPIC-0007。顺序为 REQ-0034 Procedure/TaskClass/Verified Procedure identity、最低独立审批与纯 registry admission → REQ-0018 无外部调用 Plan proposal、closed instantiation、procedure-capable Manifest/基础 Task DAG → REQ-0035 Kernel Node 状态机/checkpoint → REQ-0016 最小 Evidence Gate → REQ-0014 单 Agent 流程执行器 → REQ-0036 成功流程候选提升、复用与流程版本回退。
 
 设计边界：Procedure 定义可复用允许路径；Plan 为 exact Task 实例化 DAG；Behavior 固定提出计划/动作的策略。Memory、模型、Planner 和 adapter 都不能推动权威节点、Evidence、完成或 Promotion。
 

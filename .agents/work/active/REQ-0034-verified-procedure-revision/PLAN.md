@@ -1,6 +1,6 @@
 ---
 title: Verified Procedure 路线重设计与 REQ-0034 设计计划
-status: designing
+status: remediating-review-findings
 owner: maintainers
 updated: 2026-09-05
 links: [REQ-0034, SPEC-0010, RFC-0013]
@@ -27,3 +27,7 @@ links: [REQ-0034, SPEC-0010, RFC-0013]
 - 发现 Procedure/Plan/Behavior 双重 authority、模型/adapter 旁路、审批自签或无法保持旧 Run 可解释。
 - 需要重用已发布 Requirement ID、改写远程历史、重置/删除 main 或归档分支。
 - 独立 Review 存在 open Blocker/Major。
+
+# First review result
+
+REVIEW-0018 对 exact `cfdc65af64675b8066b9bc429fbf998d588231bc` 判定 `changes-requested`：F-001 Blocker，F-002/F-003/F-004 Major，F-005/F-006 Minor。当前整改收窄 REQ-0034、冻结 closed Plan instantiation、选择零外部 I/O Plan bootstrap、冻结 principal-root 独立性，并修正文档事实与验证 pin；finding 只能由同一 Reviewer 关闭。

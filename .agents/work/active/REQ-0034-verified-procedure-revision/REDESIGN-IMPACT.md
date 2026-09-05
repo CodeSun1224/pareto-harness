@@ -24,6 +24,8 @@
 - Procedure promotion/default rollback is separated from Behavior evolution and from recovery/compensation.
 - Provider, Tool, Workspace and Sandbox requests must be Node-bound; any direct adapter path is a Blocker.
 
+REQ-0034 itself ends at pure retained registry admission and returns only an opaque non-executable token. REQ-0018 uniquely owns Plan conformance, the no-external-I/O bootstrap and procedure-capable Manifest; REQ-0035 owns Node authority; REQ-0016 owns execution Evidence; REQ-0014 owns Agent execution; REQ-0036 owns promotion/default selection. None is an acceptance dependency of REQ-0034.
+
 ## Evidence trail
 
 - `rg` under `crates/` found `plan_revision` only in Manifest/lifecycle/tests and found no `ProcedureRevision`, Task DAG or Node state implementation.
@@ -34,7 +36,7 @@
 ## Risk responses
 
 - Identity/API: forward major only; retain every old SchemaSet and reader.
-- Permissions: Kernel-only registry/admission and Node-scoped opaque leases.
+- Permissions: REQ-0034 uses Kernel-only registry/pure opaque admission; REQ-0035 later owns Node-scoped opaque leases.
 - Isolation: bind tenant/user/workspace/run/task/plan/procedure/node/agent/evidence/effect exact lineage.
 - Persistence/replay: append-only events, explicit inclusive horizons, no hidden mutable workflow status table.
 - Concurrency: writer-lock revalidation for node claims; MVCC for promotion pointers.

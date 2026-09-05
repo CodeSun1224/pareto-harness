@@ -14,7 +14,7 @@ links: [PRD-0001, REQ-0034, RFC-0013, BACKLOG-0001]
 
 # Planned requirements
 
-六个纵向 Requirement：REQ-0034 建立 Procedure/Verified Procedure identity 与 Manifest admission；REQ-0018 建立 Task-specific PlanRevision 与基础 DAG；REQ-0035 建立 Kernel Node 状态机与 checkpoint；REQ-0016 建立最小 Evidence Gate；REQ-0014 建立单 Agent 流程执行器；REQ-0036 建立成功流程候选提升、固定复用和流程版本回退。
+六个纵向 Requirement：REQ-0034 建立 Procedure/TaskClass/Verified Procedure identity、最低独立审批与纯 registry admission；REQ-0018 建立无外部调用的 Plan proposal、closed instantiation、procedure-capable Manifest 与基础 DAG；REQ-0035 建立 Kernel Node 状态机与 checkpoint；REQ-0016 建立最小 Evidence Gate；REQ-0014 建立单 Agent 流程执行器；REQ-0036 建立成功流程候选提升、固定复用和流程版本回退。
 
 # Exit criteria
 

@@ -78,7 +78,7 @@ ModelSnapshot          ToolSetRevision
 
 - 生命周期：已实现 `run-created`、`task-created`、`run-state-transitioned`、`task-state-transitioned` 1.0；Run/Task 状态集合与合法边由 RFC-0004/ADR-0005 冻结。Procedure/Plan/Node lifecycle 尚未实现，分别由 REQ-0034、REQ-0018、REQ-0035 交付。
 - 决策：Plan proposed, context projected, model routed, retry selected。
-- 效果：Capability requested/granted/denied；REQ-0009已接受Effect intended/dispatch-claimed/receipt-admitted/attempt-concluded/reconciliation-required/reconciled的设计，但尚未实现Schema或Runtime。Effect/Executor/Boundary Inventory v2 identity、partial/unknown与fixed replay horizon由RFC-0009/ADR-0010冻结。
+- 效果：REQ-0007 已实现 Capability/Budget/取消/超时控制事件；REQ-0009 已实现 Effect intended/dispatch-claimed/receipt-admitted/attempt-concluded/reconciliation-required/reconciled Schema、Kernel Runtime、Projection 与 Boundary Inventory V2。实现保持 partial/unknown、对账和 fixed replay horizon，不包含真实 Provider/Tool/Sandbox 效果。
 - 证据：`EvidenceRecord` 协议已存在，但执行期 requested/recorded/verified/invalidated Event、节点覆盖 fold 与 completion gate 尚未实现；最小门禁由 REQ-0016 交付，完整图由 REQ-0026 扩展。
 - 资源：Budget reserved/consumed/exhausted/released。
 - 演化：Proposal created/evaluated，Candidate canaried，Behavior promoted/rolled back。

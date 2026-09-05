@@ -55,9 +55,20 @@ trusted kernel          receipt/evidence admission -> node/run transition
 - checkpoint、retry、recovery、terminal 与 compensation policy refs；
 - compatibility、limits、parent lineage 与 canonical content digest。
 
-`VerifiedProcedureRevision` 是审批包，不是可变状态字段。它固定 exact Procedure 内容、Kernel-retained `TaskClassRevision`、验证 evidence set、独立 Review decision、批准策略/authority、限制与兼容范围。第一版 Task class 只使用闭合 Schema 与 canonical constraints，不执行模型或任意代码 classifier。成功 Run 只能成为候选输入；REQ-0036 负责从候选到已验证版本的受控晋升、默认选择与流程版本回退。
+`VerifiedProcedureRevision` 是审批包，不是可变状态字段。它固定 exact Procedure 内容、Kernel-retained `TaskClassRevision`、验证 evidence set、独立 Review decision、批准策略/authority、限制与兼容范围。第一版 Task class 只使用闭合 Schema 与 canonical constraints，不执行模型或任意代码 classifier。成功 Run 只能成为候选输入；REQ-0036 负责从候选到已验证版本的受控晋升、默认选择与流程版本回退，但不能放宽 REQ-0034 的最低独立性。
 
-`PlanRevision` 由 REQ-0018 为 exact Task 实例化 verified procedure：展开具体 DAG、参数、预算和 node inputs。Planner 可以提议 Plan；Kernel 检查它是否完整且符合 Procedure。基础阶段禁止运行中自由改变流程；后续 REQ-0023 的 adaptive replan 必须产生子 PlanRevision、记录触发证据并重新准入。
+最低独立性按认证 `PrincipalRootId` 而不是可变 Agent/Actor alias 比较。`PrincipalRoleAssignmentRevision` 固定 candidate creator/proposer/runner、mandatory evidence producer/verifier、reviewer 与 approver root sets。candidate creator/proposer/runner 与 mandatory evidence producer 不得担任 verifier、reviewer 或 approver；mandatory evidence producer、verifier、reviewer、approver 四类 principal root 两两不同，且至少各一名。review decision 必须绑定 Procedure、TaskClass、evidence set、role assignment、limitations、compatibility、approval policy/authority 的 exact revisions/digests、verdict、freshness horizon 与 reviewer root。任一内容/evidence/role/limitation/compatibility 变化、过期、撤销或 evidence invalidation 都使旧批准不可用于新 admission。
+
+`PlanRevision` 由 REQ-0018 为 exact Task 实例化 verified procedure，并携带从 Procedure template 到每个 Plan node 的 canonical witness。闭合 instantiation relation 为：
+
+- 每个 Plan node 引用 exact template ID 与唯一 instance ordinal；不得新增未声明模板，所有 required template 满足 min/max cardinality。
+- branch 只能选择 Procedure 声明的闭合选项并满足 branch cardinality；实例化后的 dependency edges、terminal conditions 和 branch-derived structure 必须 exact，不允许任意增加、删除或改边。
+- 第一版要求 I/O SchemaRef、Evidence requirement、freshness/verifier/quorum、retry/recovery/compensation policy 与 success/failure conditions exact；Plan 不能增加、删除、放宽或替换这些合同。
+- Capability 是 Procedure allowance 的子集；预算位于声明的闭合 min/max envelope；retry 次数和 eligible failure class 不得扩大。
+- effectful template 默认 max cardinality 1；只有 Procedure 显式声明 repeatable、idempotency class 与上限时才可复制。
+- 参数值必须属于 canonical domain。第一版不做一般 Schema subsumption，所有 schema/policy 都用 exact ref 避免不可判定的“兼容”旁路。
+
+超出上述 envelope 必须产生新的 `ProcedureRevision`、新的 `VerifiedProcedureRevision` 和新审批；只创建新 Plan 不足。基础阶段禁止运行中自由改变 Plan；后续 REQ-0023 的 adaptive replan 必须产生子 PlanRevision、记录触发证据并重新准入。
 
 ## Node and evidence authority
 
@@ -69,9 +80,9 @@ REQ-0016 前移并提供最小 Evidence Gate：指定测试、构建、静态检
 
 ## Execution and capability flow
 
-1. Intake 固定 `TaskRevision`；Planner 可提出符合候选 Procedure 的 Plan。
-2. Kernel 从 retained registry 解析 exact `VerifiedProcedureRevision`，准入 Task compatibility 与 Plan binding。
-3. Kernel 原子创建固定 Task/Procedure/Plan/Behavior/Workspace/Environment/Context/Model/Tool/Schema/Budget/Boundary 的 `RunManifest`。
+1. Intake 固定 `TaskRevision`，并接收一个内容寻址的 `PlanProposalArtifact`。第一版 artifact 只能由用户或 pinned pure builder 在 Harness 内无 Provider/Tool/Workspace/Sandbox I/O 地生成，携带 proposer root、builder revision、Task/Procedure identity 与 canonical digest；它在 admission 前不是 authority。用户在 Harness 外如何形成输入是显式 non-replayable intake boundary，系统不得把该过程称为受治理 planning、Recorded replay 或已核算模型费用。
+2. Kernel 从 retained registry 解析 exact `VerifiedProcedureRevision`，按 closed instantiation relation 验证 Plan proposal、Task compatibility、proposer identity 与全部 digests。
+3. Kernel 在 execution Run sequence 1 首次将 validated Plan 与 Procedure 变为 authority：`RunManifest` 原子固定 Plan artifact/provenance、Procedure、Task、Behavior、Workspace、Environment、Context、Model、Tool、Schema、Budget 与 Boundary identity。sequence 1 的 Kernel admission decision 是第一版唯一 planning authority；此前只有非权威输入 artifact。
 4. Scheduler 只请求 ready Node；Kernel 重折叠 exact history并签发用途受限 lease。
 5. 单 Agent 执行器请求 Provider/Tool/Workspace/Sandbox 子能力；每个子能力绑定 Run/Plan/Procedure/Node 与 Effect identity。
 6. 外部结果仅是 observation；Kernel admission 形成 Receipt、Evidence 或失败事实。
@@ -79,7 +90,7 @@ REQ-0016 前移并提供最小 Evidence Gate：指定测试、构建、静态检
 
 REQ-0010 的新定位是“为已验证流程执行器提供受 Kernel 治理的模型调用能力”。其正式重设计必须按 Provider contract/Manifest/Secret/Network/Cost/Effect/Replay → 同路径 Fake → loopback Mock → HTTP/SSE adapter 的顺序，adapter 只能接收 Kernel-issued sealed session。
 
-由于 Provider/Tool/Workspace/Sandbox 先于 Node 状态机交付，G2A 只能暴露 Kernel-private proposal/orchestration 与确定性合同测试，不得提供 Agent 可直接调用的通用 dispatch API。REQ-0035 以 forward contract 将既有 operation/effect identity 绑定到 exact Procedure/Plan/Node，REQ-0014 才首次向 Agent executor 提供 Node-scoped 请求入口。任何为了阶段演示而保留的 Task-only 或 ambient adapter 旁路都是 Blocker。
+在 sequence-1 execution Manifest 提交前，所有 Provider/Tool/Workspace/Sandbox proposal 必须零 dispatch、零费用、零外部读写。第一版明确不支持 model-assisted pre-Run planning；该能力必须由后续独立 Requirement 建立自己的 planning Run/Verified Procedure/Manifest/Node/Evidence 边界，不能复用无权威 bootstrap。由于 Provider/Tool/Workspace/Sandbox 先于 Node 状态机交付，G2A 只能暴露 Kernel-private proposal/orchestration 与确定性合同测试，不得提供 Agent 可直接调用的通用 dispatch API。REQ-0035 以 forward contract 将既有 operation/effect identity 绑定到 exact Procedure/Plan/Node，REQ-0014 才首次向 Agent executor 提供 Node-scoped 请求入口。任何 Task-only 或 ambient adapter 旁路都是 Blocker。
 
 ## Promotion and rollback boundaries
 
@@ -125,6 +136,8 @@ REQ-0003..0009 trusted kernel foundation
 - 每个外部 Effect 绑定 exact Node；Run/Node success 在同一 writer serialization 下检查 open operation、pending/unknown Effect 与 mandatory Evidence。
 - 所有权威流都使用完整 scope 与 exact retained reader/reducer/schema；不存在“最新版本”隐式解析。
 - 流程遵循保证仅覆盖 Kernel 可观察和控制的状态转移。领域正确性仍取决于 verifier、环境和现实边界，必须通过 limitations 明示。
+- REQ-0018 必须用命名负测覆盖删 required node、改 required edge、复制非 repeatable Effect node、放宽 I/O Schema/Evidence/success、扩大 Capability/budget/retry/compensation 及 cross-task binding；全部在 lifecycle sequence 1、lease 与 Effect 前 zero-write 拒绝。
+- pre-Manifest Provider/Tool/Workspace/Sandbox 负测必须同时断言 dispatcher、费用计数、外部读写、reservation 与 Event 均为零，并证明 execution Manifest 可追溯到 exact Plan artifact、pure builder、proposer root 与 admission policy。
 
 # Failure modes and security
 
@@ -148,6 +161,8 @@ REQ-0003..0009 trusted kernel foundation
 # Compatibility, migration, and rollback
 
 路线重排只修改规划和正式设计，不修改当前 Rust、SQLite v2、SchemaSet 或已完成 Requirement 事实。既有 REQ-0001..0033 ID 不变；新增 REQ-0034..0036，不把归档 REQ-0010 设计或实现带入新基线。
+
+RFC-0007/ADR-0008 的 Rust authority 与多语言隔离决策保持有效；其中把 REQ-0018 与 Multi-Agent 同组的路线表仅在顺序和 Epic ownership 上由本 RFC 细化，Plan/DAG 的 Rust authority 不变。已完成 Requirement 中“后续由 REQ-0018/REQ-0014 交付”的历史边界声明继续成立，不把旧文档改写为已实现事实。
 
 RFC-0007/ADR-0008 的 Rust authority 与多语言隔离决策保持有效；其中把 REQ-0018 与 Multi-Agent 同组的路线表仅在顺序和 Epic ownership 上由本 RFC 细化，Plan/DAG 的 Rust authority 不变。已完成 Requirement 中“后续由 REQ-0018/REQ-0014 交付”的历史边界声明继续成立，不把旧文档改写为已实现事实。
 
