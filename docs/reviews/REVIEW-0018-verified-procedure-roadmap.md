@@ -1,15 +1,15 @@
 ---
 id: REVIEW-0018
 title: Verified Procedure 路线重设计独立审查
-status: approved
+status: changes-requested
 owners: [independent-reviewer]
 created: 2026-09-05
 updated: 2026-09-05
 links: [REQ-0034, SPEC-0010, RFC-0013]
 independence: independent
-reviewed_revision: 6df161ff5d5fc150cfa09f48ae54b7501cababcb
+reviewed_revision: 1206ad9eb074763988609999e67962ec59a0c1b7
 open_blockers: 0
-open_majors: 0
+open_majors: 1
 ---
 
 # Findings
@@ -24,10 +24,11 @@ open_majors: 0
 | F-006 | Minor | `.agents/work/active/REQ-0034-verified-procedure-revision/VALIDATION.md:6,15,34-39`; `.agents/work/active/REQ-0034-verified-procedure-revision/TASKS.md:7-11` | 原始验证仍把 subject 写成 commit 前 working tree，`check_docs` 标为 skipped，TASK-05/06 也未完成；因此实现者证据未精确 pin 到本次 candidate。候选已诚实列出 remaining gates，且独立检查能确认 commit/scope，所以该问题不改变上述设计结论。 | closure revision 中把 validation subject、实际命令/exit code、TASK 状态和 reviewed revision 对齐；不得把本 Review 或旧结果当成整改后 exact revision 的 freshness 证明。 | closed |
 | F-007 | Minor | `docs/architecture/version-and-event-model.md:79` | REQ-0034 已明确不创建 Event 或 lifecycle，但 ARCH-0003 仍称 Procedure/Plan/Node lifecycle 分别由 REQ-0034/REQ-0018/REQ-0035 交付。核心 ownership 在 Requirement、Spec 和 Backlog 中已闭合，因此这是同步瑕疵而非新的依赖闭环。 | 将 Procedure 项改写为 identity/registry admission，并把 lifecycle ownership 仅归给实际拥有 Event/state 的 Requirement。 | closed |
 | F-008 | Minor | `docs/rfcs/RFC-0013-verified-procedure-execution-architecture.md:165,167` | Compatibility 段落逐字重复，增加正式合同噪声但不改变语义。 | 删除重复段落并运行文档/hygiene 检查。 | closed |
+| F-009 | Major | `.agents/work/active/REQ-0034-verified-procedure-revision/VALIDATION.md:29`; `.agents/work/active/REQ-0034-verified-procedure-revision/HANDOFF.md:3,15`; `.agents/work/active/REQ-0034-verified-procedure-revision/TASKS.md:12` | **Violated invariant:** final Validation/Handoff 必须描述一个当前一致且按记录命令可复算的完成状态，不能把历史时点的命令结果写成当前可重跑结果。`VALIDATION.md` 将无右端 revision 的 `git diff --exit-code 72a0f8b... -- REVIEW-0018` 记为 exit 0；在 exact `1206ad9` 重跑实际 exit 1，因为同一 Reviewer 已合法更新 verdict/findings/history。`HANDOFF.md` 又同时声称 current phase 仍是 REVIEW-0018 remediation 和 route design 已停止，TASK-10 因而在 handoff 当前状态仍矛盾时提前标记完成。设计/authority 本身未回退，但 evidence-only closure 不能作为准确最终交接。 | 新 evidence-only revision 只修正 work records：把 preservation proof 固定为实际成立的 author-only区间（例如 original Review commit 到 designer remediation/evidence revision），另列 Reviewer-owned后续更新；将 Handoff 的 current phase 与 Plan/Tasks 统一，并在本 finding 经同一 Reviewer 复审前保持 final handoff task 未完成。重跑记录中的 exact command，证明 preservation exit 0、四文件 diff scope、无 runtime/schema/REQ-0010 实现、docs/governance/fmt/diff gates；再提交同一 Reviewer focused re-review。 | open |
 
 # Verdict
 
-`approved`。final freshness exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb` 忠实接受已批准的 `660cfca9e230f1440505c8e3bfd9a07bf17529ab` 设计并关闭 F-007/F-008；当前所有 finding closed，0 open Blocker、0 open Major。REQ-0034 可独立验证，Procedure/Plan 不扩权关系、零外部 I/O planning bootstrap 与 principal-root 独立审批均形成了可测试合同。
+Evidence-only candidate `1206ad9eb074763988609999e67962ec59a0c1b7` 为 `changes-requested`，0 open Blocker、1 open Major。F-009 仅阻塞 final work evidence/handoff freshness；final design closure exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb` 的 `approved` 结论、F-001..F-008 closure 与 0/0 architecture verdict 不回退。
 
 核心产品目标仍是 Kernel 强制的 Verified Procedure；Memory 保持非权威，流程遵循不冒充现实正确性，版本回退/Run recovery/Workspace recovery/Effect reconciliation-compensation 与 recorded replay/reexecute/simulated 保持分离，质量、Token/费用、延迟也继续独立报告。REQ-0034/SPEC-0010/RFC-0013 的 `approved/approved/accepted` 仅接受设计，正文和 work state 均明确 runtime/schema/Manifest/Plan/Node/Evidence executor 尚未实现。
 
@@ -85,9 +86,12 @@ Plan/TASKS 明确了 fresh independent Reviewer、Reviewer-only Review 文件、
 - F-007：ARCH-0003 现分别将 Procedure/TaskClass/Verified package identity/registry、Plan/DAG/Manifest、Node lifecycle 归给 REQ-0034、REQ-0018、REQ-0035，和 approved Requirement/Spec/Backlog 一致。
 - F-008：RFC-0013 compatibility 段落重复已删除，并把未批准候选撤回语句改为 accepted ADR 的 forward supersession 规则；未改变旧 Run、SchemaSet、reader 或 replay 合同。
 - Closure 前独立复跑 `python -B -m unittest discover -s scripts/tests -p "test_*.py"` 为 27 passed；`cargo fmt --all -- --check`、exact diff whitespace/code-scope/Review-preservation checks均 exit 0。首次 `check_docs.py` 仅报告 11 份既有 approved Review freshness，未发现 ADR/link/status/finding 结构错误。
+- Evidence-only candidate `1f3078c521118635ddc498f2767ab51daec709fd..1206ad9eb074763988609999e67962ec59a0c1b7` 恰好只修改 VALIDATION/TASKS/PLAN/HANDOFF 四个 work 文件（16 insertions/11 deletions）；完整 `e7a939c..1206ad9` 对 Cargo、Runtime、Schema、scripts、CI、AGENTS、skills/agents/templates 零差异。27 个治理测试、fmt 与 exact diff check 通过，且没有 REQ-0034/REQ-0010 实现声明。
+- 独立重跑 VALIDATION 第 29 行原命令实际 exit 1；Handoff 第 3 行与第 15 行当前阶段相互矛盾，形成 F-009。`check_docs.py` 在未刷新旧 Review 时准确只报告 REVIEW-0001..0007、REVIEW-0010..0013 对这四个 work 文件 stale；因 F-009 open，本轮未前移这些 Review freshness，也未把 docs gate 描述为通过。
 
 # Re-review history
 
 - 2026-09-05：首次独立设计审查 exact `cfdc65af64675b8066b9bc429fbf998d588231bc`；结论 `changes-requested`，1 open Blocker，3 open Major。
 - 2026-09-05：同一 Reviewer 复审 exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`；F-001 至 F-006 closed，新增 F-007/F-008 Minor，结论 `approved`，0 open Blocker，0 open Major。
 - 2026-09-05：final same-reviewer freshness review exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb` against approval commit `c2c6e32503e8a6e85c80126869c4b302374d4abd`；ADR/status/link closure忠实、无实现声明或authority回退，F-007/F-008 closed，无新finding，保持 `approved`、0 open Blocker、0 open Major。
+- 2026-09-05：evidence-only freshness review exact `1206ad9eb074763988609999e67962ec59a0c1b7` against Reviewer commit `1f3078c521118635ddc498f2767ab51daec709fd`；四文件scope与无实现声明成立，但 Validation preservation命令不可按当前记录复算且Handoff current phase矛盾，新增F-009 open Major。evidence-only closure为`changes-requested`、0 Blocker/1 Major；exact `6df161f`设计批准不回退。
