@@ -17,7 +17,7 @@
 | Scope/layer | Command or procedure | Result | Artifact | Evidence/risk |
 |---|---|---|---|---|
 | Governance tests | `python -m unittest discover -s scripts/tests -p "test_*.py"` | passed | 27 tests | Document and repository governance regressions passed |
-| Document structure | `python scripts/check_docs.py` | passed | 209 Markdown files / 74 formal IDs | Same independent Reviewer refreshed REVIEW-0001..0007 and REVIEW-0010..0013 to exact closure revision; no stale review remains |
+| Document structure at approved closure | `python scripts/check_docs.py` after Reviewer refresh for exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb` | passed | 209 Markdown files / 74 formal IDs | Time-scoped result before later author-owned work evidence; final F-009 re-review must refresh reviews again |
 | Rust format | `cargo fmt --all -- --check` | passed | exit 0 | No Rust formatting change |
 | Rust static | `cargo clippy --workspace --all-targets --all-features --offline -- -D warnings` | passed | workspace clippy | Zero warnings |
 | Workspace tests | `cargo test --workspace --all-targets --all-features --offline` | passed | Kernel 185 passed/1 ignored; Protocol 9 unit + 25 contract passed; 1 performance baseline ignored | Existing ignored cases are non-threshold performance observations |
@@ -26,7 +26,7 @@
 | Hygiene | `git diff --check` | passed | exit 0 | No whitespace error |
 | AC traceability | PowerShell parse of REQ-0034 AC rows and SPEC-0010 trace rows | passed | 12 requirements / 12 mapped | Every REQ-0034 AC has an owned SPEC test row; no downstream AC is used for REQ-0034 verification |
 | Backlog topology | PowerShell parse of all explicit prerequisite cells | passed | 35 backlog Requirements plus accepted REQ-0001 | Every prerequisite exists and precedes its consumer; no dependency cycle or backward owner reference found |
-| Review preservation | `git diff --exit-code 72a0f8b597996688f31007bd2fc7f613528f5cdc -- docs/reviews/REVIEW-0018-verified-procedure-roadmap.md` | passed | exit 0 | Designer did not edit the independent findings or verdict |
+| Review preservation during author remediation | `git diff --exit-code 72a0f8b597996688f31007bd2fc7f613528f5cdc 499116a8e93e00a737f0c112d0a0104eb9386840 -- docs/reviews/REVIEW-0018-verified-procedure-roadmap.md` | passed | exit 0 | Exact author-only interval proves the designer did not edit original findings/verdict; later REVIEW-0018 changes are Reviewer-owned commits |
 
 The protocol publisher prints `existing content-addressed schema set differs byte-for-byte` inside its negative test; the test and overall command exit successfully, proving drift rejection.
 
@@ -44,9 +44,10 @@ The protocol publisher prints `existing content-addressed schema set differs byt
 - F-005 remediation corrects REQ-0009 Effect Schema/Runtime status in the authoritative version/event model.
 - F-006 fixed exact validation/Task lineage; F-007 corrected lifecycle ownership; F-008 removed the duplicate RFC compatibility paragraph.
 - REVIEW-0018 independently approved exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb`; every F-001 through F-008 is closed, with 0 open Blocker and 0 open Major.
+- Evidence-only exact `1206ad9eb074763988609999e67962ec59a0c1b7` was returned with F-009 Major because the old preservation command was not time-bounded and Handoff phase text conflicted. This revision corrects those records; F-009 remains open until same-Reviewer re-review.
 
 ## Design closure
 
 - RFC-0013 is accepted, SPEC-0010 is approved, REQ-0034 design is approved, and ADR-0012 records the durable decision.
 - This approval does not implement REQ-0034 or authorize REQ-0010 runtime work. REQ-0034 requires a separately reviewed implementation Plan/Tasks before code or schema changes.
-- The next session must start from the accepted roadmap and redesign REQ-0010 as a distinct authority-first Requirement; the archived Provider path is not a cherry-pick source.
+- Final work-evidence handoff remains pending until REVIEW-0018 closes F-009. After closure, the next product session must start from the accepted roadmap and redesign REQ-0010 as a distinct authority-first Requirement; the archived Provider path is not a cherry-pick source.

@@ -1,15 +1,11 @@
 # REQ-0034 Handoff
 
-Current phase: remediation of REVIEW-0018. Trusted baseline is `origin/main` exact `e7a939cad71a85ada97c3b60d61ba5c024d85ab9` after REQ-0009 closure. The incomplete adapter-first REQ-0010 attempt is preserved at `archive-req0010-adapter-first-20260905` exact `fea9080fcc5529f4bdc1edf10e0bb4c5fc19f0cd` and is not releaseable or an implementation source.
+Current handoff state: the route architecture is accepted, while REVIEW-0018 F-009 evidence-only remediation is submitted for same-Reviewer re-review. Until F-009 is closed, TASK-REQ-0034-10 remains open and this work record does not claim final handoff completion.
 
-The candidate introduces REQ-0034/SPEC-0010/RFC-0013 and will add planned REQ-0035/REQ-0036 while preserving all existing Requirement IDs. It moves REQ-0018 Plan/DAG and REQ-0016 minimal Evidence Gate before REQ-0014, keeps Memory non-authoritative, and separates procedure rollback, behavior rollback, Run recovery, Workspace recovery and Effect reconciliation/compensation.
+Trusted baseline is `origin/main` exact `e7a939cad71a85ada97c3b60d61ba5c024d85ab9`. The incomplete adapter-first REQ-0010 attempt remains preserved at `archive-req0010-adapter-first-20260905` exact `fea9080fcc5529f4bdc1edf10e0bb4c5fc19f0cd`; it is not releaseable or an implementation source.
 
-No product code, Cargo, SQLite or Schema change is authorized. After an exact candidate commit, a fresh independent Reviewer must write only REVIEW-0018. Any open Blocker/Major keeps the route unaccepted. Even after route approval, REQ-0010 must be separately rewritten and independently approved before implementation.
+Architecture lineage: initial candidate `cfdc65af64675b8066b9bc429fbf998d588231bc`; original changes-requested Review commit `72a0f8b597996688f31007bd2fc7f613528f5cdc`; remediation content `499116a8e93e00a737f0c112d0a0104eb9386840`; approved remediation/evidence `660cfca9e230f1440505c8e3bfd9a07bf17529ab`; accepted RFC/Spec/Requirement plus ADR closure `6df161ff5d5fc150cfa09f48ae54b7501cababcb`. F-001 through F-008 are closed and that architecture approval remains valid.
 
-First review exact `cfdc65af64675b8066b9bc429fbf998d588231bc` is `changes-requested` with F-001 Blocker and F-002/F-003/F-004 Major. The designer owns remediation; only the same Reviewer may close them. REVIEW-0018 original finding text and verdict remain preserved in commit `72a0f8b`.
+F-009 concerns only final work evidence: exact `1206ad9eb074763988609999e67962ec59a0c1b7` used an unbounded Review-preservation command and retained conflicting historical phase text. This remediation bounds the author-only proof to `72a0f8b..499116a`, treats all later Review edits as Reviewer-owned, and presents one current state.
 
-Remediation content is exact `499116a8e93e00a737f0c112d0a0104eb9386840`. Validation and task metadata are being bound in a follow-up evidence commit; the same Reviewer must inspect both exact revisions and may update only formal Review documents.
-
-Same-reviewer re-review approved exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`, closed F-001 through F-006 and left only F-007/F-008 Minor. The route is eligible for acceptance closure. ADR-0012, status transitions and Minor fixes require a final same-reviewer freshness check before this design phase is complete.
-
-Final same-reviewer freshness review approved acceptance closure exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb`; F-001 through F-008 are closed, 0 Blocker/0 Major. RFC-0013 is accepted, SPEC-0010 approved, REQ-0034 design approved, and ADR-0012 accepted. `python scripts/check_docs.py` passes 209 Markdown files / 74 formal IDs. Route design stops here: REQ-0034 and REQ-0010 runtime/schema implementation remain unstarted and require separate SDD/review gates.
+No product code, Cargo, SQLite, Schema, REQ-0034 implementation or REQ-0010 implementation has started. After F-009 closure, stop and report; any subsequent REQ-0034 or redesigned REQ-0010 implementation requires its own SDD Plan/Tasks and independent review.
