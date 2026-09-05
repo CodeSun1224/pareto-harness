@@ -9,6 +9,8 @@
 - Approved remediation/evidence revision: `660cfca9e230f1440505c8e3bfd9a07bf17529ab`.
 - Accepted RFC/Spec/Requirement and ADR closure revision: `6df161ff5d5fc150cfa09f48ae54b7501cababcb`.
 - Final same-reviewer record commit: `1f3078c521118635ddc498f2767ab51daec709fd`.
+- F-009 remediation revision: `49c8a378520d2599719f9dad2e412e3227417f32`.
+- Fresh takeover Review closure commit: `58a2d65b4cd1ba2767ed5f1d62b8f08fa1c91d97`.
 - Scope: product/architecture/roadmap documents, REQ-0034/SPEC-0010/RFC-0013, EPIC-0007 and active work records only.
 - Environment: Windows PowerShell, 2026-09-05, Asia/Shanghai; all Cargo commands use `--offline`.
 
@@ -44,10 +46,10 @@ The protocol publisher prints `existing content-addressed schema set differs byt
 - F-005 remediation corrects REQ-0009 Effect Schema/Runtime status in the authoritative version/event model.
 - F-006 fixed exact validation/Task lineage; F-007 corrected lifecycle ownership; F-008 removed the duplicate RFC compatibility paragraph.
 - REVIEW-0018 independently approved exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb`; every F-001 through F-008 is closed, with 0 open Blocker and 0 open Major.
-- Evidence-only exact `1206ad9eb074763988609999e67962ec59a0c1b7` was returned with F-009 Major because the old preservation command was not time-bounded and Handoff phase text conflicted. This revision corrects those records; F-009 remains open until same-Reviewer re-review.
+- Evidence-only exact `1206ad9eb074763988609999e67962ec59a0c1b7` was returned with F-009 Major because the old preservation command was not time-bounded and Handoff phase text conflicted. Exact `49c8a378520d2599719f9dad2e412e3227417f32` corrected those records; a fresh independent Reviewer, explicitly authorized by the user because the original Reviewer was unavailable, closed F-009 and recorded approved 0/0 in `58a2d65b4cd1ba2767ed5f1d62b8f08fa1c91d97`.
 
 ## Design closure
 
 - RFC-0013 is accepted, SPEC-0010 is approved, REQ-0034 design is approved, and ADR-0012 records the durable decision.
 - This approval does not implement REQ-0034 or authorize REQ-0010 runtime work. REQ-0034 requires a separately reviewed implementation Plan/Tasks before code or schema changes.
-- Final work-evidence handoff remains pending until REVIEW-0018 closes F-009. After closure, the next product session must start from the accepted roadmap and redesign REQ-0010 as a distinct authority-first Requirement; the archived Provider path is not a cherry-pick source.
+- Final work-evidence handoff is complete. The next product session must start from the accepted roadmap and redesign REQ-0010 as a distinct authority-first Requirement; the archived Provider path is not a cherry-pick source.

@@ -9,4 +9,4 @@
 - [x] TASK-REQ-0034-07: fresh independent Reviewer 使用 architecture-review 和 code-review 写 REVIEW-0018。Validation: exact candidate changes-requested, 1 Blocker/3 Major; Reviewer changed only REVIEW-0018.
 - [x] TASK-REQ-0034-08: 由设计者整改所有 Blocker/Major，并由同一 Reviewer 关闭。Validation: REVIEW-0018 approved exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`, 0 Blocker/0 Major.
 - [x] TASK-REQ-0034-09: 完成 RFC/Spec/路线接受闭环与 freshness 复审。Validation: REVIEW-0018 approved exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb`; F-001..F-008 closed, 0 Blocker/0 Major.
-- [ ] TASK-REQ-0034-10: 在同一 Reviewer 关闭 F-009 后停止并报告，不进入 REQ-0010 实现。Validation: final evidence-only handoff; no runtime/schema/REQ-0010 change.
+- [x] TASK-REQ-0034-10: 在 Reviewer 关闭 F-009 后停止并报告，不进入 REQ-0010 实现。Validation: F-009 closed in Review commit `58a2d65b4cd1ba2767ed5f1d62b8f08fa1c91d97`; final gates passed; no runtime/schema/REQ-0010 change.
