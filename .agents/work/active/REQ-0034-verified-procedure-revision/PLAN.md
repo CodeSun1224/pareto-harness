@@ -30,4 +30,4 @@ links: [REQ-0034, SPEC-0010, RFC-0013]
 
 # First review result
 
-REVIEW-0018 对 exact `cfdc65af64675b8066b9bc429fbf998d588231bc` 判定 `changes-requested`：F-001 Blocker，F-002/F-003/F-004 Major，F-005/F-006 Minor。当前整改收窄 REQ-0034、冻结 closed Plan instantiation、选择零外部 I/O Plan bootstrap、冻结 principal-root 独立性，并修正文档事实与验证 pin；finding 只能由同一 Reviewer 关闭。
+REVIEW-0018 对 exact `cfdc65af64675b8066b9bc429fbf998d588231bc` 判定 `changes-requested`：F-001 Blocker，F-002/F-003/F-004 Major，F-005/F-006 Minor。整改内容 exact `499116a8e93e00a737f0c112d0a0104eb9386840` 收窄 REQ-0034、冻结 closed Plan instantiation、选择零外部 I/O Plan bootstrap、冻结 principal-root 独立性，并修正文档事实；finding 只能由同一 Reviewer 关闭。

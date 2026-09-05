@@ -7,3 +7,5 @@ The candidate introduces REQ-0034/SPEC-0010/RFC-0013 and will add planned REQ-00
 No product code, Cargo, SQLite or Schema change is authorized. After an exact candidate commit, a fresh independent Reviewer must write only REVIEW-0018. Any open Blocker/Major keeps the route unaccepted. Even after route approval, REQ-0010 must be separately rewritten and independently approved before implementation.
 
 First review exact `cfdc65af64675b8066b9bc429fbf998d588231bc` is `changes-requested` with F-001 Blocker and F-002/F-003/F-004 Major. The designer owns remediation; only the same Reviewer may close them. REVIEW-0018 original finding text and verdict remain preserved in commit `72a0f8b`.
+
+Remediation content is exact `499116a8e93e00a737f0c112d0a0104eb9386840`. Validation and task metadata are being bound in a follow-up evidence commit; the same Reviewer must inspect both exact revisions and may update only formal Review documents.
