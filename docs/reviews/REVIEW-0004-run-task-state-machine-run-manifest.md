@@ -7,7 +7,7 @@ created: 2026-08-24
 updated: 2026-09-05
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: 660cfca9e230f1440505c8e3bfd9a07bf17529ab
+reviewed_revision: 6df161ff5d5fc150cfa09f48ae54b7501cababcb
 open_blockers: 0
 open_majors: 0
 ---
@@ -124,3 +124,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅规划未来Manifest v3并明确行为编辑前planned→implementing；现有Manifest/lifecycle代码、Schema、状态边及REQ-0005合同零变化。REVIEW-0004保持approved、0/0。
 - 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。仅同步独立批准后的done/archive事实，无lifecycle/Manifest/runtime变化；原verdict/findings不变。
 - 2026-09-05：Verified Procedure 路线 freshness re-review exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`。candidate对lifecycle/Manifest runtime、四类Event、Schema、状态边和authority零差异；REQ-0034明确不创建Run，REQ-0018才以前向新Manifest major在sequence 1固定Procedure/Plan并保留旧Run/Manifest bytes。REQ-0005现有状态机与reader合同未被重释，REVIEW-0004保持approved、0/0。
+- 2026-09-05：路线接受 closure freshness exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb`。closure未修改lifecycle/Manifest Runtime、Event、Schema、状态边或authority；ADR-0012忠实保留REQ-0034不创建Run、REQ-0018才以前向major建立Procedure/Plan authority及旧Run不补写。REVIEW-0004保持approved、0/0。

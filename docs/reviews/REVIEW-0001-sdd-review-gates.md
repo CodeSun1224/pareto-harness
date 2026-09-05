@@ -7,7 +7,7 @@ created: 2026-08-22
 updated: 2026-09-05
 links: [REQ-0002, SPEC-0001]
 independence: independent
-reviewed_revision: 660cfca9e230f1440505c8e3bfd9a07bf17529ab
+reviewed_revision: 6df161ff5d5fc150cfa09f48ae54b7501cababcb
 open_blockers: 0
 open_majors: 0
 ---
@@ -91,3 +91,4 @@ Focused、Impacted 和 Core 治理测试通过。负向用例覆盖非法状态/
 - 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅推进planned并创建active PLAN/TASKS/HANDOFF；fixed planning补齐planned→implementing与AC-21 exact命令。治理规则、代码、Schema、Runtime和旧合同零变化，未声称实现。REVIEW-0001保持approved、0/0。
 - 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。该revision仅在REVIEW-0013已独立批准exact实现、0/0之后同步done/archive与README/index/architecture/Epic/roadmap事实；无runtime、Schema、权限或治理规则变化，原verdict/findings不变。
 - 2026-09-05：Verified Procedure 路线 freshness re-review exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`。`e7a939c..660cfca`只修改产品/架构/路线/Requirement设计与work/review记录；`AGENTS.md`、skills/agents/templates、checker、CI和scripts零差异。REVIEW-0018由同一independent Reviewer在exact remediation上关闭全部Blocker/Major后批准，27个治理测试通过，未绕过finding/open-count/freshness或完成门禁。REVIEW-0001保持approved、0/0。
+- 2026-09-05：路线接受 closure freshness exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb`。接受状态、ADR-0012、链接、两项Minor修复与work pending事实均发生在REVIEW-0018 exact `660cfca` approved 0/0之后；治理代码/规则/CI/scripts零差异，27个治理测试通过，未绕过独立Review或完成门禁。REVIEW-0001保持approved、0/0。

@@ -7,7 +7,7 @@ created: 2026-08-30
 updated: 2026-09-05
 links: [REQ-0009, SPEC-0008, RFC-0009, ADR-0010, REQ-0004, REQ-0007, REQ-0008, RFC-0002, RFC-0005, RFC-0006, RFC-0008, ADR-0003, ADR-0006, ADR-0007, ADR-0009, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: 660cfca9e230f1440505c8e3bfd9a07bf17529ab
+reviewed_revision: 6df161ff5d5fc150cfa09f48ae54b7501cababcb
 open_blockers: 0
 open_majors: 0
 ---
@@ -185,3 +185,4 @@ unclaimed/claimed recovery、fixed-horizon Recorded replay、兼容与rollback�
   无新finding，保持approved 0/0；本轮仅为planning freshness，不是实现code review。
 - 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。REVIEW-0013已独立批准exact实现、0/0；该closure仅同步done/archive事实，无设计合同变化，原verdict/findings不变。
 - 2026-09-05：Verified Procedure 路线 freshness re-review exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`。candidate未修改REQ/SPEC/RFC/ADR-0010或Effect Schema/Runtime；未来Node execution明确复用Intent-before-dispatch、claim/Receipt、partial/unknown、reconciliation与fixed-horizon Recorded合同，并要求每个外部Effect绑定exact Node。Effect设计authority与恢复语义无回退，REVIEW-0012保持approved、0/0。
+- 2026-09-05：路线接受 closure freshness exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb`。closure未修改REQ/SPEC/RFC/ADR-0010或Effect Schema/Runtime；ADR-0012忠实保留Effect reconciliation/compensation与Run/Workspace recovery、版本rollback的区分及Node-bound forward consumption。Effect设计批准无回退，REVIEW-0012保持approved、0/0。
