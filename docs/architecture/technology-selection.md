@@ -5,7 +5,7 @@ status: accepted
 owners: [maintainers]
 created: 2026-08-20
 updated: 2026-09-05
-links: [RFC-0007, RFC-0013, REQ-0034, ADR-0001, ADR-0002, ADR-0008, ROADMAP-0001, REVIEW-0009]
+links: [RFC-0007, RFC-0013, REQ-0034, ADR-0001, ADR-0002, ADR-0008, ADR-0012, ROADMAP-0001, REVIEW-0009, REVIEW-0018]
 ---
 
 # 技术选型基线

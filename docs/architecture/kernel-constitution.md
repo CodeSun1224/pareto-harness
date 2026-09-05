@@ -5,7 +5,7 @@ status: accepted
 owners: [maintainers]
 created: 2026-08-20
 updated: 2026-09-05
-links: [RFC-0001, RFC-0013, ADR-0001, REQ-0034]
+links: [RFC-0001, RFC-0013, ADR-0001, ADR-0012, REQ-0034]
 ---
 
 # 可信内核宪法

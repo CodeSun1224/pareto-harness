@@ -1,11 +1,11 @@
 ---
 id: SPEC-0010
 title: 不可变已验证流程版本规范
-status: draft
+status: approved
 owners: [runtime-kernel]
 created: 2026-09-05
 updated: 2026-09-05
-links: [REQ-0034, RFC-0013, REQ-0003, REQ-0004, REQ-0005, REQ-0007, REQ-0009]
+links: [REQ-0034, RFC-0013, ADR-0012, REVIEW-0018, REQ-0003, REQ-0004, REQ-0005, REQ-0007, REQ-0009]
 ---
 
 # Behavioral contract

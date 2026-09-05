@@ -57,6 +57,7 @@
 - [RFC-0009：Kernel 治理的 Effect Intent、Receipt 与对账合同](rfcs/RFC-0009-kernel-governed-effect-intent-receipt.md)
 - [ADR-0010：采用 Kernel 治理的 Effect Intent、Receipt 与对账边界](adrs/ADR-0010-kernel-governed-effect-boundary.md)
 - [RFC-0013：已验证流程执行与路线重排架构](rfcs/RFC-0013-verified-procedure-execution-architecture.md)
+- [ADR-0012：采用已验证流程版本与 Kernel 流程权威](adrs/ADR-0012-verified-procedure-authority.md)
 
 ## 交付
 
@@ -75,6 +76,7 @@
 - [REQ-0008 Observer/Gate/Transform Hook 独立实现评审](reviews/REVIEW-0011-observer-gate-transform-hooks-implementation.md)
 - [REQ-0009 Effect Intent/Receipt 独立设计评审](reviews/REVIEW-0012-effect-intent-receipt-design.md)
 - [REQ-0009 Effect Intent/Receipt 独立实现评审](reviews/REVIEW-0013-effect-intent-receipt-implementation.md)
+- [Verified Procedure 路线重设计独立评审](reviews/REVIEW-0018-verified-procedure-roadmap.md)
 - [REQ-0007 Runtime Control 修复记录](fixes/FIX-0001-runtime-control-authority-and-replay-contract.md)
 - [REQ-0009 Effect authority/recovery 修复记录](fixes/FIX-0002-effect-authority-and-recovery-closure.md)
 

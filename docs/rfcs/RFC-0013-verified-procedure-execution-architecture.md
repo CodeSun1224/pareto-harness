@@ -1,11 +1,11 @@
 ---
 id: RFC-0013
 title: 已验证流程执行与路线重排架构
-status: proposed
+status: accepted
 owners: [maintainers, runtime-kernel]
 created: 2026-09-05
 updated: 2026-09-05
-links: [REQ-0034, SPEC-0010, PRD-0001, CAP-0001, ARCH-0001, ARCH-0002, ARCH-0003, ROADMAP-0001, BACKLOG-0001, RFC-0001, ADR-0001]
+links: [REQ-0034, SPEC-0010, ADR-0012, REVIEW-0018, PRD-0001, CAP-0001, ARCH-0001, ARCH-0002, ARCH-0003, ROADMAP-0001, BACKLOG-0001, RFC-0001, ADR-0001]
 ---
 
 # Summary
@@ -164,14 +164,12 @@ REQ-0003..0009 trusted kernel foundation
 
 RFC-0007/ADR-0008 的 Rust authority 与多语言隔离决策保持有效；其中把 REQ-0018 与 Multi-Agent 同组的路线表仅在顺序和 Epic ownership 上由本 RFC 细化，Plan/DAG 的 Rust authority 不变。已完成 Requirement 中“后续由 REQ-0018/REQ-0014 交付”的历史边界声明继续成立，不把旧文档改写为已实现事实。
 
-RFC-0007/ADR-0008 的 Rust authority 与多语言隔离决策保持有效；其中把 REQ-0018 与 Multi-Agent 同组的路线表仅在顺序和 Epic ownership 上由本 RFC 细化，Plan/DAG 的 Rust authority 不变。已完成 Requirement 中“后续由 REQ-0018/REQ-0014 交付”的历史边界声明继续成立，不把旧文档改写为已实现事实。
-
-未来实现采用 forward-only Schema/Manifest/Event major。旧 Run 不补 Procedure 身份，不宣称符合已验证流程；旧 recorded replay 保持原合同。新 writer 可停用，已写入的新事实保留。若架构评审不批准，本 RFC、SPEC 与路线候选整体撤回，`origin/main@e7a939c` 仍是准确基线。
+未来实现采用 forward-only Schema/Manifest/Event major。旧 Run 不补 Procedure 身份，不宣称符合已验证流程；旧 recorded replay 保持原合同。新 writer 可停用，已写入的新事实保留。若未来证据否定本设计，必须用新的 RFC/ADR supersede，`origin/main@e7a939c` 仍是实现前准确基线。
 
 # Evaluation and acceptance
 
 - Quality：用确定性 Fake Procedure/Plan/Node/Evidence/Effect 证明跳步、伪造证据、跨域、未审批和旁路均 fail closed；清楚区分流程遵循与领域正确性。
 - Cost：每次 Run/Node 记录 manifest/event/storage overhead；真实 Provider 费用由 REQ-0010 单独评估，不用综合分掩盖质量回退。
 - Latency：分别测量 registry/Run admission、Node transition、Evidence gate 与 replay；不以未验证的百分比作为门禁。
-- 设计接受：fresh Reviewer 使用 architecture-review 与 code-review 检查 exact candidate；0 Blocker、0 Major 且 approved 后才能接受 RFC/Spec/路线。
+- 设计接受：REVIEW-0018 已对 exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab` 独立批准，0 Blocker、0 Major；本接受闭环及 ADR 仍需同一 Reviewer freshness 复审。
 - 实现接受：每个 Requirement 独立完成 impact/spec/plan/tasks、分层测试、schema compatibility、completion gates 与 fresh implementation review，不允许路线批准替代实现批准。

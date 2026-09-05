@@ -9,3 +9,5 @@ No product code, Cargo, SQLite or Schema change is authorized. After an exact ca
 First review exact `cfdc65af64675b8066b9bc429fbf998d588231bc` is `changes-requested` with F-001 Blocker and F-002/F-003/F-004 Major. The designer owns remediation; only the same Reviewer may close them. REVIEW-0018 original finding text and verdict remain preserved in commit `72a0f8b`.
 
 Remediation content is exact `499116a8e93e00a737f0c112d0a0104eb9386840`. Validation and task metadata are being bound in a follow-up evidence commit; the same Reviewer must inspect both exact revisions and may update only formal Review documents.
+
+Same-reviewer re-review approved exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`, closed F-001 through F-006 and left only F-007/F-008 Minor. The route is eligible for acceptance closure. ADR-0012, status transitions and Minor fixes require a final same-reviewer freshness check before this design phase is complete.

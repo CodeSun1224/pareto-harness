@@ -1,11 +1,11 @@
 ---
 id: REQ-0034
 title: 不可变已验证流程版本
-status: specified
+status: approved
 owners: [runtime-kernel]
 created: 2026-09-05
 updated: 2026-09-05
-links: [EPIC-0007, REQ-0003, REQ-0004, REQ-0005, REQ-0007, REQ-0009, SPEC-0010, RFC-0013]
+links: [EPIC-0007, REQ-0003, REQ-0004, REQ-0005, REQ-0007, REQ-0009, SPEC-0010, RFC-0013, ADR-0012, REVIEW-0018]
 risk: high
 work: .agents/work/active/REQ-0034-verified-procedure-revision
 ---

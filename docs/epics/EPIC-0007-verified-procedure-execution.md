@@ -5,7 +5,7 @@ status: proposed
 owners: [maintainers, runtime-kernel]
 created: 2026-09-05
 updated: 2026-09-05
-links: [PRD-0001, REQ-0034, RFC-0013, BACKLOG-0001]
+links: [PRD-0001, REQ-0034, RFC-0013, ADR-0012, BACKLOG-0001, REVIEW-0018]
 ---
 
 # Outcome

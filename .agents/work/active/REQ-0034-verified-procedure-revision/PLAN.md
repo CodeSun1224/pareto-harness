@@ -1,6 +1,6 @@
 ---
 title: Verified Procedure 路线重设计与 REQ-0034 设计计划
-status: remediating-review-findings
+status: acceptance-closure-review-pending
 owner: maintainers
 updated: 2026-09-05
 links: [REQ-0034, SPEC-0010, RFC-0013]

@@ -5,7 +5,7 @@ status: accepted
 owners: [maintainers]
 created: 2026-08-20
 updated: 2026-09-05
-links: [RFC-0001, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0009, RFC-0013, ADR-0001, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0010, REQ-0003, REQ-0004, REQ-0005, REQ-0006, REQ-0009, REQ-0034, SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0005, SPEC-0008, SPEC-0010, REVIEW-0004, REVIEW-0005, REVIEW-0012]
+links: [RFC-0001, RFC-0002, RFC-0003, RFC-0004, RFC-0005, RFC-0009, RFC-0013, ADR-0001, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0010, ADR-0012, REQ-0003, REQ-0004, REQ-0005, REQ-0006, REQ-0009, REQ-0034, SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0005, SPEC-0008, SPEC-0010, REVIEW-0004, REVIEW-0005, REVIEW-0012, REVIEW-0018]
 ---
 
 # 版本、事件与证据模型
@@ -76,7 +76,7 @@ ModelSnapshot          ToolSetRevision
 
 ## 事件族
 
-- 生命周期：已实现 `run-created`、`task-created`、`run-state-transitioned`、`task-state-transitioned` 1.0；Run/Task 状态集合与合法边由 RFC-0004/ADR-0005 冻结。Procedure/Plan/Node lifecycle 尚未实现，分别由 REQ-0034、REQ-0018、REQ-0035 交付。
+- 生命周期：已实现 `run-created`、`task-created`、`run-state-transitioned`、`task-state-transitioned` 1.0；Run/Task 状态集合与合法边由 RFC-0004/ADR-0005 冻结。Procedure/TaskClass/Verified package identity 与纯 registry admission 尚待 REQ-0034 实现；Plan/DAG 与 procedure-capable Manifest 由 REQ-0018 交付；Node lifecycle 由 REQ-0035 交付。
 - 决策：Plan proposed, context projected, model routed, retry selected。
 - 效果：REQ-0007 已实现 Capability/Budget/取消/超时控制事件；REQ-0009 已实现 Effect intended/dispatch-claimed/receipt-admitted/attempt-concluded/reconciliation-required/reconciled Schema、Kernel Runtime、Projection 与 Boundary Inventory V2。实现保持 partial/unknown、对账和 fixed replay horizon，不包含真实 Provider/Tool/Sandbox 效果。
 - 证据：`EvidenceRecord` 协议已存在，但执行期 requested/recorded/verified/invalidated Event、节点覆盖 fold 与 completion gate 尚未实现；最小门禁由 REQ-0016 交付，完整图由 REQ-0026 扩展。
