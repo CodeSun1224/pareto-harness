@@ -4,10 +4,10 @@ title: REQ-0004 SQLite append-only Event Store 独立代码评审
 status: approved
 owners: [maintainers]
 created: 2026-08-23
-updated: 2026-09-01
+updated: 2026-09-05
 links: [REQ-0004, SPEC-0003, RFC-0003, ADR-0004]
 independence: independent
-reviewed_revision: 62bc44e250587594912f7ef16b431be6b1c12103
+reviewed_revision: 660cfca9e230f1440505c8e3bfd9a07bf17529ab
 open_blockers: 0
 open_majors: 0
 ---
@@ -97,3 +97,4 @@ open_majors: 0
 - 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已评审设计、创建ADR-0010并同步共享文档；Event Store/SQLite/DDL/Schema/Cargo及REQ-0004合同零变化，未声称Runtime已实现。REVIEW-0003保持approved、0/0。
 - 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅创建忠实的active planning并补齐启动/依赖门禁；Event Store、SQLite、DDL、Schema、Cargo及REQ-0004合同零变化，未实现。REVIEW-0003保持approved、0/0。
 - 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。仅同步独立批准后的done/archive事实，无Event Store/SQLite/runtime变化；原verdict/findings不变。
+- 2026-09-05：Verified Procedure 路线 freshness re-review exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`。candidate对Event Store、SQLite v2、DDL/trigger、writer epoch、Cargo、Schema和raw SQL/API零差异；REQ-0034 pure admission明确零Event/registry mutation，后续Node/Promotion仍须复用append-only/single-writer合同。REQ-0004事务、隔离、retained reader与迁移批准事实无回退，REVIEW-0003保持approved、0/0。

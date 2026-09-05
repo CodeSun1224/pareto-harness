@@ -4,10 +4,10 @@ title: REQ-0007 Capability、预算、取消与超时独立设计评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-25
-updated: 2026-09-01
+updated: 2026-09-05
 links: [REQ-0007, SPEC-0006, RFC-0006, ADR-0007, REQ-0003, REQ-0004, REQ-0005, REQ-0006, ARCH-0002, ARCH-0003]
 independence: independent
-reviewed_revision: 62bc44e250587594912f7ef16b431be6b1c12103
+reviewed_revision: 660cfca9e230f1440505c8e3bfd9a07bf17529ab
 open_blockers: 0
 open_majors: 0
 ---
@@ -171,3 +171,4 @@ preimage或冲突优先级。实现仍需fresh independent code review和新的R
 - 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已评审Effect设计、创建ADR-0010并同步共享文档；REQ-0007合同/Runtime/Schema/API零变化，REQ-0009未实现。REVIEW-0006保持approved、0/0。
 - 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅规划已批准Effect对Runtime Control的复用并补齐planning门禁；REQ-0007合同、Runtime、Schema、API零变化，未实现。REVIEW-0006保持approved、0/0。
 - 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。仅同步独立批准后的done/archive事实，无Capability/Budget/Cancellation合同变化；原verdict/findings不变。
+- 2026-09-05：Verified Procedure 路线 freshness re-review exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`。candidate未修改REQ/SPEC/RFC/ADR-0007、Runtime Control、Schema或API；未来Plan/Node执行只可请求Node-scoped、用途受限Capability，并继续由Kernel拥有预算、取消、timeout、late result与Recorded replay authority。REQ-0007设计合同无回退，REVIEW-0006保持approved、0/0。

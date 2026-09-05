@@ -4,10 +4,10 @@ title: REQ-0005 Run/Task 状态机与 Run Manifest 独立代码评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-24
-updated: 2026-09-01
+updated: 2026-09-05
 links: [REQ-0005, SPEC-0004, RFC-0004, ADR-0005, REQ-0003, REQ-0004, REVIEW-0002, REVIEW-0003]
 independence: independent
-reviewed_revision: 62bc44e250587594912f7ef16b431be6b1c12103
+reviewed_revision: 660cfca9e230f1440505c8e3bfd9a07bf17529ab
 open_blockers: 0
 open_majors: 0
 ---
@@ -123,3 +123,4 @@ requested baseline额外包含三份既有独立Review的freshness-only commit `
 - 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受未来Manifest v3/Effect设计、创建ADR-0010并同步共享文档；现有Manifest/lifecycle代码、Schema、状态边及REQ-0005合同零变化，REQ-0009未实现。REVIEW-0004保持approved、0/0。
 - 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅规划未来Manifest v3并明确行为编辑前planned→implementing；现有Manifest/lifecycle代码、Schema、状态边及REQ-0005合同零变化。REVIEW-0004保持approved、0/0。
 - 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。仅同步独立批准后的done/archive事实，无lifecycle/Manifest/runtime变化；原verdict/findings不变。
+- 2026-09-05：Verified Procedure 路线 freshness re-review exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`。candidate对lifecycle/Manifest runtime、四类Event、Schema、状态边和authority零差异；REQ-0034明确不创建Run，REQ-0018才以前向新Manifest major在sequence 1固定Procedure/Plan并保留旧Run/Manifest bytes。REQ-0005现有状态机与reader合同未被重释，REVIEW-0004保持approved、0/0。

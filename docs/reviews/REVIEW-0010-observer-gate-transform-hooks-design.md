@@ -4,10 +4,10 @@ title: REQ-0008 Observer、Gate 与 Transform Hook 独立设计评审
 status: approved
 owners: [independent-reviewer]
 created: 2026-08-28
-updated: 2026-09-01
+updated: 2026-09-05
 links: [REQ-0008, SPEC-0007, RFC-0008, RFC-0007, ADR-0008, REQ-0004, REQ-0007, REVIEW-0006, REVIEW-0007, REVIEW-0009, FIX-0001]
 independence: independent
-reviewed_revision: 62bc44e250587594912f7ef16b431be6b1c12103
+reviewed_revision: 660cfca9e230f1440505c8e3bfd9a07bf17529ab
 open_blockers: 0
 open_majors: 0
 ---
@@ -145,3 +145,4 @@ Focused planning freshness re-review 在 Windows/PowerShell、2026-08-28 对 exa
 - 2026-08-30：REQ-0009 design-acceptance closure freshness exact `60cee6ed44d150185bf99ca3095a8ce803bcc0d3`。仅接受已评审Effect设计、创建ADR-0010并同步共享文档；Hook合同/Runtime/Schema/tests与authority边界零变化，REQ-0009未实现。REVIEW-0010保持approved、0/0。
 - 2026-08-30：REQ-0009 focused planning freshness exact `46772c7fbb30e82f0e8fd4fb50915e8414acaa65`。仅规划已批准Effect/Hook pair边界并补齐planning门禁；Hook合同、Runtime、Schema、tests与authority边界零变化，未实现。REVIEW-0010保持approved、0/0。
 - 2026-09-01：REQ-0009 closure freshness exact `62bc44e250587594912f7ef16b431be6b1c12103`。仅同步独立批准后的done/archive事实，无Hook设计/实现变化；原verdict/findings不变。
+- 2026-09-05：Verified Procedure 路线 freshness re-review exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`。candidate未修改REQ/SPEC/RFC/ADR-0009、Hook Runtime/Schema/tests或pair authority；未来最小Evidence Gate仍由Kernel admission决定状态，模型/Memory/adapter observation不能成为Evidence或terminal，且不放宽Gate default-deny、Transform reject-whole、Observer non-authority与atomic pair。REVIEW-0010保持approved、0/0。
