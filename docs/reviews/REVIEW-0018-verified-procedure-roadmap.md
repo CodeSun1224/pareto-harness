@@ -1,15 +1,15 @@
 ---
 id: REVIEW-0018
 title: Verified Procedure 路线重设计独立审查
-status: changes-requested
+status: approved
 owners: [independent-reviewer]
 created: 2026-09-05
 updated: 2026-09-05
 links: [REQ-0034, SPEC-0010, RFC-0013]
 independence: independent
-reviewed_revision: 1206ad9eb074763988609999e67962ec59a0c1b7
+reviewed_revision: 49c8a378520d2599719f9dad2e412e3227417f32
 open_blockers: 0
-open_majors: 1
+open_majors: 0
 ---
 
 # Findings
@@ -24,11 +24,11 @@ open_majors: 1
 | F-006 | Minor | `.agents/work/active/REQ-0034-verified-procedure-revision/VALIDATION.md:6,15,34-39`; `.agents/work/active/REQ-0034-verified-procedure-revision/TASKS.md:7-11` | 原始验证仍把 subject 写成 commit 前 working tree，`check_docs` 标为 skipped，TASK-05/06 也未完成；因此实现者证据未精确 pin 到本次 candidate。候选已诚实列出 remaining gates，且独立检查能确认 commit/scope，所以该问题不改变上述设计结论。 | closure revision 中把 validation subject、实际命令/exit code、TASK 状态和 reviewed revision 对齐；不得把本 Review 或旧结果当成整改后 exact revision 的 freshness 证明。 | closed |
 | F-007 | Minor | `docs/architecture/version-and-event-model.md:79` | REQ-0034 已明确不创建 Event 或 lifecycle，但 ARCH-0003 仍称 Procedure/Plan/Node lifecycle 分别由 REQ-0034/REQ-0018/REQ-0035 交付。核心 ownership 在 Requirement、Spec 和 Backlog 中已闭合，因此这是同步瑕疵而非新的依赖闭环。 | 将 Procedure 项改写为 identity/registry admission，并把 lifecycle ownership 仅归给实际拥有 Event/state 的 Requirement。 | closed |
 | F-008 | Minor | `docs/rfcs/RFC-0013-verified-procedure-execution-architecture.md:165,167` | Compatibility 段落逐字重复，增加正式合同噪声但不改变语义。 | 删除重复段落并运行文档/hygiene 检查。 | closed |
-| F-009 | Major | `.agents/work/active/REQ-0034-verified-procedure-revision/VALIDATION.md:29`; `.agents/work/active/REQ-0034-verified-procedure-revision/HANDOFF.md:3,15`; `.agents/work/active/REQ-0034-verified-procedure-revision/TASKS.md:12` | **Violated invariant:** final Validation/Handoff 必须描述一个当前一致且按记录命令可复算的完成状态，不能把历史时点的命令结果写成当前可重跑结果。`VALIDATION.md` 将无右端 revision 的 `git diff --exit-code 72a0f8b... -- REVIEW-0018` 记为 exit 0；在 exact `1206ad9` 重跑实际 exit 1，因为同一 Reviewer 已合法更新 verdict/findings/history。`HANDOFF.md` 又同时声称 current phase 仍是 REVIEW-0018 remediation 和 route design 已停止，TASK-10 因而在 handoff 当前状态仍矛盾时提前标记完成。设计/authority 本身未回退，但 evidence-only closure 不能作为准确最终交接。 | 新 evidence-only revision 只修正 work records：把 preservation proof 固定为实际成立的 author-only区间（例如 original Review commit 到 designer remediation/evidence revision），另列 Reviewer-owned后续更新；将 Handoff 的 current phase 与 Plan/Tasks 统一，并在本 finding 经同一 Reviewer 复审前保持 final handoff task 未完成。重跑记录中的 exact command，证明 preservation exit 0、四文件 diff scope、无 runtime/schema/REQ-0010 实现、docs/governance/fmt/diff gates；再提交同一 Reviewer focused re-review。 | open |
+| F-009 | Major | `.agents/work/active/REQ-0034-verified-procedure-revision/VALIDATION.md:29`; `.agents/work/active/REQ-0034-verified-procedure-revision/HANDOFF.md:3,15`; `.agents/work/active/REQ-0034-verified-procedure-revision/TASKS.md:12` | **Violated invariant:** final Validation/Handoff 必须描述一个当前一致且按记录命令可复算的完成状态，不能把历史时点的命令结果写成当前可重跑结果。`VALIDATION.md` 将无右端 revision 的 `git diff --exit-code 72a0f8b... -- REVIEW-0018` 记为 exit 0；在 exact `1206ad9` 重跑实际 exit 1，因为同一 Reviewer 已合法更新 verdict/findings/history。`HANDOFF.md` 又同时声称 current phase 仍是 REVIEW-0018 remediation 和 route design 已停止，TASK-10 因而在 handoff 当前状态仍矛盾时提前标记完成。设计/authority 本身未回退，但 evidence-only closure 不能作为准确最终交接。 | 新 evidence-only revision 只修正 work records：把 preservation proof 固定为实际成立的 author-only区间（例如 original Review commit 到 designer remediation/evidence revision），另列 Reviewer-owned后续更新；将 Handoff 的 current phase 与 Plan/Tasks 统一，并在本 finding 经同一 Reviewer 复审前保持 final handoff task 未完成。重跑记录中的 exact command，证明 preservation exit 0、四文件 diff scope、无 runtime/schema/REQ-0010 实现、docs/governance/fmt/diff gates；再提交同一 Reviewer focused re-review。 | closed |
 
 # Verdict
 
-Evidence-only candidate `1206ad9eb074763988609999e67962ec59a0c1b7` 为 `changes-requested`，0 open Blocker、1 open Major。F-009 仅阻塞 final work evidence/handoff freshness；final design closure exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb` 的 `approved` 结论、F-001..F-008 closure 与 0/0 architecture verdict 不回退。
+Evidence-only candidate `49c8a378520d2599719f9dad2e412e3227417f32` 经本轮 fresh Reviewer 治理例外接管复审后为 `approved`，0 open Blocker、0 open Major。F-009 已关闭；final design closure exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb` 的 `approved` 结论、F-001..F-008 closure 与 0/0 architecture verdict 不回退。
 
 核心产品目标仍是 Kernel 强制的 Verified Procedure；Memory 保持非权威，流程遵循不冒充现实正确性，版本回退/Run recovery/Workspace recovery/Effect reconciliation-compensation 与 recorded replay/reexecute/simulated 保持分离，质量、Token/费用、延迟也继续独立报告。REQ-0034/SPEC-0010/RFC-0013 的 `approved/approved/accepted` 仅接受设计，正文和 work state 均明确 runtime/schema/Manifest/Plan/Node/Evidence executor 尚未实现。
 
@@ -72,6 +72,10 @@ Plan/TASKS 明确了 fresh independent Reviewer、Reviewer-only Review 文件、
 
 # Re-review evidence
 
+- F-009 focused re-review exact `49c8a378520d2599719f9dad2e412e3227417f32` against original Reviewer record commit `2b7662ee4899e304920a0eb053eef755ef9c9305`: the diff contains only `HANDOFF.md`, `PLAN.md`, `TASKS.md`, and `VALIDATION.md`. `git diff --exit-code 72a0f8b597996688f31007bd2fc7f613528f5cdc 499116a8e93e00a737f0c112d0a0104eb9386840 -- docs/reviews/REVIEW-0018-verified-procedure-roadmap.md` returned exit 0, proving only the author remediation interval preserved the original Reviewer text; later Review edits remain Reviewer-owned.
+- The current Handoff has one state (`route architecture accepted; F-009 remediation submitted for re-review`), and `TASK-REQ-0034-10` remains unchecked until this closure. No runtime, Cargo, Schema, or REQ-0010 path changed in `2b7662e..49c8a37`.
+- Required local checks on the exact candidate: `python -B -m unittest discover -s scripts/tests -p "test_*.py"` passed (27/27, exit 0); `cargo fmt --all -- --check` passed (exit 0); `git diff --check` passed (exit 0). `python -B scripts/check_docs.py` returned exit 1 only for pre-existing REVIEW-0001..0007 and REVIEW-0010..0013 freshness against the four work-record paths; no REVIEW-0018 structural error was reported.
+
 - 审查链：initial candidate `cfdc65af64675b8066b9bc429fbf998d588231bc`，原 Review commit `72a0f8b597996688f31007bd2fc7f613528f5cdc`，remediation content `499116a8e93e00a737f0c112d0a0104eb9386840`，re-review candidate/evidence `660cfca9e230f1440505c8e3bfd9a07bf17529ab`；三者均为前者的 descendant，工作树在复审前 clean，原 Review 在设计者整改中 byte-identical。
 - F-001：REQ-0034 收窄为 Procedure/TaskClass/Verified package/retained registry/pure admission 的 12 个 AC。独立解析得到 12 AC、12 mappings、0 missing/extra/duplicate；Backlog 35 rows、0 missing/backward prerequisite。`REDESIGN-TEST-PLAN` 为每个 AC 提供具体 filter/preflight 命令，后续五项 authority 各有唯一 owner。
 - F-002：RFC 冻结 canonical template witness、node/branch cardinality、exact edge/schema/evidence/policy、Capability 子集、budget envelope、effectful repeatability 和 canonical parameter domain；超出 envelope 必须新 Procedure、Verified package 与审批。REQ-0018 的八类命名负测在 sequence 1/lease/Effect 前拒绝。
@@ -95,3 +99,4 @@ Plan/TASKS 明确了 fresh independent Reviewer、Reviewer-only Review 文件、
 - 2026-09-05：同一 Reviewer 复审 exact `660cfca9e230f1440505c8e3bfd9a07bf17529ab`；F-001 至 F-006 closed，新增 F-007/F-008 Minor，结论 `approved`，0 open Blocker，0 open Major。
 - 2026-09-05：final same-reviewer freshness review exact `6df161ff5d5fc150cfa09f48ae54b7501cababcb` against approval commit `c2c6e32503e8a6e85c80126869c4b302374d4abd`；ADR/status/link closure忠实、无实现声明或authority回退，F-007/F-008 closed，无新finding，保持 `approved`、0 open Blocker、0 open Major。
 - 2026-09-05：evidence-only freshness review exact `1206ad9eb074763988609999e67962ec59a0c1b7` against Reviewer commit `1f3078c521118635ddc498f2767ab51daec709fd`；四文件scope与无实现声明成立，但 Validation preservation命令不可按当前记录复算且Handoff current phase矛盾，新增F-009 open Major。evidence-only closure为`changes-requested`、0 Blocker/1 Major；exact `6df161f`设计批准不回退。
+- 2026-09-05：fresh independent Reviewer 接管 exact `49c8a378520d2599719f9dad2e412e3227417f32` 的 F-009 focused re-review。原 Reviewer 会话不可恢复，经用户明确授权，本次替代同一 Reviewer 要求，作为一次性治理例外；原始 Review findings、verdict 与完整历史均保留。四文件 work-record diff、author-only preservation proof、单一 Handoff 状态、TASK-REQ-0034-10 未完成状态及无 runtime/Cargo/Schema/REQ-0010 改动均成立；F-009 closed，REVIEW-0018 `approved`、0 open Blocker、0 open Major，`reviewed_revision` 前移至 exact `49c8a37`。
