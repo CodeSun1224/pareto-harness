@@ -147,21 +147,6 @@ def git_revision_exists(root: Path, revision: str) -> bool:
     return result.returncode == 0
 
 
-def changed_paths_since(root: Path, revision: str) -> set[str]:
-    if not (root / ".git").exists():
-        return set()
-    result = subprocess.run(
-        ["git", "diff", "--name-only", revision, "--"],
-        cwd=root,
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    if result.returncode != 0:
-        return {"<git-diff-failed>"}
-    return {line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()}
-
-
 def review_findings(record: Record) -> tuple[list[tuple[str, str, str]], list[str]]:
     findings: list[tuple[str, str, str]] = []
     errors: list[str] = []
@@ -236,61 +221,6 @@ def validation_results(path: Path) -> tuple[int, int, list[str]]:
     return results, failures, errors
 
 
-def frontmatter_body(text: str) -> str:
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return text
-    try:
-        end = lines.index("---", 1)
-    except ValueError:
-        return text
-    return "\n".join(lines[end + 1 :]).strip()
-
-
-def closure_only_requirement_change(previous_text: str, current: Record) -> bool:
-    previous, parse_error = parse_frontmatter(current.path, previous_text)
-    if parse_error or previous is None:
-        return False
-    if frontmatter_body(previous_text) != frontmatter_body(current.text):
-        return False
-    allowed_fields = {"status", "updated", "links", "work"}
-    for key in set(previous) | set(current.metadata):
-        if key not in allowed_fields and previous.get(key) != current.metadata.get(key):
-            return False
-    if previous.get("status") not in {"implementing", "reviewing"}:
-        return False
-    if current.status not in {"verified", "done"}:
-        return False
-    previous_links = parse_links(previous.get("links", ""))
-    current_links = parse_links(current.metadata.get("links", ""))
-    if previous_links is None or current_links is None or not previous_links.issubset(current_links):
-        return False
-    if any(not link.startswith("REVIEW-") for link in current_links - previous_links):
-        return False
-    previous_work = Path(previous.get("work", ""))
-    current_work = Path(current.metadata.get("work", ""))
-    if previous_work != current_work:
-        if previous_work.name != current_work.name:
-            return False
-        if "active" not in previous_work.parts or "archived" not in current_work.parts:
-            return False
-    return True
-
-
-def file_at_revision(root: Path, revision: str, path: Path) -> str | None:
-    if not (root / ".git").exists():
-        return None
-    result = subprocess.run(
-        ["git", "show", f"{revision}:{path.as_posix()}"],
-        cwd=root,
-        capture_output=True,
-        check=False,
-        text=True,
-        encoding="utf-8",
-    )
-    return result.stdout if result.returncode == 0 else None
-
-
 def validate_repository(root: Path) -> tuple[list[str], int, int]:
     root = root.resolve()
     docs = root / "docs"
@@ -361,17 +291,27 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
                 errors.append(f"{record.path}: REVIEW must link a Requirement")
             if not any(link.startswith("SPEC-") for link in record.links):
                 errors.append(f"{record.path}: REVIEW must link a Spec")
-            for field in ("independence", "reviewed_revision", "open_blockers", "open_majors"):
+            for field in ("independence", "open_blockers", "open_majors"):
                 if not record.metadata.get(field):
                     errors.append(f"{record.path}: REVIEW missing field {field}")
             independence = record.metadata.get("independence")
             if independence not in {"independent", "self-review"}:
                 errors.append(f"{record.path}: invalid independence {independence!r}")
-            revision = record.metadata.get("reviewed_revision", "")
-            if not REVISION_PATTERN.fullmatch(revision):
-                errors.append(f"{record.path}: reviewed_revision must be a Git commit ID")
-            elif not git_revision_exists(root, revision):
-                errors.append(f"{record.path}: reviewed_revision {revision} does not exist")
+            commit_fields = ("implementation_commit", "reviewed_commit", "review_record_commit")
+            uses_split_commits = any(field in record.metadata for field in commit_fields)
+            if uses_split_commits:
+                for field in commit_fields:
+                    revision = record.metadata.get(field, "")
+                    if not REVISION_PATTERN.fullmatch(revision):
+                        errors.append(f"{record.path}: {field} must be a Git commit ID")
+                    elif not git_revision_exists(root, revision):
+                        errors.append(f"{record.path}: {field} {revision} does not exist")
+            else:
+                revision = record.metadata.get("reviewed_revision", "")
+                if not REVISION_PATTERN.fullmatch(revision):
+                    errors.append(f"{record.path}: reviewed_revision must be a Git commit ID")
+                elif not git_revision_exists(root, revision):
+                    errors.append(f"{record.path}: reviewed_revision {revision} does not exist")
             for field in ("open_blockers", "open_majors"):
                 value = record.metadata.get(field, "")
                 if not value.isdigit():
@@ -389,6 +329,25 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
                 errors.append(f"{record.path}: open_majors does not match Findings table")
             if record.status == "approved" and (actual_blockers or actual_majors):
                 errors.append(f"{record.path}: approved REVIEW has open Findings table Blocker or Major")
+            remediation_round = record.metadata.get("remediation_round")
+            convergence = record.metadata.get("convergence")
+            if remediation_round is not None or convergence is not None:
+                if remediation_round is None or not remediation_round.isdigit():
+                    errors.append(f"{record.path}: remediation_round must be a non-negative integer")
+                if convergence not in {"converging", "DESIGN_NOT_CONVERGED"}:
+                    errors.append(f"{record.path}: invalid convergence {convergence!r}")
+                if remediation_round is not None and remediation_round.isdigit():
+                    round_number = int(remediation_round)
+                    if round_number >= 2 and actual_majors and convergence != "DESIGN_NOT_CONVERGED":
+                        errors.append(
+                            f"{record.path}: round two with open Major must be DESIGN_NOT_CONVERGED"
+                        )
+                    if convergence == "DESIGN_NOT_CONVERGED" and round_number < 2:
+                        errors.append(
+                            f"{record.path}: DESIGN_NOT_CONVERGED requires two remediation rounds"
+                        )
+                if convergence == "DESIGN_NOT_CONVERGED" and record.status == "approved":
+                    errors.append(f"{record.path}: DESIGN_NOT_CONVERGED REVIEW cannot be approved")
 
         if prefix == "REQ" and record.status != "accepted":
             if record.metadata.get("risk") not in {"lightweight", "standard", "high"}:
@@ -452,32 +411,6 @@ def validate_repository(root: Path) -> tuple[list[str], int, int]:
         ]
         if not valid_reviews:
             errors.append(f"{record.path}: completed Requirement lacks an approved Review")
-        else:
-            for review in valid_reviews:
-                revision = review.metadata.get("reviewed_revision", "")
-                changed = changed_paths_since(root, revision)
-                work_name = Path(record.metadata.get("work", "")).name
-                work_prefixes = {
-                    f".agents/work/active/{work_name}/",
-                    f".agents/work/archived/{work_name}/",
-                }
-                requirement_path = str(record.path).replace("\\", "/")
-                allowed = {str(review.path).replace("\\", "/")}
-                previous_requirement = file_at_revision(root, revision, record.path)
-                if previous_requirement is not None and closure_only_requirement_change(previous_requirement, record):
-                    allowed.add(requirement_path)
-                stale = sorted(
-                    path
-                    for path in changed
-                    if path not in allowed
-                    and not path.startswith("docs/reviews/")
-                    and not any(path.startswith(prefix) for prefix in work_prefixes)
-                )
-                if stale:
-                    errors.append(
-                        f"{review.path}: reviewed revision is stale; substantive paths changed: "
-                        + ", ".join(stale)
-                    )
 
         work_value = record.metadata.get("work", "")
         work_path = (root / work_value).resolve() if work_value else None

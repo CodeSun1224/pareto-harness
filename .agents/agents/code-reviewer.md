@@ -21,6 +21,8 @@ Read only the linked Requirement, Spec, RFC/ADR, repository diff, relevant sourc
 
 ## Output
 
-Create a Review record from `.agents/templates/review.md`. Pin `reviewed_revision` to the exact Git commit reviewed. List findings first with severity, location, violated contract, impact, and required proof. Use `Blocker`, `Major`, `Minor`, or `Note`; keep `open_blockers` and `open_majors` accurate. Approve only when both are zero.
+Create a Review record from `.agents/templates/review.md`. Judge only the frozen Requirement/Spec; a new desired behavior is a design input, not a finding. Record the implementation, reviewed, and review-record commits separately. List findings first with severity, location, violated contract, impact, and required proof. Use `Blocker`, `Major`, `Minor`, or `Note`; only open Blocker/Major affects approval.
 
-Remain read-only unless explicitly assigned remediation in a separate task. If the same Agent implemented the change, label the report `independence: self-review` rather than independent.
+For re-review, inspect the remediation diff and affected regression evidence. Do not reopen unrelated surfaces. After two remediation rounds, a new or open Major produces `DESIGN_NOT_CONVERGED` and returns the work to design.
+
+Remain read-only unless explicitly assigned remediation in a separate task. If the same Agent implemented the change, label the report `independence: self-review` rather than independent. Never use the Review record or its commit as proof that implementation behavior passed.

@@ -1,107 +1,68 @@
 # Pareto Harness Agent Guide
 
-This file is the canonical instruction source for coding agents in this repository.
+This file contains the repository's current operating rules. Durable product and architecture facts live under `docs/`; implementation status lives in `docs/status.md`.
 
 ## Mission
 
-Build a coding-agent harness that improves verified result quality while reducing token cost and latency. Treat quality, cost, and latency as separate dimensions and publish their Pareto frontier.
+Turn evidence-backed successful task runs into reusable immutable verified procedures, then improve strategies on a quality, token/cost, and latency Pareto frontier without weakening the trusted kernel.
 
-## Start every task
+## Stable Kernel Baseline
 
-1. Read `README.md` and `docs/index.md`.
-2. Read the accepted requirement and linked RFC/ADR before changing behavior.
-3. Check `.agents/work/active/` for an active handoff.
-4. Use the narrowest relevant skill from `.agents/skills/`.
-5. Inspect existing changes and preserve unrelated user work.
+REQ-0003 through REQ-0009 are the Stable Kernel Baseline: versioned protocol and JSON Schema, SQLite Event Store, Run/Task lifecycle and Manifest, projection/snapshot/recorded replay, capability/budget/cancellation/timeout, governed hooks, and Effect Intent/Receipt/recovery/reconciliation.
 
-## Spec-driven delivery
+Do not modify their runtime semantics or code unless an active Requirement explicitly changes a kernel contract or demonstrates an invariant violation. Documentation may update references and status without reopening the baseline.
 
-Classify every change before editing:
+## Start a task
 
-- `lightweight`: spelling, comments, links, or behavior-neutral metadata. Record impact and run basic checks; a formal Review record is optional.
-- `standard`: runtime behavior, tests, tools, public documentation structure, or automation. Require Requirement, Spec, Plan, Tasks, layered tests, and independent Review.
-- `high`: permissions, sandboxing, data isolation, events/schemas, persistence, concurrency, replay, secrets, or promotion. Add the relevant specialist review and negative tests.
-
-For standard and high-risk work, follow this state path:
-
-```text
-proposed → impact-analyzed → specified → approved → planned
-→ implementing → reviewing → verified → done
-```
-
-Before implementation, use `impact-analysis`, complete the Spec impact matrix, map every acceptance criterion to a test, and create the Requirement work directory. Do not infer impact only from the files requested by the user; inspect callers, consumers, schemas, permissions, isolation boundaries, persistence, and regression surfaces.
-
-## Architectural constitution
-
-- Keep event integrity, version identity, state transitions, permissions, budgets, cancellation, replay, MVCC, evidence admission, and promote/rollback protocols in the trusted kernel.
-- Put planner, context selection, model routing, tool ranking, retry, evaluator, and memory policies behind versioned strategy interfaces.
-- Plugins may request capabilities; they may not bypass the kernel or mutate authoritative state directly.
-- Every externally visible effect must be represented by an event or an explicitly documented non-replayable boundary.
-- Every run must pin task, behavior, workspace, environment, model, tool, and schema versions in a run manifest.
-- Do not claim an optimization without reproducible evidence against a named baseline.
-
-## One home for each fact
-
-- Epic: roadmap outcome and ordered Requirement set.
-- Requirement: desired behavior and acceptance criteria.
-- Spec: approved behavior contract, impact analysis, and test traceability.
-- RFC: proposed significant design.
-- ADR: accepted durable decision and rationale.
-- Fix: defect reproduction, root cause, repair, and regression proof.
-- Postmortem: escaped/systemic failure, timeline, and guardrails.
-- Review: independent findings, evidence, and approval state.
-- `.agents/work`: Plan, Tasks, Handoff, and test evidence for active execution; never the sole source of durable product truth.
-
-Use stable IDs (`EPIC-####`, `REQ-####`, `SPEC-####`, `RFC-####`, `ADR-####`, `FIX-####`, `PM-####`, `REVIEW-####`). Change `status` metadata rather than moving a formal document between lifecycle folders.
+1. Read `README.md`, `docs/status.md`, and `docs/index.md`.
+2. Inspect existing changes and preserve unrelated user work.
+3. Read only the Requirement, Spec, ADR/RFC, and skill relevant to the change.
+4. Prefer the smallest runnable vertical slice; do not scaffold future layers.
 
 ## Change workflow
 
-- Non-trivial product behavior requires an accepted Requirement.
-- Every standard/high Requirement requires an approved Spec, impact analysis, test matrix, Plan, Tasks, validation evidence, and independent Review.
-- Cross-cutting or hard-to-reverse design requires an RFC and, once accepted, an ADR.
-- Bug fixes require a Fix document unless the change is self-evident and local.
-- Update architecture and benchmark documents in the same change when contracts or metrics change.
-- Record assumptions, rejected alternatives, failure modes, rollback, and validation evidence.
-- Prefer a small vertical slice over empty package scaffolding.
+- `lightweight`: documentation, governance, templates, checks, refactors, and fixes that do not change product/runtime contracts. Record scope in the change and run focused checks; no new Requirement, Spec, work directory, or Review record is required.
+- `product`: observable product or runtime behavior. Require an accepted Requirement, an approved Spec, a short Plan, mapped tests, and review.
+- `kernel-contract`: authority, permissions, isolation, events/schemas, persistence, replay, concurrency, secrets, or promotion. Add explicit negative tests and specialist review.
 
-## Layered testing
+An approved Spec freezes when implementation starts. After that point, implementation and review must be judged against the frozen contract. A discovered requirement gap returns the work to design through an explicit Spec amendment; a reviewer may not invent new acceptance criteria inside a finding.
 
-- `Focused`: changed behavior and minimal reproduction.
-- `Impacted`: direct and indirect callers/consumers identified by impact analysis.
-- `Core`: kernel invariants, permissions, isolation, event/replay, and critical CLI flows.
-- `Full`: milestone and release suite, including real-provider and performance runs where applicable.
+Historical records remain valid snapshots. Do not rewrite them only to match the latest workflow wording.
 
-Within those scopes select the appropriate static, unit, component/contract, integration, E2E, replay/compatibility, security/isolation, and performance tests. Every Plan must name concrete commands; “run relevant tests” is not sufficient.
+## Review
 
-## Independent review gate
+- Review an exact implementation commit against the frozen Requirement and Spec.
+- Keep `implementation_commit`, `reviewed_commit`, and `review_record_commit` distinct. A Review record or its own commit is never evidence that the implementation works.
+- `Blocker` and `Major` findings block approval. `Minor` and `Note` findings never block and may remain open or be accepted with stated risk.
+- Remediation changes implementation/tests/evidence, not the Reviewer's original finding text.
+- Re-review focuses on the remediation diff plus affected regression evidence; it does not restart an unbounded full review or add unrelated requirements.
+- After two remediation rounds, any new or still-open Major finding classifies the work as `DESIGN_NOT_CONVERGED` and returns it to design instead of continuing the review loop.
+- Use a fresh reviewer when practical. If not, record `independence: self-review`; never claim independence that did not occur.
 
-- Run `code-review` for every standard/high Requirement after implementation and tests.
-- Prefer a fresh Agent/session. Give the reviewer the Requirement, Spec, RFC/ADR, diff, and test evidence—not the implementer's conclusions.
-- Review data isolation, API/schema compatibility, permissions, concurrency, regression scope, irrelevant changes, dependency growth, rollback, and quality/cost/latency.
-- `Blocker` and `Major` findings must be closed and re-reviewed before verification. The implementing Agent may not self-close them.
-- If independent execution is unavailable, record the review as non-independent; do not represent it as an independent approval.
+## Runtime invariants
 
-## Completion gates
+- The kernel alone advances authoritative state and admits identity, capability, budget, evidence, effects, replay, recovery, and promotion decisions.
+- Models, planners, memory, providers, tools, workers, and plugins propose actions or return observations; they cannot self-authorize or self-declare completion.
+- Every Run pins behavior-affecting versions in its Manifest.
+- Externally visible effects use Intent/Receipt and explicit recovery/reconciliation semantics.
+- Optimizations require reproducible evidence against a named baseline, with quality, token/cost, and latency reported separately.
 
-Run:
+## Validation
+
+For documentation-only changes, run:
 
 ```text
-python -m unittest discover -s scripts/tests -p "test_*.py"
-python scripts/check_docs.py
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features --offline -- -D warnings
-cargo test --workspace --all-targets --all-features --offline
-cargo run -p pareto-protocol --bin generate_schemas --offline -- schemas
+python -B -m unittest discover -s scripts/tests -p "test_*.py"
+python -B scripts/check_docs.py
 git diff --check
 git status --short
 ```
 
-Schema generation must leave `schemas/` byte-identical; the protocol contract tests cover unit, golden, compatibility, isolation, and replay-manifest semantics. Add Event Store replay/migration gates when those capabilities exist. Do not weaken a gate to make a change pass.
+For runtime changes, add the focused and impacted tests named by the Plan, then run the relevant Rust gates. Run the full workspace, schema-generation, provider, or performance suites only when the changed scope can affect them. Never weaken a gate to make a change pass.
 
-## Writing rules
+## Writing
 
-- Chinese is authoritative for core design documents; add concise English summaries where useful.
-- Distinguish implemented facts, experimental evidence, inference, hypothesis, and target.
-- Prefer direct official documentation, source code, and papers over secondary summaries.
-- Add verification date and source URL to time-sensitive research claims.
-- Keep agent instructions concise; link to durable documents instead of duplicating them.
+- Chinese is authoritative for core design documents; concise English summaries are optional.
+- Distinguish implemented fact, evidence, inference, hypothesis, and target.
+- Link to one source of truth instead of duplicating status or procedure text.
+- Keep governance proportional to risk and keep active work records short.

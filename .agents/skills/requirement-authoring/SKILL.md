@@ -13,3 +13,5 @@ description: Draft or revise verifiable Pareto Harness requirements. Use for new
 6. Run `python scripts/check_docs.py`.
 
 Reject vague criteria such as "works well," "is fast," or "uses fewer tokens" unless a baseline, workload, statistic, and threshold are named.
+
+Acceptance criteria freeze when implementation starts. Later gaps return to design as explicit amendments; reviewers do not add criteria through findings.

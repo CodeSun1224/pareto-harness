@@ -4,7 +4,7 @@ title: Pareto Harness 项目章程与产品需求
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-09-05
+updated: 2026-09-06
 links: [REQ-0001, REQ-0034, RFC-0001, RFC-0013, ADR-0001, ADR-0002, ADR-0012]
 ---
 
@@ -17,6 +17,8 @@ Pareto Harness 是独立实现的已验证 Coding Procedure Runtime。它优化�
 一次任务成功路径只有经过外部证据验证和独立批准，才能提升为不可变、内容寻址的 `VerifiedProcedureRevision`。后续 Run 固定该流程版本，可信内核强制节点、依赖、Capability、Evidence、checkpoint、恢复与补偿规则。模型、Planner、Memory、Provider 和 Tool 只能提出动作或返回 observation，不能跳过流程或自行宣告完成。
 
 项目将事件、版本身份、流程与节点状态、权限、证据准入、恢复和晋升保留在可信内核；将规划、上下文、模型路由、工具选择、重试、评测和记忆建模为可替换的版本化策略。
+
+Pareto Harness 不是 LangGraph、Codex、Skill 或其他 Agent/Workflow 系统的替代品。它们可以作为受限 executor、可版本化 strategy 或非权威知识来源接入；Pareto Harness 提供跨运行的版本、证据、效果、恢复和晋升治理，并拒绝外部组件直接推进权威状态。
 
 ## 问题
 
@@ -44,6 +46,7 @@ Pareto Harness 是独立实现的已验证 Coding Procedure Runtime。它优化�
 4. 新策略只有经过历史回放、回归门禁和 Canary 后才可晋升。
 5. 在不降低验证成功率的前提下，持续减少 Token、费用和延迟。
 6. 经批准的成功路径可提升为已验证流程；后续运行固定 exact 版本并拒绝跳步、缺证据完成或越权执行。
+7. 对同一 TaskClass 探索替代 Procedure/Behavior，保留质量、Token/费用和延迟上的 Pareto-optimal 策略，而不是用单一加权分数覆盖权衡。
 
 ## 非目标
 
@@ -78,6 +81,6 @@ Pareto Harness 是独立实现的已验证 Coding Procedure Runtime。它优化�
 - Kernel owns safety：安全和一致性由内核拥有。
 - Optimization is a claim：优化必须说明基线、工作负载和统计证据。
 
-## 首期验收
+## 产品交付顺序
 
-首期只交付可供工程团队实施的设计基线：仓库治理、需求、研究证据、架构、接口、技术选型、评测协议和路线图。不得创建没有行为和测试的业务模块空壳。
+设计与可信内核基线已经完成。下一产品验收是确定性的 Fake Verified Agent 纵切；随后接入真实 Coding 边界、可靠运行时、Multi-Agent/Context 和 Self-Evolution/Pareto。每一阶段都必须产生可运行结果，详细状态与退出条件分别见状态页和路线图。

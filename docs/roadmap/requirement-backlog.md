@@ -4,17 +4,17 @@ title: Pareto Harness Requirement Backlog
 status: active
 owners: [maintainers]
 created: 2026-08-22
-updated: 2026-09-05
+updated: 2026-09-06
 links: [EPIC-0001, EPIC-0002, EPIC-0003, EPIC-0004, EPIC-0005, EPIC-0006, EPIC-0007, REQ-0034, RFC-0007, RFC-0013, ADR-0008, ADR-0012, ARCH-0004, REVIEW-0018]
 ---
 
 # Requirement Backlog
 
-Planned ID 表示编号已保留但尚未进入 SDD 实施窗口。进入窗口时必须创建正式 Requirement、影响分析和 Spec，不能直接按本表编码。
+本表保留既有 35 个 REQ ID，作为 capability backlog 和历史导航，不再充当必须从第 1 项依次执行到第 35 项的全局硬 DAG。只有进入当前纵向里程碑的能力才需要创建或更新正式 Requirement/Spec，并在当时冻结真实依赖、范围和证据。
 
-语言不是 Requirement 的默认信任边界。REQ-0008 至 REQ-0036 可在其 outcome 需要时批准多语言 handler、adapter、Worker 或 Guest，但必须保留 Rust 对 Event、Procedure/Plan/Node identity 与 state、Capability、Budget、Cancellation、Effect/Evidence、Replay、Lease/MVCC 与 Promotion 的 authority，并在各自 Spec 中冻结协议、隔离、失败、兼容和回滚合同。RFC-0007/ADR-0008 不单独授权任何外部 Runtime，也不改变下列顺序或 prerequisite。
+表中的“关联能力”是设计线索，不是自动激活条件。实现者可以为了最小可运行纵切合并、拆分或重排未激活项，但必须保留 ID、说明偏差，并不得绕过 Stable Kernel Baseline。语言不是默认信任边界；外部 handler、adapter、Worker 或 Guest 仍只能提出请求或返回 observation。
 
-| Order | ID | Epic | Requirement outcome | Risk | Prerequisites | Planned evidence |
+| Index | ID | Epic | Capability outcome | Risk | Related capabilities | Candidate evidence |
 |---:|---|---|---|---|---|---|
 | 1 | REQ-0002 | EPIC-0001 | SDD、影响分析、分层测试和独立 Review 门禁 | standard | REQ-0001 | 自举演练、Skill/文档检查 |
 | 2 | REQ-0003 | EPIC-0002 | 版本化协议类型和 JSON Schema | high | REQ-0002 | Schema golden/compatibility tests |
@@ -54,4 +54,7 @@ Planned ID 表示编号已保留但尚未进入 SDD 实施窗口。进入窗口�
 
 ## Activation rule
 
-同一时间最多一个 Runtime Requirement 处于 `implementing`，另一个可处于 `specified/planned`。只有 prerequisite 全部 `verified` 后才能激活依赖项。路线与未来 Requirement 的设计评审不等于实施激活。每个 Epic 必须产生可运行纵向切片，禁止按 crate 横向完成后统一集成。
+- 默认只激活支撑下一可运行纵切的最小能力集合；并行数量由实际冲突与评审能力决定，不设全仓固定上限。
+- 激活时在该 Requirement 的 frozen Spec 中确认真正的阻塞依赖；本表中的关联能力可以被已有合同、Fake 或更小切片满足。
+- 未激活条目是候选方向，不是已批准合同、语言承诺或实施顺序。
+- 每个里程碑必须产生可运行、可验证的纵向结果，不能以横向 crate 或空接口完成度代替。

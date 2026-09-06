@@ -4,7 +4,7 @@ title: Pareto Harness 总体架构
 status: accepted
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-09-05
+updated: 2026-09-06
 links: [PRD-0001, REQ-0034, RFC-0001, RFC-0007, RFC-0008, RFC-0009, RFC-0013, ADR-0001, ADR-0002, ADR-0008, ADR-0009, ADR-0010, ADR-0012]
 ---
 
@@ -72,9 +72,9 @@ links: [PRD-0001, REQ-0034, RFC-0001, RFC-0007, RFC-0008, RFC-0009, RFC-0013, AD
 
 这些是逻辑模块，不要求全部使用 Rust 或处于同一进程。Event、Procedure/Plan/Node identity 与 state、Capability、Budget、Cancellation、Effect/Evidence admission、Replay、Lease/MVCC 和 Promotion 保持在 Rust 权威控制面；Provider、Tool、Hook handler、Agent Worker、Memory 检索、评测、SDK 和受限 Guest 可按 Requirement 使用其他语言，但不得取得权威数据库或内核私有对象。设计基线阶段不创建空目录。
 
-Hook 采用 ADR-0009 的 Kernel 治理合同，并已由REQ-0008交付最小Rust Fake纵切：Manifest固定registry/config和顺序，Observer只读，Gate默认拒绝，Transform只改明确允许的非权威proposal，预算准入与终结通过双stream原子pair提交，取消/timeout由Runtime Control裁决，Recorded replay只消费已记录决定。该实现不包含真实Hook Runtime、外部transport或Worker。
+Hook 采用 ADR-0009 的 Kernel 治理合同：Manifest 固定 registry/config 和顺序，Observer 只读，Gate 默认拒绝，Transform 只改明确允许的非权威 proposal，取消与 timeout 由 Runtime Control 裁决，recorded replay 只消费已记录决定。
 
-Effect采用ADR-0010合同，并已由REQ-0009交付最小Rust Fake纵切：Kernel以control/Effect atomic pair先提交Intent，再持久化dispatch claim并向Manifest-pinned sealed Fake executor交付用途受限lease；Receipt保持observation，partial/unknown经Kernel recovery authority与Manifest-pinned reconciliation producer追加事实；Projection与Boundary Inventory V2固定exact horizon，Recorded replay零执行/零写入/零核算。该实现明确提供at-most-once-or-reconcile而非虚构exactly-once，保持SQLite v2，且不包含真实文件、进程、网络、Provider、Tool或Sandbox效果。
+Effect 采用 ADR-0010 合同：Kernel 在 dispatch 前提交 Intent，Receipt 保持 observation，partial/unknown 进入显式 recovery/reconciliation；recorded replay 零执行、零写入、零核算。该边界提供 at-most-once-or-reconcile，不宣称 exactly-once。
 
 ## 一致性原则
 
@@ -84,8 +84,6 @@ Effect采用ADR-0010合同，并已由REQ-0009交付最小Rust Fake纵切：Kern
 - 外部模型输出、时钟、网络和工具环境是非确定性源，Replay 必须选择录制结果或重新执行并标记差异。
 - 删除策略以墓碑和保留期实现；已被 Run Manifest 引用的版本不可物理删除。
 
-## 当前实现与下一纵向路径
+## 状态与路线
 
-截至可信基线 `e7a939c`，REQ-0003 至 REQ-0009 已实现版本、Event Store、Run/Task lifecycle、Recorded replay、Runtime Control、Fake Hook 与 Fake Effect；Procedure、Plan/DAG、Node lifecycle 和执行期 Evidence Gate 尚未实现。
-
-下一路径按 Provider → Coding Tools → Workspace → Sandbox → Verified Procedure identity → Plan/DAG → Node state machine → minimal Evidence Gate → single-Agent procedure executor → procedure promotion/reuse 推进。每个阶段必须产生可运行的确定性纵向切片，不能用路线目标冒充已实现事实。
+本文件只维护长期架构合同。已实现/未实现边界见[项目状态](../status.md)，纵向交付顺序见[产品路线图](../roadmap/roadmap.md)。

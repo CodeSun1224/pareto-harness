@@ -4,7 +4,10 @@
 
 - Requirement:
 - Spec:
-- Git revision or diff:
+- Frozen Spec commit:
+- Implementation commit:
+- Reviewed commit:
+- Review record commit (record location only; not implementation evidence):
 - Environment:
 
 ## Results

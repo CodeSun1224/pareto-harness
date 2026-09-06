@@ -5,10 +5,10 @@ description: Validate Pareto Harness repository hygiene and completion gates bef
 
 # Run completion gates
 
-1. Run `python scripts/check_docs.py`.
+1. Run the focused checks for the changed scope. Documentation-only changes use the four commands in `AGENTS.md`.
 2. Run `git diff --check`.
 3. Run `git status --short` and classify every changed file as intended, generated, or unrelated.
-4. Verify linked Requirement/RFC/ADR/Fix records and documentation are updated.
+4. Verify linked Requirement/RFC/ADR/Fix records only when the change affects their contract.
 5. Confirm new claims have sources and targets are not described as achieved results.
-6. When runtime code exists, run the language-specific gates listed in `AGENTS.md`.
+6. For runtime changes, run the focused/impacted language gates named by the Plan; reserve full suites for affected scope.
 7. Report exact commands and results; never claim a check was run when it was inferred.

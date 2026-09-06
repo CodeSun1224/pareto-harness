@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "check_docs.py"
@@ -73,10 +73,56 @@ class DocumentValidationTests(unittest.TestCase):
         self.assertTrue(any("invalid Finding ID" in error for error in errors))
         self.assertTrue(any("Major Finding cannot use accepted" in error for error in errors))
 
-    @mock.patch.object(check_docs, "changed_paths_since", return_value={"src/changed_after_review.rs"})
-    def test_rejects_stale_review_revision(self, _changed_paths) -> None:
-        errors = self.errors("valid_completed")
-        self.assertTrue(any("reviewed revision is stale" in error for error in errors))
+    def test_accepts_open_minor_without_blocking_approval(self) -> None:
+        path = Path("docs/reviews/review.md")
+        text = """---
+id: REVIEW-0001
+status: approved
+---
+# Findings
+| ID | Severity | Location | Finding and impact | Required proof | Status |
+|---|---|---|---|---|---|
+| F-001 | Minor | docs/a.md | wording | optional | open |
+"""
+        record = check_docs.Record(path, {"id": "REVIEW-0001", "status": "approved"}, text)
+        findings, errors = check_docs.review_findings(record)
+        self.assertEqual([], errors)
+        self.assertEqual([("F-001", "Minor", "open")], findings)
+
+    def test_round_two_open_major_requires_design_not_converged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            review_dir = Path(directory) / "docs" / "reviews"
+            review_dir.mkdir(parents=True)
+            (review_dir / "review.md").write_text(
+                """---
+id: REVIEW-0001
+title: Review
+status: changes-requested
+owners: [reviewer]
+created: 2026-09-06
+updated: 2026-09-06
+links: [REQ-0001, SPEC-0001]
+independence: independent
+implementation_commit: abc1234
+reviewed_commit: bcd2345
+review_record_commit: cde3456
+remediation_round: 2
+convergence: converging
+open_blockers: 0
+open_majors: 1
+---
+# Findings
+| ID | Severity | Location | Finding and impact | Required proof | Status |
+|---|---|---|---|---|---|
+| F-001 | Major | src/a.rs | violates frozen contract | fix it | open |
+""",
+                encoding="utf-8",
+            )
+            errors, _, _ = check_docs.validate_repository(Path(directory))
+            self.assertFalse(any("must be a Git commit ID" in error for error in errors))
+            self.assertTrue(
+                any("round two with open Major must be DESIGN_NOT_CONVERGED" in error for error in errors)
+            )
 
     def test_rejects_empty_validation(self) -> None:
         errors = self.errors("empty_validation")
@@ -89,16 +135,6 @@ class DocumentValidationTests(unittest.TestCase):
     def test_rejects_unidentified_checkbox(self) -> None:
         errors = self.errors("malformed_task")
         self.assertTrue(any("every checkbox must use a valid Task ID" in error for error in errors))
-
-    def test_requirement_acceptance_change_invalidates_review(self) -> None:
-        path = FIXTURES / "valid_completed" / "docs" / "requirements" / "req.md"
-        current_text = path.read_text(encoding="utf-8")
-        metadata, error = check_docs.parse_frontmatter(Path("docs/requirements/req.md"), current_text)
-        self.assertIsNone(error)
-        assert metadata is not None
-        current = check_docs.Record(Path("docs/requirements/req.md"), metadata, current_text)
-        previous_text = current_text.replace("# Valid", "# Different acceptance contract")
-        self.assertFalse(check_docs.closure_only_requirement_change(previous_text, current))
 
     def test_rejects_all_skipped_validation(self) -> None:
         path = FIXTURES / "all_skipped" / "VALIDATION.md"

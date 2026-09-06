@@ -4,7 +4,7 @@ title: Pareto Harness 核心能力地图
 status: proposed
 owners: [maintainers]
 created: 2026-08-20
-updated: 2026-09-05
+updated: 2026-09-06
 links: [PRD-0001, REQ-0034, RFC-0001, RFC-0013, ADR-0012]
 ---
 
@@ -20,8 +20,9 @@ links: [PRD-0001, REQ-0034, RFC-0001, RFC-0013, ADR-0012]
 | Snapshot/Replay | 复现问题和历史评测 | 固定夹具投影一致、非确定性被标记 |
 | Capability/Budget | 插件不能越权或无限消耗 | 拒绝路径、超时、取消和预算耗尽测试 |
 | Verified Procedure Registry | 只运行证据验证且独立批准的流程版本 | 内容身份、审批包、撤销、替换和 Manifest pin 负测 |
+| Replay boundary | 重放、重执行和模拟不会篡改历史事实 | recorded/reexecute/simulated 谱系与零覆盖测试 |
 
-## P1：完成质量
+## P1：流程沉淀与复用
 
 | 能力 | 用户价值 | 最小证明 |
 |---|---|---|
@@ -30,6 +31,10 @@ links: [PRD-0001, REQ-0034, RFC-0001, RFC-0013, ADR-0012]
 | Minimal Evidence Gate | 第一版执行器即由证据决定转移 | 缺失、伪造、过期和跨域证据拒绝 |
 | Evaluator | 结果可比较 | 版本化 rubric、测试输出和盲评记录 |
 | Workspace Revision | 代码变化与行为变化解耦 | Git revision、dirty patch、环境摘要齐全 |
+| Success distillation | 将跑通路径生成候选流程，而不是复制聊天记录 | exact provenance、参数化、秘密清除、人工/独立批准 |
+| Procedure reuse | 在明确适用范围内复用不可变流程版本 | TaskClass、环境、工具版本与 compatibility envelope 全部匹配；旧版本可选、偏差可见 |
+
+复用不是“相似就强行照跑”。只有 Task、Workspace/Environment、Provider/Tool/Schema 版本与 Procedure 声明的 compatibility envelope 全部满足时，Kernel 才能准入；超出范围必须拒绝、选择其他已验证版本，或生成新的 Procedure 候选并重新验证，不能静默放宽约束。
 
 ## P1：成本与速度
 
@@ -49,6 +54,20 @@ links: [PRD-0001, REQ-0034, RFC-0001, RFC-0013, ADR-0012]
 | Historical replay | 发现跨任务回归 | 与固定基线同任务、同环境对照 |
 | Canary and rollback | 控制上线风险 | 自动停止条件、快速恢复、审计事件 |
 | MVCC experiments | 多候选并发而不互相覆盖 | 基线冲突检测、显式 rebase/merge |
+| Pareto Archive | 保留不被其他策略全面支配的候选 | 质量底线、Token/费用、延迟分列及可复现实验 |
+
+## 恢复与回退词汇
+
+“一键回滚”只能是控制面的 UI/CLI 编排入口，不是一个能够抹除历史或撤销所有现实效果的原子操作。入口必须展示并分别执行下列机制；存在 unknown Effect 时必须先对账，不能用统一的“成功回滚”状态掩盖差异。
+
+| 机制 | 含义 | 不等同于 |
+|---|---|---|
+| Run recovery | 在同一 Manifest 下从 checkpoint 恢复未完成 Run | 新 Run 或策略回退 |
+| Reexecute | 以新 Run 重新调用外部边界并比较结果 | recorded replay |
+| Simulation | 使用固定 fixture 执行派生场景 | 真实外部效果 |
+| Workspace recovery | 恢复或创建明确的 Workspace revision | Effect 补偿 |
+| Effect reconciliation/compensation | 确认未知结果或执行新的补偿效果 | 删除历史事件 |
+| Procedure/Behavior rollback | 改变后续 Run 的默认版本选择 | 修改已完成 Run |
 
 ## Authority classification
 

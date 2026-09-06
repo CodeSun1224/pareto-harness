@@ -1,6 +1,8 @@
 # 文档导航
 
-本目录是 Pareto Harness 的长期事实来源。当前重设计候选基于 2026-09-01 的 REQ-0009 verified/done 远程基线，候选日期为 2026-09-05。
+本目录是 Pareto Harness 的长期事实来源。实现进度与当前下一步统一维护在[状态页](status.md)，不在架构文档中重复。
+
+- [当前状态](status.md)：Stable Kernel Baseline、当前里程碑、已实现与未实现边界。
 
 ## 产品
 

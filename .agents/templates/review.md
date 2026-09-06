@@ -7,7 +7,11 @@ created: YYYY-MM-DD
 updated: YYYY-MM-DD
 links: [REQ-0000, SPEC-0000]
 independence: independent
-reviewed_revision: replace-with-git-revision
+implementation_commit: replace-with-implementation-commit
+reviewed_commit: replace-with-reviewed-commit
+review_record_commit: replace-after-review-is-recorded
+remediation_round: 0
+convergence: converging
 open_blockers: 0
 open_majors: 0
 ---
@@ -19,7 +23,7 @@ open_majors: 0
 | ID | Severity | Location | Finding and impact | Required proof | Status |
 |---|---|---|---|---|---|
 
-Use IDs `F-001`, `F-002`, and so on. Blocker/Major status is only `open` or `closed`; `accepted` is reserved for Minor/Note risk acceptance.
+Use IDs `F-001`, `F-002`, and so on. A finding must cite a frozen contract or demonstrated regression; it cannot create a new requirement. Blocker/Major status is only `open` or `closed`; `accepted` is reserved for Minor/Note risk acceptance. Minor/Note never block approval.
 
 # Acceptance trace
 
@@ -30,3 +34,5 @@ Use IDs `F-001`, `F-002`, and so on. Blocker/Major status is only `open` or `clo
 # Scope and unrelated changes
 
 # Re-review history
+
+Review only the remediation diff plus affected evidence. After remediation round two, any new or open Major sets `convergence: DESIGN_NOT_CONVERGED` and returns the work to design.

@@ -4,6 +4,8 @@ Risk class: lightweight / standard / high
 
 Linked Epic/Requirement/Spec/RFC/ADR/Fix:
 
+Frozen Spec commit:
+
 ## Impact analysis
 
 - Direct and indirect callers/consumers:
@@ -28,6 +30,11 @@ Linked Epic/Requirement/Spec/RFC/ADR/Fix:
 ## Independent review
 
 - Review record:
+- Implementation commit:
+- Reviewed commit:
+- Review record commit:
+- Remediation round:
+- Convergence: converging / DESIGN_NOT_CONVERGED
 - Open Blocker/Major findings:
 
 ## Scope check
@@ -38,8 +45,9 @@ Linked Epic/Requirement/Spec/RFC/ADR/Fix:
 ## Documentation
 
 - [ ] Durable decisions are recorded in the correct document type.
-- [ ] Requirement acceptance criteria map to test evidence.
+- [ ] Frozen Requirement acceptance criteria map to test evidence; review added no new requirements.
 - [ ] Independent Review has no open Blocker or Major findings.
+- [ ] Minor/Note findings were treated as non-blocking.
 - [ ] Data isolation, API compatibility, permissions, and regression risks were reviewed.
 - [ ] The diff contains no unexplained unrelated changes.
 - [ ] Research claims include source, evidence level, and verification date.

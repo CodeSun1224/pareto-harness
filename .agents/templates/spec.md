@@ -10,6 +10,10 @@ links: [REQ-0000]
 
 # Behavioral contract
 
+# Freeze boundary
+
+This Spec freezes when implementation starts. Later contract changes require an explicit design amendment and a new review subject; implementation review may not add acceptance criteria.
+
 # Inputs, outputs, states, and failure behavior
 
 # Impact analysis
